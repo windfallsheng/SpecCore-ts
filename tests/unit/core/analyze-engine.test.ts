@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { generateSpecsFromRequirements } from '../../../src/core/analyze-engine';
+import { generateSpecsFromRequirements, runAnalysis } from '../../../src/core/analyze-engine';
 import { writeFile, mkdir, rm } from 'fs-extra';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -157,5 +157,83 @@ describe('generateSpecsFromRequirements - 双层文档架构', () => {
     // 恢复工作目录并清理临时目录
     process.chdir(origCwd);
     await rm(tempDir, { recursive: true, force: true });
+  });
+});
+
+describe('runAnalysis - 知识库注入与 RAG 召回（v8.3.328）', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let reqPath: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `speccore-rag-analyze-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(join(tempDir, '.speccore'), { recursive: true });
+    await writeFile(join(tempDir, '.speccore', 'CONSTITUTION.md'), `# 技术宪法（测试）\n\n## 端列表\n\n| 工程标识 | 端名 | 说明 |\n| :--- | :--- | :--- |\n| admin | admin | 管理端 |\n`);
+    await mkdir(join(tempDir, '010-requirements'), { recursive: true });
+    reqPath = join(tempDir, '010-requirements', 'REQUIREMENT.md');
+    await writeFile(reqPath, '# 会议室预订需求\n\n## 功能清单\n\n| # | 模块 | 涉及端 |\n| :--- | :--- | :--- |\n| 1 | 会议室预订 | admin |\n');
+    origCwd = process.cwd();
+    process.chdir(tempDir);
+  });
+
+  afterEach(async () => {
+    process.chdir(origCwd);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('无知识库环境：报告不含知识库/RAG 小节', async () => {
+    const result = await runAnalysis({
+      sources: [],
+      requirements: [reqPath],
+      scope: 'iteration',
+      iteration: 'test-iter',
+      depth: 'normal',
+      readSource: false,
+    });
+    expect(result.report).not.toContain('全局知识库');
+    expect(result.report).not.toContain('RAG 召回');
+  });
+
+  it('有 RULES + RAG 索引：报告含 L2 注入与召回文档', async () => {
+    // L2 注入源：RULES 规则文件（loadGlobalContext 按 priority 注入）
+    await mkdir(join(tempDir, '.speccore', 'RULES'), { recursive: true });
+    await writeFile(join(tempDir, '.speccore', 'RULES', 'api-design.md'), '# API 设计规范\n\n统一接口格式与错误码体系。\n');
+    // 全局索引（indexSummary 注入）
+    await mkdir(join(tempDir, '.speccore', 'GLOBAL'), { recursive: true });
+    await writeFile(join(tempDir, '.speccore', 'GLOBAL', 'INDEX.md'), '# 全局规范索引\n\n项目全局规范入口。\n');
+    // RAG 迭代专属索引（命中「预订」）
+    await mkdir(join(tempDir, '.speccore', 'cache'), { recursive: true });
+    const ragIndex = {
+      version: '1',
+      updatedAt: new Date().toISOString(),
+      scope: 'test-iter',
+      chunks: [{
+        id: 'b1',
+        filePath: '.speccore/PATTERNS/booking.md',
+        fileName: 'booking.md',
+        title: '会议室预订模式',
+        level: 2,
+        content: '预订幂等设计',
+        summary: '会议室预订幂等与并发控制',
+        keywords: ['预订', '幂等'],
+        charCount: 30,
+      }],
+      fileSummaries: {},
+      fileMtimes: {},
+    };
+    await writeFile(join(tempDir, '.speccore', 'cache', 'rag-index-test-iter.json'), JSON.stringify(ragIndex));
+
+    const result = await runAnalysis({
+      sources: [],
+      requirements: [reqPath],
+      scope: 'iteration',
+      iteration: 'test-iter',
+      depth: 'normal',
+      readSource: false,
+    });
+    expect(result.report).toContain('全局知识库');
+    expect(result.report).toContain('RAG 召回');
+    expect(result.report).toContain('会议室预订模式');
   });
 });

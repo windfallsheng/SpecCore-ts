@@ -1,3 +1,12 @@
+## v8.3.328 (2026-10-19) — analyze 链路接入知识库：L2 规范注入 + RAG 语义召回兑底
+
+- **根因**：此前 analyze 链路的 RAG 索引只刷新不检索（索引只被体检从未被使用）；L2 规范（loadGlobalContext）也只注入 taskify/execute 的 prompt，analyze 完全未接入。
+- **L2 规范注入**：新增 `collectKnowledgeContext`，分析时自动加载 `.speccore/GLOBAL/` 必读 + BUSINESS_RULES + RULES/（按 priority），注入分析报告「全局知识库」节。
+- **RAG 兑底召回**：新增 `searchRagIndex`（中文双字组 + 英文单词加权打分，keywords ×3 / title ×2 / summary ×1），源码索引零命中时按需求全文语义召回规范/模式文档，注入报告「RAG 召回」节。
+- **全链路覆盖**：纯需求（req）/ 纯代码（code）/ 混合（combined）三模式 + 全局/task/迭代三 scope 均接入；报告概览表新增「全局知识库」「RAG 召回」两行。
+- **修复**：检索查询词由需求路径列表改为需求全文（路径里不含业务关键词，原实现召不回任何文档）。
+- 测试：487/487 全绿（+8）。
+
 ## v8.3.327 (2026-10-19) — CI 第二层修复：coverage 依赖补齐 + 锦上添花环节不阻断发布
 
 - **根因**：lock 修复后 CI 首次跑到 `vitest run --coverage`，报 MISSING DEPENDENCY（devDependencies 无 `@vitest/coverage-v8`）——此前被 npm ci 失败截停从未暴露。

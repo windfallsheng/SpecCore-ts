@@ -536,6 +536,86 @@ export async function loadRagIndex(cwd: string, fileName?: string): Promise<RagI
   }
 }
 
+/** RAG 检索命中项 */
+export interface RagHit {
+  filePath: string;
+  title: string;
+  summary: string;
+  level: number;
+  score: number;
+}
+
+/**
+ * 语义召回：对 RAG 索引做关键词加权检索（v8.3.328 起成为消费端，此前索引只被体检从未被使用）
+ *
+ * 打分规则（query 提取中文字词 + 英文单词）：
+ * - chunk.keywords 命中 ×3
+ * - chunk.title 命中 ×2
+ * - chunk.summary 命中 ×1
+ *
+ * 索引文件优先级：rag-index-{iteration}.json → rag-index.json（全局）
+ */
+export async function searchRagIndex(
+  cwd: string,
+  query: string,
+  options?: { limit?: number; iteration?: string },
+): Promise<RagHit[]> {
+  const limit = options?.limit ?? 5;
+
+  // 1. 选索引文件（迭代专属优先，回退全局）
+  let index: RagIndex | null = null;
+  if (options?.iteration) {
+    index = await loadRagIndex(cwd, `rag-index-${options.iteration}.json`);
+  }
+  if (!index) index = await loadRagIndex(cwd, 'rag-index.json');
+  if (!index || index.chunks.length === 0) return [];
+
+  // 2. 提取查询词：连续中文串→双字组；英文→单词；中英文混合拆开
+  const tokens: string[] = [];
+  const chineseRuns = query.match(/[\u4e00-\u9fa5]{2,}/g) || [];
+  for (const run of chineseRuns) {
+    for (let i = 0; i < run.length - 1; i++) tokens.push(run.slice(i, i + 2));
+  }
+  const englishWords = query.match(/[a-zA-Z][a-zA-Z0-9-]{2,}/g) || [];
+  tokens.push(...englishWords.map((w) => w.toLowerCase()));
+  const uniqueTokens = [...new Set(tokens)];
+  if (uniqueTokens.length === 0) return [];
+
+  // 3. 加权打分（v8.3.328: 用 keywords/title/summary 三路，避免全 content 扫描）
+  const hits: RagHit[] = [];
+  for (const chunk of index.chunks) {
+    let score = 0;
+    const kwLower = chunk.keywords.map((k) => k.toLowerCase()).join(' ');
+    const titleLower = chunk.title.toLowerCase();
+    const summaryLower = chunk.summary.toLowerCase();
+    for (const t of uniqueTokens) {
+      const tl = t.toLowerCase();
+      if (kwLower.includes(tl)) score += 3;
+      if (titleLower.includes(tl)) score += 2;
+      if (summaryLower.includes(tl)) score += 1;
+    }
+    if (score > 0) {
+      hits.push({
+        filePath: chunk.filePath,
+        title: chunk.title,
+        summary: chunk.summary,
+        level: chunk.level,
+        score,
+      });
+    }
+  }
+
+  // 4. 排序去重（同文件同标题只留最高分）
+  hits.sort((a, b) => b.score - a.score || a.level - b.level);
+  const seen = new Set<string>();
+  return hits.filter((h) => {
+    const key = `${h.filePath}#${h.title}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, limit);
+}
+
 /**
  * 检查索引是否匹配当前 scope（迭代/任务变更后需重建）
  */

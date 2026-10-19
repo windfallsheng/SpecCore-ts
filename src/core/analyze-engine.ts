@@ -222,18 +222,21 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   let outputPath: string;
   let report: string;
 
+  // v8.3.328: L2 规范注入 + RAG 兑底召回（此前需求分析链路未接入知识库）
+  const kctx = await collectKnowledgeContext(input, sourceContents, fullContent);
+
   if (input.scope === 'global') {
     outputPath = join(getProjectRoot(), '.speccore', 'GLOBAL', input.output || 'REQ_CONSISTENCY.md');
-    report = buildReqConsistencyReport(input, issues, archImpact);
+    report = buildReqConsistencyReport(input, issues, archImpact, kctx);
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
     outputPath = join(getProjectRoot(), `Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
-    report = buildTaskReqReport(input, issues, archImpact, sourceContents, sourceSummaries);
+    report = buildTaskReqReport(input, issues, archImpact, sourceContents, sourceSummaries, kctx);
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
-    report = buildIterationReqReport(input, issues, archImpact, sourceContents, sourceSummaries);
+    report = buildIterationReqReport(input, issues, archImpact, sourceContents, sourceSummaries, kctx);
 
     // 按端分目录输出
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
@@ -392,14 +395,14 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
 
   if (input.scope === 'global') {
     outputPath = join('.speccore', 'GLOBAL', input.output || 'ARCH_IMPACT.md');
-    report = await buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
+    report = await buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents, reqContent: fullReqContent });
   } else if (input.scope === 'task') {
     outputPath = join(getProjectRoot(), `Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
-    report = await buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
+    report = await buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents, reqContent: fullReqContent });
   } else {
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
-    report = await buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents });
+    report = await buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents, reqContent: fullReqContent });
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
     await writePerFeature(iterDir, report, input.output || 'ANALYSIS.md');
   }
@@ -864,12 +867,15 @@ interface CodeMapEntry {
 function buildReqConsistencyReport(
   input: AnalyzeInput,
   issues: Issue[],
-  archImpact: ArchImpact
+  archImpact: ArchImpact,
+  kctx?: KnowledgeContext,
 ): string {
   const now = new Date().toISOString().split('T')[0];
   let r = `# 全局需求一致性分析\n\n`;
   r += `> 分析时间: ${now} | 需求文档: ${input.requirements.length} 个 | 模式: 全局\n\n`;
   r += `---\n\n`;
+  // v8.3.328: 全局知识库（L2 注入）+ RAG 召回结果
+  if (kctx) r += renderKnowledgeSections(kctx);
   r += `## 1. 需求覆盖\n\n`;
   r += `| # | 文档 |\n| :--- | :--- |\n`;
   for (let i = 0; i < input.requirements.length; i++) {
@@ -896,6 +902,7 @@ function buildIterationReqReport(
   archImpact: ArchImpact,
   sourceContents?: Record<string, string>,
   sourceSummaries?: Record<string, string>,
+  kctx?: KnowledgeContext,
 ): string {
   const now = new Date().toISOString().split('T')[0];
   const iter = input.iteration || 'current';
@@ -904,6 +911,9 @@ function buildIterationReqReport(
   let r = `# 需求分析报告\n\n`;
   r += `> 迭代: ${iter} | 分析时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n\n`;
   r += `---\n\n`;
+
+  // v8.3.328: 全局知识库（L2 注入）+ RAG 召回结果
+  if (kctx) r += renderKnowledgeSections(kctx);
 
   r += `## 1. 需求完整性检查\n\n`;
   r += `| 严重度 | 分类 | 问题 |\n| :--- | :--- | :--- |\n`;
@@ -970,10 +980,13 @@ function buildTaskReqReport(
   archImpact: ArchImpact,
   sourceContents?: Record<string, string>,
   sourceSummaries?: Record<string, string>,
+  kctx?: KnowledgeContext,
 ): string {
   const now = new Date().toISOString().split('T')[0];
   let r = `# 任务需求分析\n\n`;
   r += `> 迭代: ${input.iteration} | 任务: ${input.taskId} | 分析: ${now}\n\n---\n\n`;
+  // v8.3.328: 全局知识库（L2 注入）+ RAG 召回结果
+  if (kctx) r += renderKnowledgeSections(kctx);
   r += `## 问题清单\n`;
   if (issues.length === 0) r += `> ✅ 无问题\n`;
   else for (const i of issues) r += `- [ ] ${i.message.replace(/\n/g, ' ')}\n`;
@@ -1172,6 +1185,73 @@ interface AIEnhancedReportParams {
   apiInventory: ApiEntry[];
   aiContext: AIContextResult;
   sourceContents: Record<string, string>;
+  /** 需求全文（用于 RAG 语义检索的查询词，v8.3.328） */
+  reqContent?: string;
+}
+
+// ================================================================
+// 知识上下文：L2 规范注入 + RAG 语义召回（v8.3.328）
+// ================================================================
+
+/** 分析上下文中的知识库注入结果 */
+export interface KnowledgeContext {
+  /** L2 规范注入（BUSINESS_RULES + RULES/ 按 priority）格式化后的 Markdown */
+  globalContextStr: string;
+  /** RAG 语义召回命中（仅当源码索引零命中时兑底） */
+  ragHits: { filePath: string; title: string; summary: string }[];
+}
+
+/**
+ * 收集知识上下文：L2 规范注入（loadGlobalContext）+ RAG 兑底召回（searchRagIndex）
+ *
+ * 此前 analyze 链路对 RAG 索引只刷新不检索（索引只被体检从未被使用），
+ * L2 规范也只注入 taskify/execute 的 prompt，analyze 链路完全未接入。
+ */
+async function collectKnowledgeContext(
+  input: AnalyzeInput,
+  sourceContents: Record<string, string>,
+  queryText: string,
+): Promise<KnowledgeContext> {
+  let globalContextStr = '';
+  let ragHits: KnowledgeContext['ragHits'] = [];
+  try {
+    const { loadGlobalContext, formatGlobalContext } = await import('./prompt-builder');
+    const gctx = await loadGlobalContext(process.cwd(), 'analyze', undefined, undefined);
+    // 仅当知识库有实质内容才注入（formatGlobalContext 对空 ctx 也输出标题行）
+    const hasContent = !!(
+      gctx.indexSummary ||
+      (gctx.keyFileSummaries && gctx.keyFileSummaries.length > 0) ||
+      (gctx.toc && gctx.toc.length > 0)
+    );
+    globalContextStr = hasContent ? formatGlobalContext(gctx) : '';
+    if (Object.keys(sourceContents).length === 0) {
+      const { searchRagIndex } = await import('./rag-engine');
+      ragHits = await searchRagIndex(process.cwd(), queryText, {
+        iteration: input.iteration,
+      });
+      if (ragHits.length > 0) {
+        logger.info(`   🔎 RAG 语义召回 ${ragHits.length} 条规范文档（源码索引零命中兑底）`);
+      }
+    }
+  } catch { /* 非关键，静默失败 */ }
+  return { globalContextStr, ragHits };
+}
+
+/** 渲染知识库注入小节（全局知识库 + RAG 召回命中） */
+function renderKnowledgeSections(kctx: KnowledgeContext): string {
+  let out = '';
+  if (kctx.globalContextStr) {
+    out += `${kctx.globalContextStr}\n`;
+  }
+  if (kctx.ragHits.length > 0) {
+    out += `## 🔎 相关规范与模式（RAG 召回）\n\n`;
+    out += `> 源码索引零命中，以下为语义检索命中的规范/模式文档，请结合其内容完成分析。\n\n`;
+    for (const hit of kctx.ragHits) {
+      out += `- **${hit.title}**（\`${hit.filePath}\`）: ${hit.summary.slice(0, 120)}\n`;
+    }
+    out += `\n`;
+  }
+  return out;
 }
 
 async function buildAIEnhancedReport(
@@ -1183,6 +1263,13 @@ async function buildAIEnhancedReport(
   const now = new Date().toISOString().split('T')[0];
   const iter = input.iteration || 'current';
   const blockerCount = issues.filter(i => i.severity === 'blocker').length;
+
+  // v8.3.328: L2 规范注入 + RAG 兑底召回（此前 analyze 链路未接入；RAG 索引只被体检从未被使用）
+  const kctx = await collectKnowledgeContext(
+    input,
+    sourceContents,
+    params.reqContent || input.requirements.join('\n'),
+  );
 
   let r = `# ${scope === 'global' ? '全局架构影响分析' : scope === 'task' ? '任务综合分析' : '需求分析报告'}\n\n`;
   r += `> 迭代: ${iter} | 时间: ${now} | 状态: ${blockerCount > 0 ? '🔴 有阻断' : '🟢 可拆分'}\n`;
@@ -1199,7 +1286,12 @@ async function buildAIEnhancedReport(
   r += `| 阻断问题 | ${blockerCount} |\n`;
   r += `| API 接口 | ${apiInventory.length} |\n`;
   r += `| 架构风险 | ${archImpact.risks.length} |\n`;
+  r += `| 全局知识库 | ${kctx.globalContextStr ? '已注入' : '未发现'} |\n`;
+  r += `| RAG 召回 | ${kctx.ragHits.length} 条 |\n`;
   r += `\n`;
+
+  // v8.3.328: 全局知识库（L2 注入）+ RAG 召回结果
+  r += renderKnowledgeSections(kctx);
 
   // 2. 问题清单 (基础规则检查)
   r += `## 🔍 自动检查结果\n\n`;
