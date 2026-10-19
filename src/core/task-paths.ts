@@ -43,12 +43,17 @@ export async function findTaskDir(tasksRoot: string, taskId: string): Promise<st
   if (await pathExists(legacyPath)) return legacyPath;
 
   // 2. 查新布局: 030-tasks/{type}/Task-NNN*/
+  // v8.3.316+: 前缀匹配加边界——Task-033 只命中 Task-033 自身或其 -topic 后缀，
+  // 不误命中 Task-0331-xxx（需且仅需下一字符为 '-' 或串尾）
   for (const type of TASK_TYPES) {
     const typeDir = join(tasksRoot, type);
     if (await pathExists(typeDir)) {
       const entries = await readdir(typeDir, { withFileTypes: true });
       for (const e of entries) {
-        if (e.isDirectory() && e.name.startsWith(taskId)) {
+        if (
+          e.isDirectory() && e.name.startsWith(taskId) &&
+          (e.name.length === taskId.length || e.name[taskId.length] === '-')
+        ) {
           return join(typeDir, e.name);
         }
       }

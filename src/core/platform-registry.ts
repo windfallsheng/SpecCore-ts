@@ -2,17 +2,42 @@
  * platform-registry — 端名注册与解析
  *
  * 三层端名一致性保障:
- *   层级 1: CONSTITUTION.md「端列表」章节 / 「对应端」列 — 全局权威
+ *   层级 1: PROJECT.yaml platforms（机器事实源，v8.3.323+）> CONSTITUTION.md「端列表」/「对应端」列（AI 契约回退）
  *   层级 2: _shared/PLATFORMS.md — 任务级实际涉及的端
  *   层级 3: 模糊匹配 — 命令层自动纠错
  */
 
-import { readFile, pathExists, writeFile, ensureDir, readdir } from 'fs-extra';
+import { readFile, readFileSync, existsSync, pathExists, writeFile, ensureDir, readdir } from 'fs-extra';
 import { join } from 'path';
+import { parseYaml } from './unified-config';
 
-/** 从 CONSTITUTION.md 解析全局端名列表 */
+/**
+ * 从 PROJECT.yaml platforms 解析端名列表（v8.3.323: 机器事实源优先）
+ * 只认显式声明的端（platforms 非空才生效）；空/缺失返回空数组，由调用方回退 CONSTITUTION。
+ */
+function parsePlatformsFromProjectYaml(base: string): string[] {
+  try {
+    const projectPath = join(base, '.speccore', 'PROJECT.yaml');
+    if (!existsSync(projectPath)) return [];
+    const raw = parseYaml(readFileSync(projectPath, 'utf-8')) as {
+      platforms?: Array<{ name?: unknown }>;
+    };
+    return (raw.platforms || [])
+      .map((p) => (typeof p?.name === 'string' ? p.name.trim() : ''))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** 从 CONSTITUTION.md 解析全局端名列表（v8.3.323: PROJECT.yaml platforms 优先，此处为回退） */
 export async function parseGlobalPlatforms(cwd?: string): Promise<string[]> {
   const base = cwd || process.cwd();
+
+  // v8.3.323: 机器事实源优先——PROJECT.yaml platforms 声明了端就以它为准
+  const fromYaml = parsePlatformsFromProjectYaml(base);
+  if (fromYaml.length > 0) return fromYaml;
+
   const constitutionPath = join(base, '.speccore', 'CONSTITUTION.md');
   if (!(await pathExists(constitutionPath))) return [];
 

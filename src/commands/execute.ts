@@ -2459,6 +2459,13 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
       taskState.type = (await readFile(typePath, 'utf-8')).trim() || 'feature';
     }
   } catch {}
+  // v8.3.320: 读取负责人（.meta/owner，与批量模式 scanTasks 口径一致，计划/分支展示不再落空）
+  try {
+    const ownerPath = join(taskDir, '.meta', 'owner');
+    if (await pathExists(ownerPath)) {
+      taskState.assignee = (await readFile(ownerPath, 'utf-8')).trim();
+    }
+  } catch {}
   const branchName = await prepareTaskBranch(taskState, iteration, options.base, createdBranches);
   if (branchName) {
     logger.info(`  🌿 ${task}: ${branchName}`);

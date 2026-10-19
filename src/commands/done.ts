@@ -316,8 +316,11 @@ async function batchDoneFlow(
 async function scanForTask(iterDir: string, taskId: string): Promise<string[]> {
   const fs = require('fs');
   const entries = fs.readdirSync(iterDir, { withFileTypes: true });
+  // v8.3.316+: 前缀匹配加边界——Task-033 只命中 Task-033 自身或其 -topic 后缀，
+  // 不误命中 Task-0331-xxx（与 task-paths.ts findTaskDir 同源修复）
   return entries
-    .filter((e: any) => e.isDirectory() && e.name.startsWith(taskId))
+    .filter((e: any) => e.isDirectory() && e.name.startsWith(taskId) &&
+      (e.name.length === taskId.length || e.name[taskId.length] === '-'))
     .map((e: any) => e.name);
 }
 

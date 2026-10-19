@@ -12,6 +12,8 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   loadStaffing,
+  parseStaffingTable,
+  mergeStaffing,
   matchDirection,
   parseOwnerDecls,
   renderOwnersBlock,
@@ -58,6 +60,186 @@ describe('loadStaffing', () => {
 
   it('STAFFING.md 缺失返回空数组（报缺不脑补）', () => {
     expect(loadStaffing(iterDir)).toEqual([]);
+  });
+});
+
+describe('loadStaffing 两级合并（v8.3.319+: 全局 TEAM.md 基座 + 迭代 STAFFING.md 差异）', () => {
+  const teamTable = (rows: string[]) => [
+    '# 团队与 Git 映射',
+    '| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 | 平台方向 | 投入比例 |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
+    ...rows,
+  ].join('\n');
+
+  function setupGlobalTeam(content: string) {
+    mkdirSync(join(tmp, '.speccore', 'PROJECT'), { recursive: true });
+    writeFileSync(join(tmp, '.speccore', 'PROJECT', 'TEAM.md'), content);
+  }
+
+  it('全局基座 + 迭代无 STAFFING.md → 纯全局名册（已建迭代即时继承）', () => {
+    setupGlobalTeam(teamTable([
+      '| 张三 | zs | 后端 | Node.js | 订单 | 后台 | 80% |',
+      '| 李四 | ls | 前端 | React | 订单 | Web, APP | 70% |',
+    ]));
+    const members = loadStaffing(iterDir);
+    expect(members).toEqual([
+      { name: '张三', directions: ['后台'], capacity: 80, status: 'active' },
+      { name: '李四', directions: ['Web', 'APP'], capacity: 70, status: 'active' },
+    ]);
+  });
+
+  it('迭代同名整体覆盖、独有成员追加、未列基座成员保留', () => {
+    setupGlobalTeam(teamTable([
+      '| 张三 | zs | 后端 | Node.js | 订单 | 后台 | 80% |',
+      '| 李四 | ls | 前端 | React | 订单 | Web | 70% |',
+    ]));
+    writeFileSync(join(iterDir, 'STAFFING.md'), [
+      '| 成员 | 平台方向 | 投入比例 |',
+      '| :--- | :--- | :--- |',
+      '| 李四 | 小程序 | 100% |',
+      '| 王五 | APP | 60% |',
+    ].join('\n'));
+    expect(loadStaffing(iterDir)).toEqual([
+      { name: '张三', directions: ['后台'], capacity: 80, status: 'active' },
+      { name: '李四', directions: ['小程序'], capacity: 100, status: 'active' },
+      { name: '王五', directions: ['APP'], capacity: 60 },
+    ]);
+  });
+
+  it('迭代方向留空 + 比例 0% → 覆盖为空方向（本迭代不参与该成员分配）', () => {
+    setupGlobalTeam(teamTable([
+      '| 张三 | zs | 后端 | Node.js | 订单 | 后台 | 80% |',
+    ]));
+    writeFileSync(join(iterDir, 'STAFFING.md'), [
+      '| 成员 | 平台方向 | 投入比例 |',
+      '| :--- | :--- | :--- |',
+      '| 张三 | | 0% |',
+    ].join('\n'));
+    expect(loadStaffing(iterDir)).toEqual([
+      { name: '张三', directions: [], capacity: 0, status: 'active' },
+    ]);
+  });
+
+  it('旧版 TEAM.md 无「平台方向」列 → 基座不可用，回退仅迭代级（兼容）', () => {
+    setupGlobalTeam([
+      '# 团队与 Git 映射',
+      '| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 |',
+      '| :--- | :--- | :--- | :--- | :--- |',
+      '| 张三 | zs | 后端 | Node.js | 订单 |',
+    ].join('\n'));
+    writeFileSync(join(iterDir, 'STAFFING.md'), [
+      '| 成员 | 平台方向 | 投入比例 |',
+      '| :--- | :--- | :--- |',
+      '| 李四 | Web | 70% |',
+    ].join('\n'));
+    expect(loadStaffing(iterDir)).toEqual([
+      { name: '李四', directions: ['Web'], capacity: 70 },
+    ]);
+  });
+});
+
+describe('parseStaffingTable / mergeStaffing', () => {
+  it('按表头定位列，兼容列序差异（TEAM.md 多列 vs STAFFING.md 三列）', () => {
+    const team = parseStaffingTable([
+      '| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 | 平台方向 | 投入比例 |',
+      '| :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
+      '| 张三 | zs | 后端 | Node.js | 订单 | 后台，Web | 80% |',
+    ].join('\n'));
+    expect(team).toEqual([{ name: '张三', directions: ['后台', 'Web'], capacity: 80 }]);
+
+    const staffing = parseStaffingTable([
+      '| 成员 | 平台方向 | 投入比例 |',
+      '| :--- | :--- | :--- |',
+      '| 李四 | 小程序、APP | 70% |',
+    ].join('\n'));
+    expect(staffing).toEqual([{ name: '李四', directions: ['小程序', 'APP'], capacity: 70 }]);
+  });
+
+  it('mergeStaffing 空基座/空覆盖快捷路径', () => {
+    const g = [{ name: '张三', directions: ['后台'], capacity: 80 }];
+    const i = [{ name: '李四', directions: ['Web'], capacity: 70 }];
+    expect(mergeStaffing([], i)).toEqual(i);
+    expect(mergeStaffing(g, [])).toEqual(g);
+    expect(mergeStaffing(g, i)).toEqual([
+      { name: '张三', directions: ['后台'], capacity: 80 },
+      { name: '李四', directions: ['Web'], capacity: 70 },
+    ]);
+  });
+});
+
+describe('成员状态（v8.3.321+: 出项目成员不参与自动填充）', () => {
+  const teamTableWithStatus = (rows: string[]) => [
+    '# 团队与 Git 映射',
+    '| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 | 平台方向 | 投入比例 | 状态 |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
+    ...rows,
+  ].join('\n');
+
+  function setupGlobalTeam(content: string) {
+    mkdirSync(join(tmp, '.speccore', 'PROJECT'), { recursive: true });
+    writeFileSync(join(tmp, '.speccore', 'PROJECT', 'TEAM.md'), content);
+  }
+
+  it('全局「出项目」成员被剔除，只返回在职成员', () => {
+    setupGlobalTeam(teamTableWithStatus([
+      '| 张三 | zs | 后端 | Node.js | 订单 | admin | 80% | 在职 |',
+      '| 李四 | ls | 前端 | React | 订单 | h5 | 70% | 出项目 |',
+      '| 赵六 | zl | 前端 | Vue | 活动 | miniapp | 60% | |',
+    ]));
+    expect(loadStaffing(iterDir)).toEqual([
+      { name: '张三', directions: ['admin'], capacity: 80, status: 'active' },
+      { name: '赵六', directions: ['miniapp'], capacity: 60, status: 'active' },
+    ]);
+  });
+
+  it('迭代写「在职」可复活出项目成员（状态也是可覆盖差异）', () => {
+    setupGlobalTeam(teamTableWithStatus([
+      '| 李四 | ls | 前端 | React | 订单 | h5 | 70% | 出项目 |',
+    ]));
+    writeFileSync(join(iterDir, 'STAFFING.md'), [
+      '| 成员 | 平台方向 | 投入比例 | 状态 |',
+      '| :--- | :--- | :--- | :--- |',
+      '| 李四 | h5 | 100% | 在职 |',
+    ].join('\n'));
+    expect(loadStaffing(iterDir)).toEqual([
+      { name: '李四', directions: ['h5'], capacity: 100, status: 'active' },
+    ]);
+  });
+
+  it('迭代写「出项目」可局部停用在职成员', () => {
+    setupGlobalTeam(teamTableWithStatus([
+      '| 张三 | zs | 后端 | Node.js | 订单 | admin | 80% | 在职 |',
+      '| 李四 | ls | 前端 | React | 订单 | h5 | 70% | 在职 |',
+    ]));
+    writeFileSync(join(iterDir, 'STAFFING.md'), [
+      '| 成员 | 平台方向 | 投入比例 | 状态 |',
+      '| :--- | :--- | :--- | :--- |',
+      '| 张三 | admin | 80% | 出项目 |',
+    ].join('\n'));
+    expect(loadStaffing(iterDir)).toEqual([
+      { name: '李四', directions: ['h5'], capacity: 70, status: 'active' },
+    ]);
+  });
+
+  it('旧表无「状态」列 → 全员在职（兼容不变）', () => {
+    setupGlobalTeam([
+      '# 团队与 Git 映射',
+      '| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 | 平台方向 | 投入比例 |',
+      '| :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
+      '| 张三 | zs | 后端 | Node.js | 订单 | admin | 80% |',
+    ].join('\n'));
+    expect(loadStaffing(iterDir)).toEqual([
+      { name: '张三', directions: ['admin'], capacity: 80, status: 'active' },
+    ]);
+  });
+
+  it('方向唯一成员出项目 → 候选推导跳过（不脑补）', () => {
+    setupGlobalTeam(teamTableWithStatus([
+      '| 张三 | zs | 后端 | Node.js | 订单 | admin | 80% | 出项目 |',
+    ]));
+    const staffing = loadStaffing(iterDir);
+    expect(staffing).toEqual([]);
+    expect(deriveOwnerCandidates(['admin'], staffing)).toEqual([]);
   });
 });
 

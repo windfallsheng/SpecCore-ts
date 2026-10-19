@@ -1488,7 +1488,7 @@ export async function getEffectiveGitConfig(platformName: string): Promise<Effec
  * 之前的行级手写解析器只认块级数组，不认 flow 写法（[a,b]/[]/{}），
  * 且把「- # 注释」误当元素值，已 3 次踩坑。js-yaml 是标准解析器，彻底根治。
  */
-function parseYaml(content: string): unknown {
+export function parseYaml(content: string): unknown {
   try {
     // JSON_SCHEMA: 不做 YAML 特有的日期/二进制推断（避免 date: 2026-09-19 被解析成 Date 对象）
     return yaml.load(content, { schema: yaml.JSON_SCHEMA }) ?? {};
@@ -1518,7 +1518,7 @@ function normalizeStringArray(v: unknown): string[] {
   return [];
 }
 
-function toYaml(config: SpecConfig): string {
+export function toYaml(config: SpecConfig): string {
   let yaml = '# =============================================================================\n';
   yaml += '# SpecCore 系统配置 (.speccore.yml)\n';
   yaml += '# =============================================================================\n';
@@ -1887,7 +1887,7 @@ function toYaml(config: SpecConfig): string {
   return yaml;
 }
 
-function toProjectYaml(config: ProjectConfig): string {
+export function toProjectYaml(config: ProjectConfig): string {
   let yaml = '# =============================================================================\n';
   yaml += '# SpecCore 项目配置 (.speccore/PROJECT.yaml)\n';
   yaml += '# =============================================================================\n';

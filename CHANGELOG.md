@@ -1,3 +1,158 @@
+## v8.3.325 (2026-10-19) — constitution-builder 接线：技术栈自动检测写入主 CONSTITUTION 决策式表
+
+- **constitution-builder 重构**：写入目标从 `.speccore/PROJECT/CONSTITUTION.md`（无人读取的副本）改为 `.speccore/CONSTITUTION.md` 主文件的「技术栈」节，与 v8.3.324 决策式表对齐；检测产出「语言/框架/数据存储/依据」四列，端名列留待用户拍板（不脑补）。
+- **init 接线**：模板生成后自动检测（pom.xml/build.gradle/package.json/go.mod/requirements.txt/源码扫描），示例行整体替换为检测行（端名用项目名）。
+- **update 接线**：仅当技术栈表未填时补填检测行；已填不动（不覆盖用户数据）；旧菜单格式仅提示不破坏。
+- **删除框架通用规则**（RESTful/PR 审查/created_at 等），符合 AGENTS.md 禁令 12。
+- **typescript 判定收紧**：仅显式依赖 typescript 才判 TS，纯 JS 项目不再误判。
+- 新增 tests/unit/core/constitution-builder.test.ts（11 用例：检测分支 + freshTemplate/存量已填/存量未填/旧格式/文件缺失）。
+
+## v8.3.324 (2026-10-19) — CONSTITUTION 模板族升级：决策式技术栈 + 分段异常码 + 模板族机器锁
+
+### 背景
+- CONSTITUTION.md 的「技术栈」是菜单式罗列（Java/TS/Go/Python + 四框架），AI 拿到的是排除法信息而非正选答案；「异常码体系」是几个枚举示例（1001/1002），AI 无法从中获得生成能力；且主模板与 examples/ 示例是多份独立字符串，新语义靠人肉同步，漏同步无机器拦截。
+
+### 新增
+- **技术栈改决策式**：每端一行写「已选定」的技术与版本（含依据列，如 pom.xml/package.json）；可选技术域降为末尾的「约束参考」；未填写的端回退到端级 TECH.md（analyze 产物）。主模板与 CONSTITUTION-EXAMPLE 同步升级。
+- **异常码改分段规则**：按段划分（如 1xxx 用户/2xxx 订单）+ 生成规则（首位=模块段、后三位=段内序号）——给 AI 生成能力而非几个例子。
+- **examples 新增人员配置示例**：TEAM-EXAMPLE.md（全员基座 7 列含状态）、STAFFING-EXAMPLE.md（迭代差异 4 列含状态，演示出项目/临时复活语义）；存量项目跑 update 即可照抄最新样式。
+- **模板族一致性机器锁**：tests/unit/commands/template-consistency.test.ts 集中登记关键语义锚点（机器事实源/决策式/分段规则/状态列等），行为级比对主模板与 EXAMPLE，任一缺锚点即红。
+
+### 修改
+- CONSTITUTION-EXAMPLE 补 v8.3.323 platforms 指针 + 技术栈/异常码决策式示例；examples README 清单与使用方式同步（第 11 条）。
+- 命名规范充实：目录约定（全小写短横线）、Git 提交格式（type(scope)）等。
+- 本仓库 .speccore/CONSTITUTION.md 填真：技术栈改 ts-cli 决策式单行（TypeScript 5/Node.js/无数据存储）、异常码改真实退出码约定（0 成功/1 一般错误/10 主机 AI 接力）、项目信息「对应端」填「—」（CLI 单工程）、端列表注释如实标注为测试迭代示例端。
+
+### 测试
+- 新增模板族一致性机器锁 4 用例；全量 468/468 通过。
+
+### 背景
+- v8.3.322 收敛了「Git 分支策略」，但「项目信息」表（端列表/源码路径/Git 仓库）仍两头消费：parseGlobalPlatforms、loadSourcePathMap 只认 CONSTITUTION.md 表格，而 PROJECT.yaml platforms 已声明同构字段；保护分支两处不一致时静默「合并」，用户不知哪份生效；冲突时反复告警刷屏。
+
+### 新增
+- **项目信息表收敛（v8.3.323）**：`parseGlobalPlatforms`（端列表权威）与 `loadSourcePathMap`（源码路径→端映射，变更检测用）改为 PROJECT.yaml `platforms` 声明即准、未声明字段回退 CONSTITUTION「项目信息」表——与 Git 段同构的「声明即准 + 回退」模式；CONSTITUTION.md / init 模板的「项目信息」节加机器事实源指针。
+- **保护分支严格收敛**：PROJECT.yaml 声明了 protected_branches（全局或端级）即以它为准（不再与 CONSTITUTION 并集）；显式声明空列表 = 完全关闭该层保护分支；未声明才回退 CONSTITUTION「保护分支」行。
+- **不一致一次性告警**：PROJECT.yaml 与 CONSTITUTION 对应字段不一致时，首� ��写入一次指纹 marker 后不再重复（同值重录即消），避免每次命令都刷屏。
+
+### 修改
+- `installGitHooks` shell 模板纳入 PROJECT.yaml protected_branches（与同步/异步检查同口径）。
+- 本仓库 `.speccore/CONSTITUTION.md`、`.speccore/PROJECT.yaml` 实例同步加指针。
+
+### 测试
+- git-integration-subtask / platform-registry 新增覆盖语义、显式清空、默认兜底、告警去重用例；全量 464/464 通过。
+
+### 背景
+- CONSTITUTION.md「Git 分支策略」与 PROJECT.yaml `git` 段都有 Git 配置（默认分支/保护分支），但消费链各说各话：loadGitConfig/getProtectedBranches 只认 CONSTITUTION，resolveTaskBaseBranch/getEffectiveGitConfig 只认 PROJECT.yaml，同一字段两份值各管一段；PROJECT.yaml 头注释宣称「update 自动同步到 CONSTITUTION」、init 模板宣称反向同步，而 update 命令实际都不做。
+
+### 新增
+- **loadGitConfig 全局层收敛**：PROJECT.yaml `git` 段（同步解析原始文件，新增 loadRawProjectGitSync）为主源——default_base→默认分支、protected_branches（全局+端级合并）→保护分支；CONSTITUTION「Git 分支策略」降为 AI 契约回退，每字段独立（仅 PROJECT.yaml 未声明时回退，如「任务分支」类型段、依赖合并策略等 PROJECT.yaml 无对应表达的字段）。
+- **getProtectedBranches 同步版收敛**：与异步合并版同口径——PROJECT.yaml 全局+端级为主源、CONSTITUTION 回退；isProtectedBranch 同步检查随之修复（此前 PROJECT.yaml 配置的保护分支在同步路径从不生效）。
+- **Git hooks 纳入 PROJECT.yaml**：pre-commit/pre-push 的 shell 保护分支检查在 CONSTITUTION grep 后追加 PROJECT.yaml `protected_branches`（全局+端级）提取。
+
+### 修改
+- 文档方向统一：PROJECT.yaml 头注释（模板 toProjectYaml + 本仓库实例）改为「本段为 Git 配置机器事实源」；init.ts 四处反向声明（CONSTITUTION 模板指针、字段对照表、examples/README、CONSTITUTION-EXAMPLE）改为准确描述——CLI 只认 PROJECT.yaml，CONSTITUTION 是 AI 阅读契约/兼容回退。
+- 本仓库 .speccore/PROJECT.yaml、CONSTITUTION.md 注释同步修正（不动 schema 字段）。
+
+### 测试
+- git-integration-subtask.test.ts 新增 4 用例：PROJECT.yaml 覆盖 CONSTITUTION、每字段独立回退、getProtectedBranches 全局+端级+CONSTITUTION 合并、无 PROJECT.yaml 兼容回退。459/459 全绿。
+
+## v8.3.321 (2026-10-19) — 成员状态：出项目成员不再参与自动填充
+
+### 背景
+- 团队有成员出项目时，无状态标记——analyze 候选推导、taskify 负荷均衡仍会把已离开的成员自动填充到新任务上。
+
+### 新增
+- **「状态」列**（TEAM.md 全员基座 + 迭代 STAFFING.md 差异层）：在职（缺省）/ 出项目，归一化识别（出/离/停/inactive 均可）；出项目成员在 loadStaffing 合并后统一剔除，analyze 推导与 taskify 分配自动跳过，只选在职成员。
+- **状态也是可覆盖差异**：迭代层写「在职」可复活基座出项目成员（如临时回归），写「出项目」可局部停用；留空继承基座状态；旧表无状态列全员在职（兼容不变）。
+- 已拍板（confirmed）/已固化的 .meta/owner 不受影响——状态只影响未来自动填充。
+
+### 修改
+- init.ts / create.ts 模板同步加「状态」列与说明。
+
+### 测试
+- unit-staffing.test.ts 新增 5 用例（剔除出项目/迭代复活/局部停用/旧表兼容/唯一候选跳过）；全量 455/455 零回归。
+
+## v8.3.320 (2026-10-19) — 人员链路下游补齐：execute 单任务读 owner + TASK_SUMMARY 人员维度
+
+### 背景
+- 排查「子任务开发人员是否都来自团队配置」时发现两处断链：①execute 单任务路径（--task）taskState.assignee 硬编码空串，不读 .meta/owner——执行单任务时计划/分支展示的负责人落空（批量模式 scanTasks 正常读）；②TASK_SUMMARY 任务总览无负责人列，也没有按人统计的维度。
+
+### 修复
+- **execute 单任务路径读 .meta/owner**（execute.ts）：与批量模式 scanTasks 口径一致，单任务执行的计划展示/分支命名不再缺负责人。
+- **TASK_SUMMARY 加「负责人」列 + 人员分布统计**（taskify.ts）：任务清单表新增负责人列（confirmed 拍板/autoAssign 分配结果）；汇总区新增「人员分布」表按负责人统计任务数。
+
+### 测试
+- 全量 450/450 零回归。
+
+## v8.3.319 (2026-10-19) — 人员配置两级继承：全局 TEAM.md 全员基座 + 迭代 STAFFING.md 差异覆盖
+
+### 背景
+- 团队名册无「一次维护」机制：全局 .speccore/PROJECT/TEAM.md 只有成员/Git 映射列（无方向/比例），无人消费；每开一个迭代都要把 STAFFING.md 从头重填一遍，团队稳定时重复劳动。
+
+### 新增
+- **TEAM.md 升为全员基座**（init.ts）：表头新增「平台方向/投入比例」两列（原有 Git 映射列保留），登记即被所有迭代继承；旧版无「平台方向」列的表兼容读取（基座不参与合并，行为不变）。
+- **loadStaffing 两级合并**（unit-staffing.ts）：全局 TEAM.md 为底 + 迭代 STAFFING.md 差异覆盖——同名成员整体覆盖方向/比例（方向留空 = 本迭代不做该方向，0% = 不参与），迭代独有成员追加，未列基座成员默认保留；已建迭代即时生效，无需重开。
+- **按表头定位列解析**（parseStaffingTable）：兼容 TEAM.md 多列与 STAFFING.md 三列的列序差异；中间空列保留（「| 张三 | | 0% |」方向留空不再错位）。
+- **autoAssign 跳过 0% 成员**（taskify.ts）：投入比例 0% = 本迭代不参与分配（如休假），此前 0 < Infinity 恒真会把 0% 的人优先分配。
+
+### 修改
+- taskify readStaffing 删除重复解析实现，复用 unit-staffing 合并结果；无配置提示文案同步提 TEAM.md。
+- iteration create / init 示例的 STAFFING.md 模板注明「只写差异，全员基座见 TEAM.md」。
+
+### 测试
+- unit-staffing.test.ts 新增 7 用例：纯基座继承、同名覆盖/独有追加/基座保留、方向留空+0% 覆盖、旧版表兼容、按表头定位、merge 快捷路径；全量 450/450 零回归。
+
+## v8.3.318 (2026-10-19) — 增量切分闭环：内容切分 + 翻译接力对齐 + 章节序号回源
+
+### 背景
+- 验证「需求新增功能单元/新文档/一段内容切分」四个场景时，隔离副本实测暴露三处断链：①宿主翻译接力（--translate-response）序号基准错位——增量重切时旧单元缓存命中，PROMPT 清单只剩新单元，但响应按全量标题对齐，{"1":"push-preference"} 被错位写到「站内信通知」，新单元反而降级拼音；②切分序号沿用 written+1，增量重切时旧单元被 skip 后新章节（第 4 章）拿 01，与已有 01-inbox 序号撞车且破坏「排序==文档顺序」；③「一段文档内容切分」无入口（只能 --file 文档路径）。
+
+### 修复
+- **翻译接力序号基准改待翻译清单**（doc2spec.ts）：translateResponse 解析基准从全量 titles 改为 misses（与 [SPECCORE_PROMPT] 输出清单同源），增量重切不再错位；misses 计算提前，响应写缓存后重算。
+- **切分序号回到文档章节序号**（doc2spec.ts）：seq = unitIndex+1，幂等稳定（重切/增量切分目录名不变），替代 written+1 的产出序。
+- **unitize --content 内容切分**（unitize.ts + cli.ts）：`-c, --content <文本>` 直接切一段文档内容——自动落盘 010-requirements/converted/{文档名}.md 后走常规切分；文档名取 --title 或内容首个 H1（转 ASCII 文件名），两者皆无报错指路。
+- **ask 内容切分意图**（intent-recognition.ts + ask-engine.ts）：信号词（这段内容/以下内容/…）+ 冒号后含 Markdown 标题才提取 content/title（.md 路径优先，防误提取）；ask-engine 拼 `--content`/`--title`（双引号转义）。
+- **help 同步**（help.ts）：unitize 参数表补 --content 条目。
+
+### 测试
+- intent-recognition.test.ts 新增 3 用例：内容切分提取 content/title、.md 路径优先不抢 content、无信号词不误提取；全量 444/444 零回归。
+- 隔离副本 E2E：增量重切（已有 3 单元 skip + 第 4 章产出 04-push-preference）、二次重跑幂等（4/4 全 skip）、run 自动发现新文档切分、--content 落盘切分、ask 三条语句识别、TTY 三选一渲染。
+
+## v8.3.317 (2026-10-19) — 增量重切与 ask 识别修复
+
+### 背景
+- 实测四场景（需求新增功能单元重切/指定新文档/ask 识别/run 自动交互）发现：①ask 对「需求中新增了功能单元，需要重新切分」被 create 任务抢走（100% vs 92%）；②「切分需求文档 docs/新需求.md」未提取文件参数；③无参数命令 ask 输出畸形执行标记（speccore unitize speccore unitize）；④run --from split-units 在 features/ 非空时直接跳过，增量重切无从执行；⑤重切时「系统公告」重复产出（旧 SOURCE.md 含「涉及端」元数据行、新切无 platform，指纹不同 + Jaccard 0.833 < 0.85 双漏）。
+
+### 修复
+- **ask 引擎**（ask-engine.ts）：autoExec 参数提取改首空格拆分，无参数命令不再把整串命令当 args（修复畸形标记）；unitize 拼 `--file "${params.file}"`。
+- **意图识别**（intent-recognition.ts）：ANCHOR_RULES 新增增量切分强锚点（重新切分/再切/增量切分 +30）与 create/new_task 让位规则（功能单元/需求文档+切分共现 -35）；extractParams 提 .md 路径 → params.file。
+- **run 增量重切**（run.ts）：`--from split-units` 显式指定时视为增量重切（不因 features/ 非空跳过），切分传 onDuplicate=skip——已有单元跳过、新增章节自动产出；自动断点场景保留跳过（幂等）。
+- **同名检测加固**（doc2spec.ts）：标题（两侧剥章节序号对齐）+ 指纹相同或 Jaccard>0.6 即视为同名——platform 缺失导致的元数据行差异不再漏拦。
+
+## v8.3.316 (2026-10-19) — 切分命名链路边界修复
+
+### 背景
+- 检查「功能单元命名 → 任务模块 → 子任务命令」链路发现：①stripUnitSeqPrefix 重叠扫描漏洞——plan-24-01-inbox 的 -24- 与 -01- 共享连字符，默认 lastIndex 跳过导致漏计候选、误剥成 01-inbox 残片；②任务目录前缀匹配无边界——Task-033 会误命中 Task-0331-xxx 兄弟目录。
+
+### 修复
+- **重叠扫描**（taskify.ts）：正则 lastIndex 回退 m.index+1 允许重叠，plan-24-01-inbox 两候选全部计入，宁全勿残。
+- **前缀边界**（task-paths.ts / done.ts）：前缀命中后下一字符必须是 '-' 或串尾，findTaskDir 与 scanForTask 同源修复。
+
+### 测试
+- 新增 find-task-dir.test.ts 5 用例（精确命中/不误命中 Task-0331/无 topic 后缀/兄弟共存/子任务完整 ID 递减定位）；全量 441/441 零回归。
+
+## v8.3.315 (2026-10-15) — 升级机制根治：版本戳驱动迁移 + 序列化器机器锁
+
+### 背景
+- 配置升级「总是出问题」的根因是结构性的：①单一事实源被人肉复制成多份（DEFAULT_CONFIG → 接口 → 手写序列化器 → 注释），改一处忘一处即产生假补全；②内置资产升级靠「枚举旧特征」检测，每次改版都要新枚举，漏一个就是一个盲区；③资产刷新与投影/索引等多消费点判定不统一，备份文件污染下游。
+
+### 修复
+- **机器锁**（config-serializer-consistency.test.ts）：DEFAULT_CONFIG 与手写序列化器 toYaml 双向一致性校验，新增字段漏写输出段当场红——「人肉记忆」变为「构建期把关」。
+- **版本戳驱动迁移**（asset-stamp.ts）：内置资产（AGENTS 角色/注册表/RULES inline 投影模板）写盘时注入 `<!-- speccore-asset-version -->` 戳；升级时凭戳判定：旧戳→备份刷新、同版本→保留（用户改过不覆盖）、无戳→旧特征兜底（命中则备份刷新，否则视为用户自定义保留）。改版无需再枚举旧特征。
+- **restamp 过渡分支**：8.3.314 及以前生成的无戳同内容文件，升级时直接补戳进入版本戳体系（内容零变化、零备份），存量项目平滑入轨。
+- **统一决策表**（decideStampedSync）：四类内置资产共用同一决策函数，新增资产类别不再引入分支逻辑。
+- **消费点一致性**：inline 备份文件过滤与剥戳下沉到 syncAgentsMd（投影）、rag-engine（RAG 索引扫描/增量检测）两个消费点——备份不进投影表、不进语义索引；inline 覆盖一律 safeWriteWithBackup 保底可回滚。
+
 ## v8.3.314 (2026-10-15) — 升级盲区三连修：旧项目升级后规范库同步到位
 
 ### 背景

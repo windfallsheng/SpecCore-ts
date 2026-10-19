@@ -830,7 +830,7 @@ program
 program
   .command('constitution')
   .alias('cn')
-  .description('Auto-detect tech stack and generate CONSTITUTION.md rules')
+  .description('Auto-detect tech stack and fill the CONSTITUTION.md tech stack table (only when unfilled)')
   .action(async () => { await buildConstitution(process.cwd()); });
 
 program
@@ -906,6 +906,8 @@ program
   .description('切分需求文档为功能单元 → features/（独立能力；拆任务用 taskify）')
   .option('-f, --file <path>', '需求文档路径（.md，通常为 converted/*.md）')
   .option('--files <files>', '批量: "a.md=平台1,b.md=平台2"')
+  .option('-c, --content <text>', '直接切分一段文档内容（自动写入 converted/，配合 --title 指定文档名）')
+  .option('--title <name>', '内容切分时的文档标题/文件名（配合 --content；缺省取内容首个 H1）')
   .option('-i, --iter <name>', '目标迭代（缺省用当前活跃迭代）')
   .option('-p, --platform <name>', '平台标识（端名，缺省由 analyze 端推断）')
   .option("--translate-en <mode>", "单元标题英译: auto(默认) | host | off")

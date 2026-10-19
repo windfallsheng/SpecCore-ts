@@ -746,6 +746,23 @@ const ANCHOR_RULES: AnchorRule[] = [
     verbs: /(?:切分|切)/,
     bonus: 20,
   },
+  // 增量切分强锚点（v8.3.317+）：「重新切分/再切/补切 + 功能单元/需求文档」
+  // 语义明确指向对已有单元体系的增量切分，而非新建任务
+  {
+    kind: 'anchor', intent: 'split-units',
+    anchors: /(?:需求文档|功能单元)/,
+    verbs: /(?:重新.{0,4}切分|再切|增量切分|重切|补切)/,
+    bonus: 30,
+  },
+  // 增量切分让位（v8.3.317+）：create/new_task 的宽捕获「新增(.+)」吞下
+  // 「功能单元/需求文档 … 切分」组合时让位 unitize——「需求中新增了功能单元，
+  // 需要重新切分」曾被误路由 task new（100% vs 92%）。
+  // 要求「功能单元/需求文档」与「切分」共现于捕获内容，单纯「新增一个支付功能单元」不受影响
+  {
+    kind: 'capturePenalty', intents: ['create', 'new_task'],
+    anchors: /(?:功能单元|需求文档).{0,30}切分|切分.{0,30}(?:功能单元|需求文档)/,
+    bonus: 35,
+  },
   // 反向让位：task new 的宽 pattern「创建(.+)」吞掉迭代名词 → 夺回误加分
   {
     kind: 'capturePenalty', intents: ['create', 'new_task'],
@@ -1021,6 +1038,30 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
   const taskNameMatch = input.match(/(?:子任务|任务)[：:\s]*([^，,。\s]+)/);
   if (taskNameMatch && !params.task) {
     params.task = taskNameMatch[1];
+  }
+
+  // v8.3.317+: 提取需求文档文件路径（.md/.markdown，支持中文路径）——
+  // 「切分需求文档 docs/新需求.md」「指定了一个新文档 xxx.md 切分功能单元」
+  const fileMatch = input.match(/([^\s，,。；;：:"“”'']+\.(?:md|markdown))/i);
+  if (fileMatch) {
+    params.file = fileMatch[1];
+  }
+
+  // v8.3.318+: 一段文档内容直接切分（「把这段内容切分成功能单元：## 1. …」）——
+  // 信号词 + 冒号后内容含 Markdown 标题才认定（防「切分一下这个需求」误提取）；
+  // .md 路径优先（上面已提 file），内容模式不再抢。标题取首个 H1 作文档名。
+  // 不依赖 params.desc（其正则为单行 .+$，多行内容提取会落空），直接从原文取冒号后全文。
+  if (!params.file && mapping.intent === 'split-units'
+      && /这段内容|以下内容|内容如下|这段需求|以下需求|下面这段/.test(input)) {
+    const contentMatch = input.match(/[：:]\s*([\s\S]+)$/);
+    if (contentMatch) {
+      const raw = contentMatch[1].trim();
+      if (/#\s+\S/.test(raw)) {
+        params.content = raw;
+        const h1 = raw.match(/^#\s+(.+)$/m);
+        if (h1) params.title = h1[1].trim();
+      }
+    }
   }
 
   // 检测 --from-code 参数（从源码反推需求，spec-source-to-global 工作流）

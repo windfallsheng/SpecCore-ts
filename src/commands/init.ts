@@ -16,6 +16,7 @@ import {
 // v6.85.0+: RULES 规范库
 import { getBuiltinRuleContents } from '../core/rule-loader';
 import { isTimestampBackup } from '../utils/task-utils';
+import { decideStampedSync, stampContent, stripAssetStamp } from '../core/asset-stamp';
 // v6.87.0+: COMMANDS 命令模板
 import { getBuiltinCommandContents } from '../core/command-loader';
 // v6.88.0+: SKILLS + HOOKS
@@ -360,6 +361,8 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 ## 字段对照总表
 
 > **AI 必读**：以下表格明确 CONSTITUTION.md 各字段与 PROJECT.yaml 的对应关系，以及每个字段的准确语义。请勿混淆。
+>
+> **事实源（v8.3.322+）**：CLI 命令的机器执行只认 PROJECT.yaml；CONSTITUTION.md 是 AI 阅读契约，仅在 PROJECT.yaml 未声明对应字段时作兼容回退。两处内容需保持语义一致。
 
 ### 项目信息表字段
 
@@ -416,6 +419,8 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 > - 小程序：微信小程序 / 支付宝小程序
 
 ## 项目信息
+
+> ⚠️ **机器事实源是 \`.speccore/PROJECT.yaml\` 的 \`platforms\`**（v8.3.323+）：源码路径→端的映射（变更检测等）以 platforms[].code_path 为准；本表为 AI 契约与兼容回退，两处需保持一致。
 
 | 工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -525,31 +530,43 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 ## 技术栈
 
-### 后端
-- 语言：Java / TypeScript / Go / Python
-- 框架：Spring Boot / NestJS / Gin / FastAPI
-- 数据库：MySQL / PostgreSQL / MongoDB
-- 缓存：Redis
+> 填写规则：**每端一行，只写「已选定」的技术与版本**（决策式声明，不是选项菜单）。
+> AI 生成代码时以本表为准；未填写的端回退到端级 TECH.md（analyze 产物）。
+> 可选技术域见本节末尾，仅作约束参考——未出现在上表中的均视为未选用。
 
-### 前端
-- 框架：Vue / React / Angular
-- 状态管理：Pinia / Redux / NgRx
-- UI 组件：Element Plus / Ant Design
+| 端 | 语言 | 框架 | 数据存储 | 依据（依赖清单文件） |
+| :--- | :--- | :--- | :--- | :--- |
+| backend-api | Java 17 | Spring Boot 3.x | MySQL 8 | pom.xml |
+| admin-web | TypeScript | Vue 3 | — | package.json |
+
+> 可选技术域（约束参考，非已选）：
+> - 后端语言：Java / TypeScript / Go / Python；框架：Spring Boot / NestJS / Gin / FastAPI
+> - 前端框架：Vue / React / Angular；状态管理：Pinia / Redux / NgRx；UI 组件：Element Plus / Ant Design
+> - 数据存储：MySQL / PostgreSQL / MongoDB；缓存：Redis
 
 ## 命名规范
 - 接口：/api/v1/{模块}/{操作}
-- 错误码：4 位数字，按模块划分
-- 数据库：snake_case
-- 代码：camelCase / PascalCase
+- 错误码：4 位数字，按「异常码体系」分段划分
+- 数据库：snake_case；代码：camelCase；类/组件：PascalCase
+- 目录：全小写短横线（user-service）；文件名与默认导出组件同名
+- Git 提交：type(scope): subject（feat/fix/docs/refactor/test）
 
 ## 异常码体系
-| 错误码 | 含义 | 场景 |
+
+> 错误码为 4 位数字，按段划分——**分段规则给 AI 的是「生成能力」，不是几个示例**：
+
+| 段 | 范围 | 归属 |
 | :--- | :--- | :--- |
-| 1001 | 用户不存在 | 登录时手机号未注册 |
-| 1002 | 密码错误 | 登录密码不匹配 |
-| ... | ... | ... |
+| 1xxx | 1000-1999 | 用户模块 |
+| 2xxx | 2000-2999 | 订单模块 |
+
+- 首位 = 模块段，后三位 = 段内序号；错误码全项目唯一，跨端共用同一套编号
+- 示例（演示用，按真实模块替换上表）：1001 用户不存在 / 2001 订单不存在
 
 ## Git 分支策略
+
+> ⚠️ **机器事实源是 \`.speccore/PROJECT.yaml\` 的 \`git\` 段**（v8.3.322+）：CLI 命令（分支创建、PR、保护分支拦截）只认 PROJECT.yaml；
+> 本节是 AI 阅读契约，仅在 PROJECT.yaml 未声明对应字段时作为兼容回退。修改策略请改 PROJECT.yaml，并保持本节语义一致。
 
 > 公共默认策略。各工程可在「Git 配置」表中覆盖。
 
@@ -562,6 +579,15 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
   - 支持精确匹配和通配符（如 release/*）
 `
   );
+
+  // v8.3.325: 自动检测技术栈并预填决策式技术栈表（模板刚生成，示例行可整体替换）
+  try {
+    const { enhanceConstitutionTechStack } = require('../core/constitution-builder') as typeof import('../core/constitution-builder');
+    await enhanceConstitutionTechStack(projectRoot, {
+      platformName: projectName,
+      freshTemplate: true,
+    });
+  } catch { /* 检测失败不影响 init 主流程 */ }
   } // if CONSTITUTION.md 不存在
 
   // PROJECT files
@@ -587,9 +613,18 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
     join(speccoreDir, 'PROJECT', 'TEAM.md'),
     `# 团队与 Git 映射
 
-| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 |
-| :--- | :--- | :--- | :--- | :--- |
-| | | | | |
+> **全员名册（全局基座，v8.3.319+）**: 成员在此登记后，所有迭代的 STAFFING.md 自动继承。
+> 各迭代 STAFFING.md 只写差异（同名成员整体覆盖其方向/比例）；本表是团队人员的唯一事实源。
+
+| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 | 平台方向 | 投入比例 | 状态 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| | | | | | | | |
+
+> 说明:
+> - **平台方向**: 后台 / 小程序 / Web / APP，多个用逗号分隔（也可直接写标准端名）
+> - **投入比例**: 0-100%（缺省按 100），用于 taskify 时自动分配和负荷均衡
+> - **状态**: 在职（缺省）/ 出项目——出项目成员不参与自动填充（analyze 候选推导、taskify 负荷均衡自动跳过）
+> - 旧版本表（无「平台方向」列）兼容读取：缺此列时全局基座不参与合并，各迭代 STAFFING.md 独立生效
 `
   );
 
@@ -1458,15 +1493,18 @@ export async function initAgentsDir(projectRoot: string): Promise<void> {
     if (!(await pathExists(destPath))) {
       await writeFile(destPath, agent.content);
     } else {
-      // v8.3.314+: 旧版内置角色智能刷新 — 旧版 CLI 生成的文件只有 activations frontmatter，
-      // 正文以「# 角色：」开头；新版含 name/title/systemPrompt/contextType/contextBudget。
-      // 检测到旧版特征则备份并刷新；用户自定义文件（自建 frontmatter）不受影响。
+      // v8.3.315+: 版本戳驱动同步 — 内置内容带当前版本戳：
+      //   有旧戳 → 旧版 CLI 生成 → 备份刷新
+      //   无戳且命中旧版特征（「# 角色：」标题、缺 systemPrompt frontmatter）→ 老项目首升级 → 备份刷新
+      //   无戳且无旧版特征 → 用户自定义 → 保留
       const existing = await readFile(destPath, 'utf-8');
-      const isLegacyBuiltin =
-        !/^---\s*[\s\S]*?systemPrompt:/m.test(existing) && /#\s*角色[：:]\s*\(?/m.test(existing);
-      if (isLegacyBuiltin && existing !== agent.content) {
+      // 旧版特征 = 缺 systemPrompt frontmatter 且带「# 角色：」标题（新版无此标题）
+      const decision = decideStampedSync(existing, agent.content, c => !/^---\s*[\s\S]*?systemPrompt:/m.test(c) && /#\s*角色[：:]\s*\(?/m.test(c));
+      if (decision === 'refresh') {
         await safeWriteWithBackup(destPath, agent.content);
         logger.info(`   🔄 刷新旧版角色定义: ${agent.name}.md（原文件已备份）`);
+      } else if (decision === 'restamp') {
+        await writeFile(destPath, agent.content);
       }
     }
   }
@@ -1478,12 +1516,15 @@ export async function initAgentsDir(projectRoot: string): Promise<void> {
     if (!(await pathExists(registryPath))) {
       await writeFile(registryPath, registryContent);
     } else {
-      // v8.3.314+: 旧版注册表智能刷新 — 旧版缺「叠加 RULES/」上下文列，刷新到新版；
+      // v8.3.315+: 版本戳驱动 + 缺失型旧特征兜底（老项目无戳且缺「叠加 RULES/」列）
       // 已注册的自定义角色如有丢失可从备份文件恢复。
       const existing = await readFile(registryPath, 'utf-8');
-      if (!/叠加\s+RULES\//.test(existing) && existing !== registryContent) {
+      const decision = decideStampedSync(existing, registryContent, c => !/叠加\s+RULES\//.test(c));
+      if (decision === 'refresh') {
         await safeWriteWithBackup(registryPath, registryContent);
         logger.info('   🔄 刷新旧版 AGENTS 注册表: _INDEX.md（原文件已备份，自定义角色请从备份合并）');
+      } else if (decision === 'restamp') {
+        await writeFile(registryPath, registryContent);
       }
     }
   }
@@ -1762,17 +1803,27 @@ speccore verify deploy                   # 测试阶段位置参数（dev/pr/dep
 
   for (const tpl of inlineTemplates) {
     const destPath = join(rulesDir, tpl.name);
+    const stampedContent = stampContent(tpl.content);
     const exists = await pathExists(destPath);
     if (!exists) {
-      await writeFile(destPath, tpl.content);
-    } else if (tpl.name.endsWith('.inline.md')) {
-      // v8.3.46+: 智能过时检测 — 发现已知过时标记时自动覆盖
-      // v8.3.314+: 缺新版关键内容（required）同样视为过时
+      await writeFile(destPath, stampedContent);
+    } else {
+      // v8.3.315+: 版本戳驱动同步（统一决策表 decideStampedSync）
+      //   有旧戳 → 旧版 CLI 生成 → 备份刷新（不再枚举旧特征，改模板即自动迁移）
+      //   无戳 → 旧特征兜底：过时标记命中 / 缺新版关键内容（required）→ 备份刷新
+      //   同版本戳或用户自定义 → 保留
+      // 覆盖一律 safeWriteWithBackup：旧版特征检测存在误判可能，备份保底可回滚
       const existingContent = await readFile(destPath, 'utf-8');
-      const { hasObsolete, markers } = detectObsoleteContent(existingContent, tpl.required);
-      if (hasObsolete) {
-        logger.info(`   🔄 检测到过时内容 [${tpl.name}]: ${markers.join('、')}，已自动更新`);
-        await writeFile(destPath, tpl.content);
+      const decision = decideStampedSync(
+        existingContent,
+        stampedContent,
+        c => detectObsoleteContent(c, tpl.required).hasObsolete,
+      );
+      if (decision === 'refresh') {
+        logger.info(`   🔄 检测到旧版内容 [${tpl.name}]，已备份并更新`);
+        await safeWriteWithBackup(destPath, stampedContent);
+      } else if (decision === 'restamp') {
+        await writeFile(destPath, stampedContent);
       }
     }
   }
@@ -1883,7 +1934,7 @@ export async function syncAgentsMd(projectRoot: string, force = false): Promise<
     for (const f of files) {
       if (f.endsWith('.inline.md')) {
         const content = await readFile(join(agentsDir, f), 'utf-8');
-        agentInlines.push(content.trim());
+        agentInlines.push(stripAssetStamp(content).trim());
       } else {
         const content = await readFile(join(agentsDir, f), 'utf-8');
         const titleMatch = content.match(/^title:\s*(.+)$/m);
@@ -1921,12 +1972,13 @@ export async function syncAgentsMd(projectRoot: string, force = false): Promise<
   const ruleLinks: string[] = [];
   if (await pathExists(rulesDir)) {
     const files = (await readdir(rulesDir))
-      .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.'))
+      .filter(f => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.') && !isTimestampBackup(f))
       .sort();
     for (const f of files) {
       if (f.endsWith('.inline.md')) {
         const content = await readFile(join(rulesDir, f), 'utf-8');
-        ruleInlines.push(content.trim());
+        // v8.3.315+: 剥掉资产版本戳（投影内容不携带 CLI 内部戳）
+        ruleInlines.push(stripAssetStamp(content).trim());
       } else {
         const name = f.replace(/\.md$/, '').replace(/[-_]/g, ' ');
         ruleLinks.push(`- [${name}](.speccore/RULES/${f})`);
@@ -1972,10 +2024,12 @@ async function createSampleIteration(projectRoot: string): Promise<void> {
   await writeFile(join(iterDir, 'STAFFING.md'), [
     '# 示例 人员排期配置',
     '',
-    '| 成员 | 平台方向 | 投入比例 |',
-    '| :--- | :--- | :--- |',
-    '| 张三 | APP, H5 | 80% |',
-    '| 李四 | admin, 小程序 | 70% |',
+    '> 全员基座见 .speccore/PROJECT/TEAM.md（全局名册，自动继承）；本文件只写本迭代差异/覆盖',
+    '',
+    '| 成员 | 平台方向 | 投入比例 | 状态 |',
+    '| :--- | :--- | :--- | :--- |',
+    '| 张三 | APP, H5 | 80% | |',
+    '| 李四 | admin, 小程序 | 70% | |',
     '',
     '> 编辑此文件后重新运行 taskify 即可更新默认分配',
   ].join('\n'));
@@ -2268,7 +2322,7 @@ export function generateAIRulesContent(): string {
     '1. **/spec:ask 是智能路由入口** — 用户说"新建迭代"、"分析需求" → 调用 `speccore ask`，不要自己写 mkdir/analyze',
     '2. **不要跨命令猜测** — 每个斜杠命令只做它描述的事，不要自动级联后续步骤',
     '3. **参数从命令描述获取** — /spec:execute 的描述中有完整的参数说明',
-    '4. **上下文不足时读取文件** — 查看 .speccore/CONSTITUTION.md、STAFFING.md 等',
+    '4. **上下文不足时读取文件** — 查看 .speccore/CONSTITUTION.md、STAFFING.md、.speccore/PROJECT/TEAM.md（全员名册）等',
     '',
     '## 核心流水线',
     '',
@@ -2451,6 +2505,8 @@ examples/
 ├── README.md                    ← 本文件
 ├── config/                      ← 配置文件示例
 │   ├── CONSTITUTION-EXAMPLE.md  ← CONSTITUTION.md 完整示例（多工程）
+│   ├── TEAM-EXAMPLE.md          ← TEAM.md 全员名册示例（7 列，含状态）
+│   ├── STAFFING-EXAMPLE.md      ← STAFFING.md 迭代排期示例（差异覆盖，含状态）
 │   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
 │   ├── SPECCORE-YML-EXAMPLE.yml ← .speccore.yml 主配置完整示例（v8.3.296+）
 │   ├── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
@@ -2477,8 +2533,9 @@ examples/
 8. 查看 \`config/DEPLOY-EXAMPLE.yaml\`，了解部署配置格式（用于 \`speccore deploy\`）
 9. 查看 \`config/VERIFY-EXAMPLE.yaml\`，了解测试验证配置格式（用于 \`speccore verify --config\`）
 10. 查看 \`config/SPECCORE-YML-EXAMPLE.yml\`，了解主配置 .speccore.yml 全部字段（质量门禁/冒烟三时机/流水线/AI provider）
-11. 查看 \`ci/github-actions.yml\`，复制到 \`.github/workflows/\` 启用 CI 校验
-12. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
+11. 查看 \`config/TEAM-EXAMPLE.md\` 与 \`config/STAFFING-EXAMPLE.md\`，了解人员配置两级继承（TEAM 全员基座 + STAFFING 迭代差异），「状态」列支持出项目成员免分配
+12. 查看 \`ci/github-actions.yml\`，复制到 \`.github/workflows/\` 启用 CI 校验
+13. 修改后运行 \`speccore update\` 更新配置结构（Git 策略以 \`.speccore/PROJECT.yaml\` 的 \`git\` 段为机器事实源）
 
 ## 注意事项
 
@@ -2491,7 +2548,7 @@ examples/
   const constitutionExample = `## 字段对照总表
 
 > **AI 必读**：以下表格明确 CONSTITUTION.md 各字段与 PROJECT.yaml 的对应关系。
-> 人类只需填写 CONSTITUTION.md，PROJECT.yaml 由 CLI 自动生成/同步。
+> 机器执行以 PROJECT.yaml 为事实源（CLI 只读 PROJECT.yaml）；CONSTITUTION.md 是 AI 阅读契约，仅在 PROJECT.yaml 未声明对应字段时作兼容回退。两处内容需保持语义一致。
 
 ### 项目信息表字段
 
@@ -2543,6 +2600,8 @@ examples/
 
 ## 项目信息
 
+> ⚠️ **机器事实源是 \`.speccore/PROJECT.yaml\` 的 \`platforms\`**（v8.3.323+）：源码路径→端的映射（变更检测等）以 platforms[].code_path 为准；本表为 AI 契约与兼容回退，两处需保持一致。
+
 | 工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | admin-web | Web管理后台 | 后台管理 | 运营后台 | 运营人员使用的后台管理系统 | ./packages/admin | 后台管理端需求文档 | 核心系统 |
@@ -2559,6 +2618,35 @@ examples/
 > - **工程源码路径**：相对于项目根目录的代码位置（如 ./packages/backend）
 > - **涉及需求端**：需求文档名称/标识，仅作 AI 参考（如"后台管理端需求文档"、"订单系统PRD"）。说明本工程大概会出现在哪些需求文档中
 > - **备注**：额外信息、特殊说明、TODO 等
+
+---
+
+## 技术栈
+
+> 填写规则：**每端一行，只写「已选定」的技术与版本**（决策式声明，不是选项菜单）。
+> AI 生成代码时以本表为准；未填写的端回退到端级 TECH.md（analyze 产物）。
+
+| 端 | 语言 | 框架 | 数据存储 | 依据（依赖清单文件） |
+| :--- | :--- | :--- | :--- | :--- |
+| backend-api | Java 17 | Spring Boot 3.x | MySQL 8 | pom.xml |
+| admin-web | TypeScript | Vue 3 | — | package.json |
+| h5-mobile | TypeScript | Vue 3 | — | package.json |
+| miniapp | JavaScript | 原生小程序 | — | package.json |
+
+> 可选技术域（约束参考，非已选）：后端语言 Java/TypeScript/Go/Python；框架 Spring Boot/NestJS/Gin/FastAPI；前端框架 Vue/React/Angular；数据存储 MySQL/PostgreSQL/MongoDB；缓存 Redis。
+
+## 异常码体系
+
+> 错误码为 4 位数字，按段划分——**分段规则给 AI 的是「生成能力」，不是几个示例**：
+
+| 段 | 范围 | 归属 |
+| :--- | :--- | :--- |
+| 1xxx | 1000-1999 | 用户模块 |
+| 2xxx | 2000-2999 | 订单模块 |
+| 3xxx | 3000-3999 | 支付模块 |
+
+- 首位 = 模块段，后三位 = 段内序号；错误码全项目唯一，跨端共用同一套编号
+- 示例（演示用，按真实模块替换上表）：1001 用户不存在 / 2001 订单不存在 / 3001 支付超时
 
 ---
 
@@ -2651,11 +2739,49 @@ examples/
 
 > 📌 **使用说明**：
 > 1. 复制本示例内容到 \`CONSTITUTION.md\`，根据实际项目修改
-> 2. 修改后运行 \`speccore update\` 自动同步到 PROJECT.yaml
+> 2. 修改后运行 \`speccore update\` 更新配置结构（Git 策略以 \`.speccore/PROJECT.yaml\` 的 \`git\` 段为机器事实源）
 > 3. 子任务目录下的 \`.meta/git-config\` 可覆盖全局配置（见目录结构说明）
 `;
 
   await writeFile(join(configDir, 'CONSTITUTION-EXAMPLE.md'), constitutionExample);
+
+  // v8.3.324: 人员配置示例（两级继承：TEAM 全员基座 + STAFFING 迭代差异，含「状态」列）
+  const teamExample = `# TEAM.md — 团队与 Git 映射（全员名册，示例）
+
+> **全员名册（全局基座，v8.3.319+）**: 成员在此登记后，所有迭代的 STAFFING.md 自动继承。
+> 各迭代 STAFFING.md 只写差异（同名成员整体覆盖其方向/比例/状态）；本表是团队人员的唯一事实源。
+
+| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 | 平台方向 | 投入比例 | 状态 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 张三 | zhangsan | 后端 | Java/Spring Boot | 订单模块 | backend-api | 100% | 在职 |
+| 李四 | lisi | 前端 | Vue 3 | 商城页面 | admin-web, h5-mobile | 80% | 在职 |
+| 王五 | wangwu | 前端 | 原生小程序 | 小程序 | miniapp | 60% | 在职 |
+| 赵六 | zhaoliu | 后端 | Go | 消息推送 | backend-api | 0% | 出项目 |
+
+> 说明:
+> - **平台方向**: 后台 / 小程序 / Web / APP，多个用逗号分隔（也可直接写标准端名）
+> - **投入比例**: 0-100%（缺省按 100），用于 taskify 时自动分配和负荷均衡
+> - **状态**: 在职（缺省）/ 出项目——出项目成员不参与自动填充（analyze 候选推导、taskify 负荷均衡自动跳过）；迭代层写「在职」可临时复活（如赵六回归某期）
+`;
+  await writeFile(join(configDir, 'TEAM-EXAMPLE.md'), teamExample);
+
+  const staffingExample = `# STAFFING.md — 迭代人员排期（差异覆盖层，示例）
+
+> **本文件只写差异**: 与基座 TEAM.md 同名的成员整体覆盖其方向/比例/状态；基座成员未列出的默认参与本迭代。
+> 全员名册见 .speccore/PROJECT/TEAM.md（全局基座，自动继承）。
+
+| 成员 | 平台方向 | 投入比例 | 状态 |
+| :--- | :--- | :--- | :--- |
+| 李四 | admin-web | 100% | 在职 |
+| 赵六 | backend-api | 50% | 在职 |
+
+> 说明:
+> - **平台方向**: 后台 / 小程序 / Web / APP，多个用逗号分隔（也可直接写标准端名）
+> - **投入比例**: 0-100%，用于 taskify 时自动分配和负荷均衡；写 0% 表示本迭代不参与
+> - **状态**: 在职（缺省）/ 出项目——出项目成员不参与自动填充；留空则继承基座状态。示例中赵六基座「出项目」，本迭代写「在职 50%」= 临时回归
+> - 编辑此文件后重新运行 taskify 即可更新默认分配
+`;
+  await writeFile(join(configDir, 'STAFFING-EXAMPLE.md'), staffingExample);
 
   // PROJECT.yaml 完整示例（多工程）
   const projectExample = `# PROJECT.yaml — 项目配置（由 CLI 自动生成，不建议手动编辑）

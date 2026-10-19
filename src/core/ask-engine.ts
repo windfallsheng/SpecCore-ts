@@ -896,6 +896,18 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
         ? ` --iter "${params.iteration}"`
         : ` --iteration "${params.iteration}"`;
     }
+    // v8.3.317+: unitize 提取文档路径（「切分需求文档 docs/新需求.md」等）
+    if (best.command === 'unitize' && params.file) {
+      fullCommand += ` --file "${params.file}"`;
+      paramNotes.push(`📄 文档: ${params.file}`);
+    }
+    // v8.3.318+: unitize 直接切分一段文档内容（「把这段内容切分成功能单元：...」）——
+    // 双引号转义防注入；宿主可从 user 消息中带内容时同时给 --title 定文档名
+    if (best.command === 'unitize' && params.content) {
+      fullCommand += ` --content "${params.content.replace(/"/g, '\\"')}"`;
+      if (params.title) fullCommand += ` --title "${params.title.replace(/"/g, '\\"')}"`;
+      paramNotes.push(`📝 内容切分${params.title ? `（文档名: ${params.title}）` : ''}`);
+    }
     // v8.3.257: --scope 不是通用选项（仅 dashboard/verify/analyze 注册）。sync 用 --global 布尔，
     // 其余命令只作提示，避免死参数
     if (params.scope && best.command !== 'analyze') {
@@ -1029,8 +1041,15 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     detail,
     commands: [best.command],
     autoExec: shouldAutoExec ? {
-      command: fullCommand.replace(/^speccore /, '').split(' ')[0],  // 主命令
-      args: fullCommand.replace(/^speccore [a-z-]+ /, ''),           // 子命令 + 参数
+      // v8.3.317 修复：无参数命令（如 `speccore unitize`）下 args 提取正则失配，
+      // args 保留了整个 fullCommand → 执行标记畸形（speccore unitize speccore unitize）。
+      // 改用首空格拆分：无空格则 args 为空，绝不回退整串。
+      command: fullCommand.replace(/^speccore\s+/, '').split(/\s+/)[0],  // 主命令
+      args: (() => {
+        const rest = fullCommand.replace(/^speccore\s+/, '');
+        const idx = rest.indexOf(' ');
+        return idx === -1 ? '' : rest.slice(idx + 1);                     // 子命令 + 参数
+      })(),
       // v6.97.0+ 修复：强制确认命令始终要求确认，避免"直接就乱搞"
       confirm: needsConfirm || best.confidence < 95,
     } : undefined,

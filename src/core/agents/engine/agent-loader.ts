@@ -14,6 +14,7 @@
 import { join } from 'path';
 import { pathExists, readFile, readdir } from 'fs-extra';
 import { isTimestampBackup } from '../../../utils/task-utils';
+import { stampContent } from '../../asset-stamp';
 import * as yaml from 'js-yaml';
 import {
   AgentDefinition,
@@ -442,19 +443,21 @@ export async function loadAgentDefinition(
 
 /**
  * 获取内置 Agent 的原始 Markdown 内容（用于 init 时复制到项目）
+ * v8.3.315+: 注入版本戳（asset-stamp），升级时凭戳判定旧版/用户自定义
  */
 export async function getBuiltinAgentContents(): Promise<{ name: string; content: string }[]> {
   const files = await scanAgentFiles(BUILTIN_AGENTS_DIR);
-  return files.map(f => ({ name: f.name, content: f.content }));
+  return files.map(f => ({ name: f.name, content: stampContent(f.content) }));
 }
 
 /**
  * 获取内置注册表内容（用于 init 时复制到项目）
+ * v8.3.315+: 注入版本戳（asset-stamp）
  */
 export async function getBuiltinRegistryContent(): Promise<string | undefined> {
   const path = join(BUILTIN_AGENTS_DIR, '_INDEX.md');
   if (await pathExists(path)) {
-    return readFile(path, 'utf-8');
+    return stampContent(await readFile(path, 'utf-8'));
   }
   return undefined;
 }

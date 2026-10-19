@@ -995,11 +995,16 @@ export async function splitDocumentToUnits(
     // 以 overview- 开头，被下方「全局章节拦截」误杀
     let docSlug = sanitizeUnitName(basename(sourceFileName, '.md')) || 'doc';
     docSlug = docSlug.replace(/^(overview|global)(-|$)/i, 'doc$2');
+    // v8.3.316+: docSlug 统一以字母结尾（如 plan-24 → plan、2026 → doc）——
+    // taskify 的 stripUnitSeqPrefix 靠「前段以字母结尾的 -NN- 才是序号段」锚定 seq，
+    // 若 docSlug 尾数字残留，plan-24-01-inbox 会被误剥成 01-inbox（序号冒充语义段）
+    docSlug = docSlug.replace(/\d+$/, '') || 'doc';
     // v8.3.227+: 目录名加两位序号前缀（按文档内章节顺序），
     // 保证文件系统排序 == 文档顺序，解决切分目录乱序问题
-    // v8.3.240+: 序号基于实际写入数（written+1）而非原始索引，
-    // 修复「跳过重复单元导致编号空洞」（如 1~56 全跳过后从 57 开始）
-    const seq = String(written + 1).padStart(2, '0');
+    // v8.3.318: 序号回到文档章节序号（unitIndex+1）——v8.3.240 的 written+1 方案
+    // 在增量重切时错乱：已有 01/02/03 被 skip 后，新章节（第 4 章）written=0 拿 01，
+    // 与 01-inbox 序号撞车且破坏「排序==文档顺序」；章节序号幂等稳定，重切不变
+    const seq = String(unitIndex + 1).padStart(2, '0');
     // v8.3.271+: 目录名尾段用英文 slug（v8.3.272+ 优先 LLM 英译，失败拼音兜底）；
     // 中文显示名保留在 SOURCE.md 标题与 _matrix.md feature 字段
     // v8.3.282: slug 剥离括号注释——「通知触发机制（跨页面通用）」只取「通知触发机制」主体，
@@ -1015,7 +1020,15 @@ export async function splitDocumentToUnits(
     if (!conflictDir) {
       for (const d of existingUnitDirs) {
         if (d === unitDirName) continue;
-        if ((await readUnitTitle(join(featuresDir, d))) === unit.title && existingContentHashes.get(d) === fp) {
+        // v8.3.317: 标题是第一身份（两侧均剥章节序号对齐），命中后再判内容：
+        // 指纹相同 → 同名；指纹不同但高度相似（Jaccard>0.6）也视为同名——
+        // 重切时 platform 缺失导致「涉及端: admin」元数据行差异（相似度 0.833）
+        // 曾被 0.85 阈值漏拦，产出 01/03 两个「系统公告」重复单元
+        const titleA = stripSectionNo((await readUnitTitle(join(featuresDir, d)))).trim();
+        const titleB = stripSectionNo(unit.title).trim();
+        if (titleA !== titleB || !titleA) continue;
+        const existing = existingUnitContents.get(d);
+        if (existingContentHashes.get(d) === fp || (existing && contentSimilarity(unitContent, existing) > 0.6)) {
           conflictDir = d;
           break;
         }
@@ -1806,11 +1819,17 @@ async function translateUnitTitles(
     }
   } catch { /* 缓存损坏则重建 */ }
 
+  let misses = titles.filter(t => t && !cache[t]);
+
   // 宿主 AI 接力响应：解析英译 JSON 写入缓存后继续切分
   // v8.3.273: 键约定统一为序号（1~N，与 PROMPT 清单编号及 LLM 直呼路径一致），
   // 中文标题仅作展示——避免重复标题键冲突与两套标识错位；也兼容中文标题作键
-  if (translateResponse) {
-    const parsed = parseTranslationResponse(translateResponse, titles);
+  // v8.3.318: 序号键基准从全量 titles 改为待翻译清单（misses）——[SPECCORE_PROMPT]
+  // 只列出缓存未命中的标题（增量重切时旧单元已缓存英文名，清单仅剩新单元），
+  // 此前按 titles 对齐会把 {"1":"push-preference"} 错位映射到 titles[0]（旧单元
+  // 「站内信通知」被污染成 push-preference，新单元反而降级拼音）
+  if (translateResponse && misses.length > 0) {
+    const parsed = parseTranslationResponse(translateResponse, misses);
     let valid = 0;
     for (const [zh, en] of parsed) {
       if (/^[a-z0-9][a-z0-9-]{0,39}$/i.test(en)) {
@@ -1824,9 +1843,9 @@ async function translateUnitTitles(
     } else {
       logger.warn('--translate-response 未解析出有效翻译（键须为序号或中文标题），按缓存/拼音继续');
     }
+    misses = titles.filter(t => t && !cache[t]);
   }
 
-  const misses = titles.filter(t => t && !cache[t]);
   if (misses.length === 0) {
     return new Map(Object.entries(cache));
   }

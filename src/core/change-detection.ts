@@ -107,10 +107,37 @@ export function getUntrackedFiles(cwd?: string): string[] {
 }
 
 /**
- * 读取 CONSTITUTION.md 中的源码路径 → 端映射
+ * 从 PROJECT.yaml platforms 解析 源码路径 → 端 映射（v8.3.323: 机器事实源优先）
+ * 只认显式声明的端（platforms 非空才生效）；空/缺失返回空 Map，由调用方回退 CONSTITUTION。
+ */
+async function loadSourcePathMapFromProjectYaml(cwd: string): Promise<Map<string, string>> {
+  const pathMap = new Map<string, string>();
+  try {
+    const projectPath = join(cwd, '.speccore', 'PROJECT.yaml');
+    if (!(await pathExists(projectPath))) return pathMap;
+    const { parseYaml } = require('./unified-config') as typeof import('./unified-config');
+    const content = await readFile(projectPath, 'utf-8');
+    const raw = parseYaml(content) as {
+      platforms?: Array<{ name?: unknown; code_path?: unknown }>;
+    };
+    for (const p of raw.platforms || []) {
+      const name = typeof p?.name === 'string' ? p.name.trim() : '';
+      const codePath = typeof p?.code_path === 'string' ? p.code_path.trim().replace(/^\.\//, '') : '';
+      if (name && codePath) pathMap.set(codePath, name);
+    }
+  } catch {}
+  return pathMap;
+}
+
+/**
+ * 读取 CONSTITUTION.md 中的源码路径 → 端映射（v8.3.323: PROJECT.yaml platforms 优先，此处为回退）
  * @returns Map<源码路径, 端名>
  */
 export async function loadSourcePathMap(cwd: string): Promise<Map<string, string>> {
+  // v8.3.323: 机器事实源优先——PROJECT.yaml platforms 声明了 code_path 就以它为准
+  const fromYaml = await loadSourcePathMapFromProjectYaml(cwd);
+  if (fromYaml.size > 0) return fromYaml;
+
   const pathMap = new Map<string, string>();
   const constitutionPath = join(cwd, '.speccore', 'CONSTITUTION.md');
 

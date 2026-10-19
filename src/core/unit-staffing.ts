@@ -12,7 +12,7 @@
  * 方向唯一成员才写入候选；多人或无人时保持缺省，由人工声明。
  */
 import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { logger } from '../utils/logger';
 
 /** STAFFING.md 单行成员 */
@@ -22,6 +22,11 @@ export interface StaffingMember {
   directions: string[];
   /** 投入比例（%） */
   capacity: number;
+  /**
+   * 成员状态（v8.3.321+）：active 在职 / inactive 出项目。
+   * undefined = 未声明（基座缺省视为在职；迭代覆盖层缺省不覆盖，继承基座状态）
+   */
+  status?: 'active' | 'inactive';
 }
 
 /** _matrix.md owners 段单条声明 */
@@ -34,27 +39,115 @@ export interface UnitOwnerDecl {
   status: 'pending' | 'confirmed';
 }
 
-/** 解析 STAFFING.md 人员表格（| 成员 | 平台方向 | 投入比例 |） */
-export function loadStaffing(iterationDir: string): StaffingMember[] {
-  const staffingPath = join(iterationDir, 'STAFFING.md');
+/** 安全读取文件内容；缺失/读失败返回空串 */
+function readOrEmpty(path: string): string {
   try {
-    if (!require('fs').existsSync(staffingPath)) return [];
-    const content = require('fs').readFileSync(staffingPath, 'utf-8');
-    const members: StaffingMember[] = [];
-    for (const line of content.split(/\r?\n/)) {
-      if (!line.startsWith('|') || line.includes(':---')) continue;
-      const cols = line.split('|').map((c: string) => c.trim()).filter(Boolean);
-      if (cols.length < 3 || cols[0] === '成员' || cols[0] === '人员') continue;
-      members.push({
-        name: cols[0],
-        directions: (cols[1] || '').split(/[,，、]/).map((d: string) => d.trim()).filter(Boolean),
-        capacity: parseInt(cols[2] || '100') || 100,
-      });
-    }
-    return members;
+    return require('fs').existsSync(path) ? require('fs').readFileSync(path, 'utf-8') : '';
   } catch {
-    return [];
+    return '';
   }
+}
+
+/** 从起始目录向上查找 .speccore/ 所在项目根（迭代目录可能位于任意深度） */
+export function findSpeccoreRoot(startDir: string): string | null {
+  let dir = resolve(startDir);
+  for (let i = 0; i < 10; i++) {
+    if (require('fs').existsSync(join(dir, '.speccore'))) return dir;
+    const parent = join(dir, '..');
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/**
+ * 解析含「成员 / 平台方向 / 投入比例」列的 Markdown 人员表格（按表头定位列，兼容列序差异）。
+ * TEAM.md（全员基座，多列）与 STAFFING.md（迭代覆盖，三/四列）共用此解析器；
+ * 表头缺「平台方向」列（旧版 TEAM.md 仅 5 列）时返回空数组（基座不可用，回退仅迭代级）。
+ * 「状态」列（v8.3.321+）：出/离/停/inactive 归一为 inactive，其余为 active；
+ * 无此列或该行留空 → undefined（基座缺省在职，迭代层缺省不覆盖）。
+ */
+export function parseStaffingTable(content: string): StaffingMember[] {
+  let nameIdx = -1, dirIdx = -1, capIdx = -1, statusIdx = -1;
+  const members: StaffingMember[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    if (!line.startsWith('|') || line.includes(':---')) continue;
+    // 只去首尾空项（| 包裹产生），保留中间空列（如「| 张三 | | 0% |」的方向留空）
+    const cols = line.split('|').map((c: string) => c.trim());
+    if (cols[0] === '') cols.shift();
+    if (cols.length > 0 && cols[cols.length - 1] === '') cols.pop();
+    if (cols.length < 3) continue;
+    // 表头行：定位「成员/平台方向/投入比例/状态」列索引
+    if (nameIdx < 0 && (cols[0] === '成员' || cols[0] === '人员')) {
+      cols.forEach((c, i) => {
+        if (c === '成员' || c === '人员') nameIdx = i;
+        else if (c === '平台方向' || c === '方向') dirIdx = i;
+        else if (c === '投入比例' || c === '比例') capIdx = i;
+        else if (c === '状态') statusIdx = i;
+      });
+      continue;
+    }
+    if (nameIdx < 0) continue; // 表头未出现前忽略
+    const name = cols[nameIdx];
+    if (!name) continue;
+    // 投入比例解析：0% 是合法值（本迭代不参与），不能用 || 兜底成 100
+    const rawCap = capIdx >= 0 ? (cols[capIdx] || '100') : '100';
+    const cap = parseInt(rawCap);
+    // 状态归一化：留空/无列 = undefined（不声明）
+    const rawStatus = statusIdx >= 0 ? (cols[statusIdx] || '') : '';
+    const status: 'active' | 'inactive' | undefined = rawStatus
+      ? (/出|离|停|inactive|off|exit/i.test(rawStatus) ? 'inactive' : 'active')
+      : undefined;
+    members.push({
+      name,
+      directions: dirIdx >= 0
+        ? (cols[dirIdx] || '').split(/[,，、]/).map((d: string) => d.trim()).filter(Boolean)
+        : [],
+      capacity: Number.isNaN(cap) ? 100 : cap,
+      status,
+    });
+  }
+  return dirIdx < 0 ? [] : members;
+}
+
+/**
+ * 两级合并（v8.3.319+）：全局基座（TEAM.md 全员名册）为底，迭代覆盖层（STAFFING.md）
+ * 同名成员整体覆盖方向/比例（含方向留空 = 本迭代不做该方向），迭代独有成员追加末尾；
+ * 未在迭代列出的基座成员默认保留（全员名册一次维护，已建迭代即时继承）。
+ * 状态（v8.3.321+）：迭代层未声明状态时继承基座状态（写「在职」可复活出项目成员，写「出项目」可局部停用）。
+ */
+export function mergeStaffing(
+  globalMembers: StaffingMember[],
+  iterationMembers: StaffingMember[]
+): StaffingMember[] {
+  if (globalMembers.length === 0) return [...iterationMembers];
+  if (iterationMembers.length === 0) return [...globalMembers];
+  const merged = [...globalMembers];
+  for (const m of iterationMembers) {
+    const idx = merged.findIndex((g) => g.name === m.name);
+    if (idx >= 0) merged[idx] = { ...m, status: m.status ?? merged[idx].status };
+    else merged.push({ ...m });
+  }
+  return merged;
+}
+
+/**
+ * 读取人员排期（两级合并）：全局 .speccore/PROJECT/TEAM.md 全员基座
+ * + 迭代 STAFFING.md 差异覆盖（v8.3.319+）。任一文件缺失均不阻塞。
+ * v8.3.321+：出项目（inactive）成员统一剔除——analyze 候选推导、
+ * taskify 负荷均衡自动跳过，只选在职成员；已拍板/已固化的 .meta/owner 不受影响。
+ */
+export function loadStaffing(iterationDir: string): StaffingMember[] {
+  const iterationMembers = parseStaffingTable(
+    readOrEmpty(join(iterationDir, 'STAFFING.md'))
+  );
+  const root = findSpeccoreRoot(iterationDir);
+  const globalMembers = root
+    ? parseStaffingTable(readOrEmpty(join(root, '.speccore', 'PROJECT', 'TEAM.md')))
+    : [];
+  // 基座未声明状态 = 在职
+  const base = globalMembers.map((m) => ({ ...m, status: m.status ?? 'active' as const }));
+  return mergeStaffing(base, iterationMembers).filter((m) => m.status !== 'inactive');
 }
 
 /** 端名 ↔ STAFFING 方向匹配：先精确双向包含，再按类别词别名词边界匹配（如「后台」→ backend/service） */

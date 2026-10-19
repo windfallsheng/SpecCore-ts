@@ -12,7 +12,7 @@
 import { readFile, pathExists, writeFile, ensureDir, stat, readdir } from 'fs-extra';
 import { join, basename } from 'path';
 import { createHash } from 'crypto';
-import { getProjectRoot } from '../utils/task-utils';
+import { getProjectRoot, isTimestampBackup } from '../utils/task-utils';
 
 // ═══════════════════════════════════════════════════════════
 // 类型定义
@@ -874,7 +874,7 @@ async function scanForNewFiles(
     const fullPath = join(dir, item.name);
     if (item.isDirectory() && !item.name.startsWith('.') && item.name !== 'node_modules') {
       await scanForNewFiles(fullPath, indexedPaths, newFiles);
-    } else if (item.isFile() && (item.name.endsWith('.md') || item.name.endsWith('.html') || item.name.endsWith('.htm')) && !indexedPaths.has(fullPath)) {
+    } else if (item.isFile() && !isTimestampBackup(item.name) && (item.name.endsWith('.md') || item.name.endsWith('.html') || item.name.endsWith('.htm')) && !indexedPaths.has(fullPath)) {
       newFiles.push(fullPath);
     }
   }
@@ -899,7 +899,9 @@ export async function indexDirectoryDocuments(
       const fullPath = join(dir, item.name);
       if (item.isDirectory() && !item.name.startsWith('.') && item.name !== 'node_modules') {
         await scanDir(fullPath);
-      } else if (item.isFile()) {
+      } else if (item.isFile() && !isTimestampBackup(item.name)) {
+        // v8.3.315+: 时间戳备份文件（{name}-{14位时间戳}.md）不进入 RAG 索引，
+        // 否则升级刷新产生备份后，语义检索会召回过期内容
         const isMd = item.name.endsWith('.md') && !item.name.startsWith('README');
         const isHtml = item.name.endsWith('.html') || item.name.endsWith('.htm');
         if (!isMd && !isHtml) continue;

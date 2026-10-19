@@ -655,11 +655,18 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           } catch { return 0; }
         };
         let hasFeatures = (await countFeatureDirs()) > 0;
-        if (hasFeatures) {
+        // v8.3.317+: 显式 --from split-units 视为增量重切请求（新增单元/新文档补切），
+        // 不因 features/ 非空跳过；默认自动断点场景保留跳过（幂等）
+        const incrementalResplit = options.from === 'split-units';
+        if (hasFeatures && !incrementalResplit) {
           logger.info('  ✅ 功能单元已切分，跳过');
+          logger.info('     💡 需求新增功能单元/新文档时增量重切: speccore run --from split-units');
           phaseStatus = 'skipped';
           phaseMessage = '功能单元已切分';
           break;
+        }
+        if (hasFeatures && incrementalResplit) {
+          logger.info('  🔪 增量重切: 已有单元跳过（skip），新增功能单元自动补齐');
         }
         // 收集待切分的需求文档（converted/ + REQUIREMENT.md）
         const docsToSplit: string[] = [];
@@ -688,7 +695,13 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         const { splitDocumentToUnits } = await import('./doc2spec');
         for (const doc of docsToSplit) {
           try {
-            await splitDocumentToUnits(iterDir, doc, '', basename(doc));
+            // v8.3.317+: 增量重切（--from split-units 且已有单元）传 onDuplicate=skip——
+            // 同名已有单元跳过不覆盖，新增章节自动产出；首次切分照旧默认 ask
+            await splitDocumentToUnits(
+              iterDir, doc, '', basename(doc),
+              undefined, undefined,
+              hasFeatures && incrementalResplit ? 'skip' : undefined,
+            );
           } catch (e: any) {
             logger.warn(`  ⚠️ 切分失败: ${basename(doc)} — ${e?.message || e}`);
           }

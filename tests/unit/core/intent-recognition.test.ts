@@ -178,3 +178,31 @@ describe('from-source 反推路由（v8.3.301+）', () => {
     });
   }
 });
+
+// ── v8.3.318+: 一段文档内容切分（unitize --content 路由）──
+describe('内容切分参数提取（v8.3.318+）', () => {
+  it('「把这段内容切分成功能单元：## 1.…」→ split-units + content/title', async () => {
+    const input = '把这段内容切分成功能单元：# 消息中心\n## 1. 通知列表\n用户可以查看通知列表，支持筛选和分页。';
+    const results = await recognizeIntent(input);
+    const best = results[0];
+    expect(best.intent).toBe('split-units');
+    expect(best.extractedParams?.content).toContain('## 1. 通知列表');
+    expect(best.extractedParams?.title).toBe('消息中心');
+  });
+
+  it('带 .md 路径时内容模式不抢（file 优先）', async () => {
+    const input = '把这段内容切分成功能单元，文档 docs/新需求.md 如下：# 消息中心\n## 1. 通知列表';
+    const results = await recognizeIntent(input);
+    const best = results[0];
+    expect(best.extractedParams?.file).toBe('docs/新需求.md');
+    expect(best.extractedParams?.content).toBeUndefined();
+  });
+
+  it('无信号词+内容时不算内容切分（防误提取）', async () => {
+    const input = '把这个需求文档切分成功能单元，包含登录注册功能';
+    const results = await recognizeIntent(input);
+    const best = results[0];
+    expect(best?.intent).toBe('split-units');
+    expect(best?.extractedParams?.content).toBeUndefined();
+  });
+});

@@ -142,8 +142,9 @@ function extractTopic(task: any): string {
     }
   }
 
-  // 4. fallback 到 hash
-  return slugify(task.name || task.functionalUnit || 'task');
+  // 4. fallback 到拼音/hash（v8.3.316+: 纯中文改拼音兜底，与全局命名契约一致，
+  // 替代无语义 hash 乱码——「支付回调异常」不再产出 9seya4 式目录名）
+  return toSlug(task.name || task.functionalUnit || 'task');
 }
 
 /**
@@ -152,10 +153,27 @@ function extractTopic(task: any): string {
  * 保证任务目录 topic 与切分单元语义一一对应（修复 Task-033-21 残片问题）。
  * 非目录名格式（自创英文名/中文）无序号段时不匹配，原样返回。
  * 导出供单测锁定剥离行为。
+ *
+ * v8.3.316+: 序号段错定修复——「恰好两位数字段」可能来自 docSlug 尾段
+ * （plan-24-01-inbox 的 -24-）或 slug 尾段（doc-01-tier-02-design 的 -02-），
+ * 消费端无法从目录名本身区分。规则改为：
+ *   - 恰好一个 -NN- 候选 → 它就是序号段（docSlug 多位数字如 meeting-2024 不产生候选）→ 剥离
+ *   - 零个候选 → 非单元目录名（自创名）→ 原样
+ *   - 多个候选 → 歧义结构 → 宁全勿残，原样返回（语义完整胜于序号冒充语义）
+ * 新切分由生成端保证 docSlug 以字母结尾（doc2spec 截尾数字），歧义结构不再产出。
  */
 export function stripUnitSeqPrefix(unitDirName: string): string {
-  const m = unitDirName.match(/^[a-z0-9-]+?-\d{2}-(.+)$/);
-  return m ? m[1] : unitDirName;
+  const re = /-\d{2}-/g;
+  const hits: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(unitDirName)) !== null) {
+    hits.push(m.index);
+    // 允许重叠扫描：plan-24-01-inbox 的 -24- 与 -01- 共享一个连字符，
+    // 默认 lastIndex 跳过会漏掉 -01- 候选 → 误判唯一候选剥出 01-inbox 残片
+    re.lastIndex = m.index + 1;
+  }
+  if (hits.length !== 1) return unitDirName;
+  return unitDirName.slice(hits[0] + 4); // '-NN-' 长度 4
 }
 
 /**
@@ -194,13 +212,14 @@ function buildTaskTopic(sec: any, taskType: string): string {
     return stripUnitSeqPrefix(functionalUnit).slice(0, 40);
   }
   if (bugTopic && /^[a-z0-9-]+$/.test(bugTopic)) return bugTopic.slice(0, 40);
-  return slugify(sec.name);
+  // v8.3.316+: 纯中文任务名拼音兜底（toSlug），替代旧 slugify hash 乱码
+  return toSlug(sec.name);
 }
 
 /**
  * 生成子任务全局唯一 ID
- * 格式: Task-{父任务ID}-{端名}
- * 例: Task-001-booking-service, Task-001-h5-mobile
+ * 格式: Task-{父任务尾段}-{端名}
+ * 例: Task-033-login-flow-booking-service（父任务 ID Task-033-login-flow 去 Task- 前缀后接端名）
  */
 function generateSubtaskId(parentTaskId: string, platform: string): string {
   // v6.49.5+ / v8.3.10+：确定性格式 {taskId}-{platform}，保证全项目唯一
@@ -1575,7 +1594,7 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
         }
       }
     } else {
-      logger.info('   ℹ️ 未找到 STAFFING.md，人员分配默认为"未分配"');
+      logger.info('   ℹ️ 未找到 STAFFING.md 或全局 TEAM.md 人员配置，人员分配默认为"未分配"');
     }
 
     logger.info(`Found ${sections.length} sections to split`);
@@ -4421,34 +4440,17 @@ async function buildSplitPrompt(
 }
 
 /**
- * 读取迭代的 STAFFING.md 人员排期配置
+ * 读取人员排期（两级合并，v8.3.319+）：复用 unit-staffing 的 loadStaffing——
+ * 全局 .speccore/PROJECT/TEAM.md 全员基座 + 迭代 STAFFING.md 差异覆盖。
  */
 function readStaffing(iterationDir: string): StaffMember[] | null {
-  try {
-    const staffingPath = join(iterationDir, 'STAFFING.md');
-    if (!require('fs').existsSync(staffingPath)) return null;
-    
-    const content = require('fs').readFileSync(staffingPath, 'utf-8');
-    const members: StaffMember[] = [];
-    
-    // 解析表格: | 张三 | 后台 | 70% |
-    const lines = content.split(/\r?\n/);
-    for (const line of lines) {
-      if (!line.startsWith('|') || line.includes(':---')) continue;
-      const cols = line.split('|').map((c: string) => c.trim()).filter(Boolean);
-      if (cols.length >= 3 && cols[0] !== '人员' && cols[0] !== '成员') {
-        const capacity = parseInt(cols[2] || '100') || 100;
-        members.push({
-          name: cols[0],
-          platforms: (cols[1] || '').split(/[,，]/).map((p: string) => p.trim()),
-          capacity,
-        });
-      }
-    }
-    return members.length > 0 ? members : null;
-  } catch {
-    return null;
-  }
+  const { loadStaffing } = require('../../core/unit-staffing') as typeof import('../../core/unit-staffing');
+  const members = loadStaffing(iterationDir).map((m) => ({
+    name: m.name,
+    platforms: m.directions,
+    capacity: m.capacity,
+  }));
+  return members.length > 0 ? members : null;
 }
 
 /**
@@ -4488,6 +4490,7 @@ function autoAssign(section: Section, platforms: string[], staffing: StaffMember
   let bestLoad = Infinity;
   
   for (const m of staffing) {
+    if (m.capacity <= 0) continue; // v8.3.319: 投入比例 0% = 本迭代不参与分配（如休假）
     const platformMatch = m.platforms.some(p => 
       targetPlatform.includes(p) || p.includes(targetPlatform)
     );
@@ -4696,8 +4699,8 @@ async function generateTaskSummary(
 
   // 汇总表
   md += `## 任务清单\n\n`;
-  md += `| # | 任务名 | 功能单元 | 人工工时 | AI工时 | 优先级 | 依赖 | 风险 |\n`;
-  md += `| :--- | :--- | :--- | ---: | ---: | :---: | :--- | :---: |\n`;
+  md += `| # | 任务名 | 功能单元 | 负责人 | 人工工时 | AI工时 | 优先级 | 依赖 | 风险 |\n`;
+  md += `| :--- | :--- | :--- | :--- | ---: | ---: | :---: | :--- | :---: |\n`;
 
   let totalHumanHours = 0;
   let totalAiHours = 0;
@@ -4713,6 +4716,8 @@ async function generateTaskSummary(
     const aiHours = Math.round(estimatedHours * 0.7); // 预估 70% 可由 AI 完成
     const humanHours = estimatedHours - aiHours;
     const priority = task.priority || (sec as any)._complexity?.priority || 'medium';
+    // v8.3.320: 负责人列（confirmed 拍板/autoAssign 分配结果，来自团队配置两级合并）
+    const owner = (sec as any)._owner || task.owner || '未分配';
     // v8.3.291: 依赖从解析后的 _dependsOn 读取（AI 的 dependencies 字段已映射为实际 taskId）
     const deps = ((sec as any)._dependsOn || []).join(', ') || '-';
     const risk = task.risk || 'medium';
@@ -4722,7 +4727,7 @@ async function generateTaskSummary(
 
     const priorityIcon = priority === 'high' ? '🔴' : priority === 'low' ? '🟢' : '🟡';
     const riskIcon = risk === 'high' ? '🔴' : risk === 'low' ? '🟢' : '🟡';
-    md += `| ${taskId} | ${name} | ${unit} | ${humanHours}h | ${aiHours}h | ${priorityIcon} ${priority} | ${deps} | ${riskIcon} ${risk} |\n`;
+    md += `| ${taskId} | ${name} | ${unit} | ${owner} | ${humanHours}h | ${aiHours}h | ${priorityIcon} ${priority} | ${deps} | ${riskIcon} ${risk} |\n`;
   }
 
   // 汇总
@@ -4743,6 +4748,18 @@ async function generateTaskSummary(
   md += `| 功能单元 | 任务数 |\n| :--- | ---: |\n`;
   for (const [unit, count] of Object.entries(unitCounts)) {
     md += `| ${unit} | ${count} |\n`;
+  }
+
+  // v8.3.320: 人员分布（按负责人统计任务数，口径与任务清单负责人列一致）
+  const ownerCounts: Record<string, number> = {};
+  for (let i = 0; i < createdSections.length; i++) {
+    const owner = (createdSections[i] as any)._owner || (tasks[i] || {}).owner || '未分配';
+    ownerCounts[owner] = (ownerCounts[owner] || 0) + 1;
+  }
+  md += `\n## 人员分布\n\n`;
+  md += `| 负责人 | 任务数 |\n| :--- | ---: |\n`;
+  for (const [owner, count] of Object.entries(ownerCounts)) {
+    md += `| ${owner} | ${count} |\n`;
   }
 
   // 写入文件（带时间戳，放单独子目录）

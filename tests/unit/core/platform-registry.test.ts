@@ -89,5 +89,34 @@ describe('platform-registry - 端注册表与模糊匹配', () => {
       expect(platforms).toContain('admin');
       expect(platforms).toContain('h5');
     });
+
+    it('PROJECT.yaml platforms 声明端时优先于 CONSTITUTION（v8.3.323）', async () => {
+      writeFileSync(join(TEST_CWD, '.speccore', 'CONSTITUTION.md'), [
+        '| 工程 | 对应端 |',
+        '| :--- | :--- |',
+        '| web-app | admin, h5 |',
+      ].join('\n'));
+      writeFileSync(join(TEST_CWD, '.speccore', 'PROJECT.yaml'), [
+        'schema_version: 1',
+        'platforms:',
+        '  - name: admin-web',
+        '    type: frontend',
+        '  - name: h5-app',
+        '    type: frontend',
+      ].join('\n'));
+      const platforms = await parseGlobalPlatforms(TEST_CWD);
+      expect(platforms).toEqual(['admin-web', 'h5-app']);
+    });
+
+    it('platforms 为空时回退 CONSTITUTION「对应端」列', async () => {
+      writeFileSync(join(TEST_CWD, '.speccore', 'CONSTITUTION.md'), [
+        '| 工程 | 对应端 |',
+        '| :--- | :--- |',
+        '| web-app | admin, h5 |',
+      ].join('\n'));
+      writeFileSync(join(TEST_CWD, '.speccore', 'PROJECT.yaml'), 'schema_version: 1\nplatforms: []\n');
+      const platforms = await parseGlobalPlatforms(TEST_CWD);
+      expect(platforms).toEqual(['admin', 'h5']);
+    });
   });
 });

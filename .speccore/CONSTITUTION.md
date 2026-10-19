@@ -6,6 +6,7 @@
 ## 端列表（全局权威）
 
 > ⚠️ **端名是全项目唯一的标识符**，所有命令（analyze/split/execute）、目录名（020-specs/{端}/）、模板目录（templates/{level}/{端}/）均使用此处声明的端名。
+> 本仓库为 SpecCore CLI 工具（单工程 ts-cli）；下列端名为测试迭代（Iteration-002/003）的示例端，非本工程真实部署端。
 
 | 工程标识 | 描述 | 类型 |
 | :--- | :--- | :--- |
@@ -23,11 +24,13 @@
 
 ## 项目信息
 
+> ⚠️ **机器事实源是 `.speccore/PROJECT.yaml` 的 `platforms`**（v8.3.323+）：源码路径→端的映射（变更检测等）以 platforms[].code_path 为准；本表为 AI 契约与兼容回退，两处需保持一致。
+
 > ⚠️ **所有端名称（app/h5/miniapp/admin）必须与 010-requirements/ 子目录名严格一致**
 
 | 工程 | 项目名称 | 源码路径 | Git 仓库 | 默认分支 | 对应端 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| ts-cli | SpecCore CLI | ./ | git@gitee.com:windfullsheng/spec-core-ts.git | main | 待填写 |
+| ts-cli | SpecCore CLI | ./ | git@gitee.com:windfullsheng/spec-core-ts.git | main | — |
 
 > 多工程示例（每个端 = 一个独立工程）:
 >
@@ -44,31 +47,37 @@
 
 ## 技术栈
 
-### 后端
-- 语言：Java / TypeScript / Go / Python
-- 框架：Spring Boot / NestJS / Gin / FastAPI
-- 数据库：MySQL / PostgreSQL / MongoDB
-- 缓存：Redis
+> 填写规则：**每端一行，只写「已选定」的技术与版本**（决策式声明，不是选项菜单）。
+> AI 生成代码时以本表为准；未填写的端回退到端级 TECH.md（analyze 产物）。
 
-### 前端
-- 框架：Vue / React / Angular
-- 状态管理：Pinia / Redux / NgRx
-- UI 组件：Element Plus / Ant Design
+| 端 | 语言 | 框架 | 数据存储 | 依据（依赖清单文件） |
+| :--- | :--- | :--- | :--- | :--- |
+| ts-cli | TypeScript 5 | Node.js（无 Web 框架） | 无（文件落盘） | package.json |
 
 ## 命名规范
-- 接口：/api/v1/{模块}/{操作}
-- 错误码：4 位数字，按模块划分
-- 数据库：snake_case
-- 代码：camelCase / PascalCase
+- 接口（CLI 命令）：speccore {领域} {动作}（如 speccore iteration create）
+- 退出码：见「异常码体系」分段约定
+- 目录：全小写短横线（unit-staffing）；文件名与默认导出组件同名
+- 代码：camelCase 变量/函数；PascalCase 类/接口/组件
+- Git 提交：type(scope): subject（feat/fix/docs/refactor/test）
 
 ## 异常码体系
-| 错误码 | 含义 | 场景 |
+
+> CLI 进程退出码约定——分段规则给 AI 的是「生成能力」，不是几个示例：
+
+| 退出码 | 含义 | 场景 |
 | :--- | :--- | :--- |
-| 1001 | 用户不存在 | 登录时手机号未注册 |
-| 1002 | 密码错误 | 登录密码不匹配 |
-| ... | ... | ... |
+| 0 | 成功 | 命令正常完成 |
+| 1 | 一般错误 | 参数错误、前置校验失败、质量门禁拦截 |
+| 10 | 主机 AI 接力 | CLI 输出自包含 prompt 后退出，由宿主 AI 执行并续跑（--resume） |
+
+- 新增退出码遵循：0 成功 / 1 一般错误 / 10 接力；其余按需在 2-9 段内扩展
 
 ## Git 分支策略
+
+> ⚠️ **机器事实源是 `.speccore/PROJECT.yaml` 的 `git` 段**（v8.3.322+）：CLI 命令（分支创建、PR、保护分支拦截）只认 PROJECT.yaml；
+> 本节是 AI 阅读契约，仅在 PROJECT.yaml 未声明对应字段时作为兼容回退。修改策略请改 PROJECT.yaml，并保持本节语义一致。
+
 - 默认分支: main  (可选: master / develop / trunk / release)
 - 任务分支: feature/{Task-ID}
 - 发布分支: release/{version}

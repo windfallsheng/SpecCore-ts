@@ -20,6 +20,24 @@ describe('stripUnitSeqPrefix', () => {
     expect(stripUnitSeqPrefix('order-notification-02-order-status-push')).toBe('order-status-push');
   });
 
+  it('v8.3.316+: 新契约 docSlug 以字母结尾，序号段照常剥离', () => {
+    // 生成端已把 plan-24 截尾数字为 plan，目录名中首个前段以字母结尾的 -NN- 即序号段
+    expect(stripUnitSeqPrefix('plan-01-inbox')).toBe('inbox');
+    expect(stripUnitSeqPrefix('plan-01-2026niandujihua')).toBe('2026niandujihua');
+  });
+
+  it('v8.3.316+: docSlug 尾多位数字（年份/版本）单候选仍精确剥离', () => {
+    // meeting-2024 的 -2024- 不是两位数字段（20/24 均无连字符包围），唯一候选即序号段
+    expect(stripUnitSeqPrefix('prd-v2-01-inbox')).toBe('inbox');
+    expect(stripUnitSeqPrefix('2026-01-inbox')).toBe('inbox');
+  });
+
+  it('v8.3.316+: 双候选歧义结构（plan-24-01-inbox）宁全勿残', () => {
+    // -24- 与 -01- 均可能为序号段，消费端无法区分 → 整体原样返回，不剥成 01-inbox 残片
+    expect(stripUnitSeqPrefix('plan-24-01-inbox')).toBe('plan-24-01-inbox');
+    expect(stripUnitSeqPrefix('doc-01-tier-02-design')).toBe('doc-01-tier-02-design');
+  });
+
   it('自创英文名（无序号段）：原样返回', () => {
     expect(stripUnitSeqPrefix('user-auth')).toBe('user-auth');
     expect(stripUnitSeqPrefix('login-flow')).toBe('login-flow');

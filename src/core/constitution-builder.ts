@@ -1,65 +1,52 @@
 /**
- * constitution-builder — 自动检测项目技术栈，生成/完善 CONSTITUTION.md
+ * constitution-builder — 自动检测项目技术栈，完善 CONSTITUTION.md「技术栈」节（决策式）
+ *
+ * v8.3.325 重构：
+ * - 写入目标从 .speccore/PROJECT/CONSTITUTION.md（无人读取的副本）改为 .speccore/CONSTITUTION.md 主文件
+ * - 与 v8.3.324 决策式技术栈表对齐：检测产出「语言/框架/数据存储/依据」四列，端名留待用户拍板（不脑补）
+ * - 不再生成框架通用规则（AGENTS.md 禁令 12：严禁框架自带标准用法）
+ * - init 模式（模板刚生成）：替换示例行；update 模式（存量文件）：仅在技术栈未填时补填，绝不覆盖用户已填内容
  */
 import { readFile, writeFile, pathExists } from 'fs-extra';
 import { join } from 'path';
 import { logger } from '../utils/logger';
 import { existsSync, readdirSync } from 'fs';
 
-interface ConstitutionRule {
-  category: string;
-  rule: string;
-  reason: string;
-  enforced: boolean;
+export interface DetectedStack {
+  backend?: string;
+  backendSource?: string;
+  frontend?: string;
+  frontendSource?: string;
+  database?: string;
+  databaseSource?: string;
+  language?: string;
+  languageSource?: string;
 }
 
-export async function buildConstitution(cwd: string): Promise<void> {
-  const constitutionPath = join(cwd, '.speccore', 'PROJECT', 'CONSTITUTION.md');
-  
-  // Detect tech stack
-  const stack = await detectStack(cwd);
-  const rules = generateRules(stack);
-  
-  let content = '# 项目技术宪法\n\n';
-  content += '> 自动检测 + 人工确认 | 以下规则在 analyze/split 时强制执行\n\n';
-  content += `## 技术栈（自动检测）\n\n`;
-  content += `| 层级 | 技术 | 来源 |\n`;
-  content += `| :--- | :--- | :--- |\n`;
-  
-  if (stack.backend) content += `| 后端 | ${stack.backend} | ${stack.backendSource} |\n`;
-  if (stack.frontend) content += `| 前端 | ${stack.frontend} | ${stack.frontendSource} |\n`;
-  if (stack.database) content += `| 数据库 | ${stack.database} | ${stack.databaseSource} |\n`;
-  if (stack.language) content += `| 语言 | ${stack.language} | ${stack.languageSource} |\n`;
-  
-  content += `\n## 强制规则（自动生成，可手动修改）\n\n`;
-  
-  for (const r of rules) {
-    const icon = r.enforced ? '🔒' : '💡';
-    content += `### ${icon} ${r.category}\n\n`;
-    content += `- **规则**: ${r.rule}\n`;
-    content += `- **原因**: ${r.reason}\n\n`;
-  }
-  
-  content += `\n---\n> 编辑此文件后，运行 analyze 和 split 将强制执行这些规则。\n`;
-  
-  await writeFile(constitutionPath, content);
-  logger.info(`  📜 CONSTITUTION.md 已完善（${rules.length} 条规则）`);
+export interface EnhanceOptions {
+  /** 端名列取值（init 传项目名；不传则「待填写」） */
+  platformName?: string;
+  /** true = 模板刚生成，直接替换示例行（init 用）；false = 存量文件，未填才补（update 用） */
+  freshTemplate?: boolean;
 }
 
-async function detectStack(cwd: string): Promise<{
-  backend?: string; backendSource?: string;
-  frontend?: string; frontendSource?: string;
-  database?: string; databaseSource?: string;
-  language?: string; languageSource?: string;
-}> {
-  const stack: any = {};
+/** 检测技术栈（pom.xml / build.gradle / package.json / go.mod / requirements.txt / 源码扫描） */
+export async function detectStack(cwd: string): Promise<DetectedStack> {
+  const stack: DetectedStack = {};
+
   // pom.xml → Java/Spring
   if (existsSync(join(cwd, 'pom.xml'))) {
     try {
       const pom = await readFile(join(cwd, 'pom.xml'), 'utf-8');
-      if (pom.includes('spring-boot')) { stack.backend = 'Spring Boot'; stack.backendSource = 'pom.xml'; }
-      else { stack.backend = 'Java'; stack.backendSource = 'pom.xml'; }
-      stack.language = 'Java'; stack.languageSource = 'pom.xml';
+      if (pom.includes('spring-boot')) {
+        stack.backend = 'Spring Boot';
+        stack.backendSource = 'pom.xml';
+      } else {
+        stack.backend = 'Java';
+        stack.backendSource = 'pom.xml';
+      }
+      stack.language = 'Java';
+      stack.languageSource = 'pom.xml';
     } catch {}
   }
 
@@ -67,38 +54,66 @@ async function detectStack(cwd: string): Promise<{
   if (!stack.backend && existsSync(join(cwd, 'build.gradle'))) {
     try {
       const gradle = await readFile(join(cwd, 'build.gradle'), 'utf-8');
-      if (gradle.includes('spring')) { stack.backend = 'Spring Boot'; stack.backendSource = 'build.gradle'; }
-      else { stack.backend = 'Java/Kotlin'; stack.backendSource = 'build.gradle'; }
+      if (gradle.includes('spring')) {
+        stack.backend = 'Spring Boot';
+        stack.backendSource = 'build.gradle';
+      } else {
+        stack.backend = 'Java/Kotlin';
+        stack.backendSource = 'build.gradle';
+      }
     } catch {}
   }
 
-  // package.json → Node.js
+  // package.json → Node.js 生态
   if (existsSync(join(cwd, 'package.json'))) {
     try {
       const pkg = JSON.parse(await readFile(join(cwd, 'package.json'), 'utf-8'));
       const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-      if (deps['next'] || deps['react']) { stack.frontend = 'React/Next.js'; stack.frontendSource = 'package.json'; }
-      if (deps['vue']) { stack.frontend = 'Vue'; stack.frontendSource = 'package.json'; }
-      if (deps['express'] || deps['koa']) { stack.backend = stack.backend || 'Node.js'; stack.backendSource = 'package.json'; }
-      if (deps['nestjs']) { stack.backend = 'NestJS'; stack.backendSource = 'package.json'; }
-      if (deps['mysql2'] || deps['pg']) { stack.database = Object.keys(deps).find(k => deps[k] && ['mysql2','pg','mongodb'].includes(k)) || 'SQL'; stack.databaseSource = 'package.json'; }
-      stack.language = stack.language || 'TypeScript'; stack.languageSource = 'package.json';
+      if (deps['next'] || deps['react']) {
+        stack.frontend = 'React/Next.js';
+        stack.frontendSource = 'package.json';
+      }
+      if (deps['vue']) {
+        stack.frontend = 'Vue';
+        stack.frontendSource = 'package.json';
+      }
+      if (deps['express'] || deps['koa']) {
+        stack.backend = stack.backend || 'Node.js';
+        stack.backendSource = 'package.json';
+      }
+      if (deps['nestjs']) {
+        stack.backend = 'NestJS';
+        stack.backendSource = 'package.json';
+      }
+      if (deps['mysql2'] || deps['pg'] || deps['mongodb']) {
+        stack.database = ['mysql2', 'pg', 'mongodb'].find((k) => deps[k]) || 'SQL';
+        stack.databaseSource = 'package.json';
+      }
+      // v8.3.325: 仅显式依赖 typescript 才判 TS，避免把纯 JS 项目误判
+      if (deps['typescript']) {
+        stack.language = stack.language || 'TypeScript';
+        stack.languageSource = 'package.json';
+      }
     } catch {}
   }
 
   // go.mod → Go
   if (existsSync(join(cwd, 'go.mod'))) {
-    stack.backend = stack.backend || 'Go'; stack.backendSource = 'go.mod';
-    stack.language = 'Go'; stack.languageSource = 'go.mod';
+    stack.backend = stack.backend || 'Go';
+    stack.backendSource = 'go.mod';
+    stack.language = 'Go';
+    stack.languageSource = 'go.mod';
   }
 
   // requirements.txt → Python
   if (existsSync(join(cwd, 'requirements.txt'))) {
-    stack.backend = stack.backend || 'Python'; stack.backendSource = 'requirements.txt';
-    stack.language = 'Python'; stack.languageSource = 'requirements.txt';
+    stack.backend = stack.backend || 'Python';
+    stack.backendSource = 'requirements.txt';
+    stack.language = 'Python';
+    stack.languageSource = 'requirements.txt';
   }
 
-  // Scan src/ for framework detection
+  // 源码扫描兜底
   if (!stack.backend || !stack.frontend) {
     await scanSourceForFrameworks(cwd, stack);
   }
@@ -106,21 +121,26 @@ async function detectStack(cwd: string): Promise<{
   return stack;
 }
 
-async function scanSourceForFrameworks(cwd: string, stack: any): Promise<void> {
+async function scanSourceForFrameworks(cwd: string, stack: DetectedStack): Promise<void> {
   const srcDirs = ['src', 'app', 'lib'];
   for (const dir of srcDirs) {
     const full = join(cwd, dir);
     if (!existsSync(full)) continue;
     const files = findFiles(full, /\.(java|ts|tsx|py|go|vue|jsx)$/, 2);
     for (const f of files) {
-      if (f.endsWith('.vue') && !stack.frontend) { stack.frontend = 'Vue'; stack.frontendSource = f; }
-      if (f.endsWith('.java') && !stack.backend) { stack.backend = 'Java'; stack.backendSource = f; }
+      if (f.endsWith('.vue') && !stack.frontend) {
+        stack.frontend = 'Vue';
+        stack.frontendSource = f;
+      }
+      if (f.endsWith('.java') && !stack.backend) {
+        stack.backend = 'Java';
+        stack.backendSource = f;
+      }
     }
   }
 }
 
 function findFiles(dir: string, pattern: RegExp, maxDepth: number): string[] {
-  const { join } = require('path');
   const results: string[] = [];
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -136,65 +156,109 @@ function findFiles(dir: string, pattern: RegExp, maxDepth: number): string[] {
   return results;
 }
 
-function generateRules(stack: any): ConstitutionRule[] {
-  const rules: ConstitutionRule[] = [];
+/** 表格数据行的「已填」判定：语言列或框架列有实质内容 */
+function isFilledRow(row: string): boolean {
+  const cols = row.split('|').map((c) => c.trim());
+  // | 端 | 语言 | 框架 | 数据存储 | 依据 |
+  const lang = cols[2] || '';
+  const framework = cols[3] || '';
+  return (
+    lang !== '' &&
+    lang !== '待填写' &&
+    framework !== '' &&
+    framework !== '待填写' &&
+    framework !== '—'
+  );
+}
 
-  if (stack.language) {
-    rules.push({
-      category: '编程语言',
-      rule: `所有代码必须使用 ${stack.language}`,
-      reason: `项目已使用 ${stack.language}，保持一致性`,
-      enforced: true,
-    });
-  }
+function buildDetectedRow(stack: DetectedStack, platformName?: string): string {
+  const platform = platformName || '待填写';
+  const language = stack.language || '待填写';
+  const framework = stack.backend || stack.frontend || '待填写';
+  const database = stack.database || '—';
+  const source =
+    stack.languageSource ||
+    stack.backendSource ||
+    stack.frontendSource ||
+    stack.databaseSource ||
+    '—';
+  return `| ${platform} | ${language} | ${framework} | ${database} | ${source} |`;
+}
 
-  if (stack.backend) {
-    rules.push({
-      category: 'API 规范',
-      rule: '所有接口必须使用 RESTful 风格，返回 JSON',
-      reason: `${stack.backend} 项目，保持 API 一致性`,
-      enforced: true,
-    });
+/**
+ * 检测并完善 .speccore/CONSTITUTION.md 的「## 技术栈」节。
+ * @returns true = 已写入；false = 无需写入（已配置 / 检测不到 / 旧格式仅提示 / 文件不存在）
+ */
+export async function enhanceConstitutionTechStack(
+  projectRoot: string,
+  options: EnhanceOptions = {},
+): Promise<boolean> {
+  const constitutionPath = join(projectRoot, '.speccore', 'CONSTITUTION.md');
+  if (!(await pathExists(constitutionPath))) return false;
 
-    if (stack.backend.includes('Spring')) {
-      rules.push({
-        category: '框架约束',
-        rule: '使用 Spring Boot 约定，Controller → Service → Repository 分层',
-        reason: 'Spring Boot 标准分层架构',
-        enforced: true,
-      });
+  const content = await readFile(constitutionPath, 'utf-8');
+  const lines = content.split('\n');
+
+  // 1. 定位「## 技术栈」节
+  const sectionIdx = lines.findIndex((l) => /^##\s+技术栈/.test(l.trim()));
+  if (sectionIdx < 0) return false;
+
+  // 2. 找表头行（| 端 | 语言 | …），跳过注释行
+  let headerIdx = -1;
+  for (let i = sectionIdx + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t.startsWith('|') && t.includes('语言') && t.includes('框架')) {
+      headerIdx = i;
+      break;
     }
+    // 遇到下一个 ## 节或表格外内容就停止（旧菜单格式无此表头）
+    if (/^##\s+/.test(t)) break;
+  }
+  if (headerIdx < 0) {
+    logger.info('  ℹ️ 技术栈为旧版菜单格式，未自动改写（可运行 speccore constitution 后手动升级为决策式）');
+    return false;
   }
 
-  if (stack.database) {
-    rules.push({
-      category: '数据库',
-      rule: `数据库使用 ${stack.database}，所有表必须有 created_at/updated_at`,
-      reason: '标准数据库规范，便于审计',
-      enforced: true,
-    });
+  // 3. 收集表头之后的数据行（跳过分隔行 :---；空行/注释/下一节为止）
+  const dataRowIndexes: number[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (/^##\s+/.test(t) || (t !== '' && !t.startsWith('|') && !t.startsWith('>'))) break;
+    if (t.startsWith('|') && !t.includes('---')) dataRowIndexes.push(i);
+    if (t === '') break;
+  }
+  if (dataRowIndexes.length === 0) return false;
+
+  const hasFilled = dataRowIndexes.some((i) => isFilledRow(lines[i]));
+
+  // 4. 决策：存量文件已填 → 不覆盖；未填/模板刚生成 → 检测后替换
+  if (!options.freshTemplate && hasFilled) {
+    logger.info('  ℹ️ 技术栈已配置，跳过自动检测（可运行 speccore constitution 手动完善）');
+    return false;
   }
 
-  rules.push({
-    category: '错误处理',
-    rule: '统一错误码格式：MODULE_XXX + HTTP 状态码',
-    reason: '便于前端统一处理和监控告警',
-    enforced: true,
-  });
+  const stack = await detectStack(projectRoot);
+  if (!stack.language && !stack.backend && !stack.frontend) {
+    logger.info('  ℹ️ 未检测到可识别的技术栈（pom.xml/package.json/go.mod/requirements.txt），保留现状');
+    return false;
+  }
 
-  rules.push({
-    category: '代码审查',
-    rule: '所有代码必须经过 PR 审查才能合并',
-    reason: '质量保障',
-    enforced: true,
-  });
+  const detectedRow = buildDetectedRow(stack, options.platformName);
+  // 多行示例/占位 → 首行替换为检测行，其余删除（每端一行，不产生重复行）
+  lines[dataRowIndexes[0]] = detectedRow;
+  for (let i = dataRowIndexes.length - 1; i >= 1; i--) lines.splice(dataRowIndexes[i], 1);
 
-  rules.push({
-    category: '测试',
-    rule: '新增接口必须有对应的单元测试',
-    reason: '避免回归',
-    enforced: false,
-  });
+  await writeFile(constitutionPath, lines.join('\n'));
+  logger.info(`  🔍 技术栈自动检测完成：${stack.language || stack.backend || stack.frontend}（来源: ${
+    stack.languageSource || stack.backendSource || stack.frontendSource || '—'
+  }），已写入 CONSTITUTION.md 技术栈表（端名请人工确认）`);
+  return true;
+}
 
-  return rules;
+/** constitution 命令入口：存量文件手动完善（已填行不动，未填才补） */
+export async function buildConstitution(cwd: string): Promise<void> {
+  const ok = await enhanceConstitutionTechStack(cwd, { freshTemplate: false });
+  if (!ok) {
+    logger.info('  未检测到可完善的技术栈（可能已配置、旧格式、或无已知依赖清单文件）');
+  }
 }

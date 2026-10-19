@@ -506,6 +506,12 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
     await generateExampleConfigs(projectRoot);
   } catch { /* 示例更新失败不影响主流程 */ }
 
+  // v8.3.325: 自动检测技术栈（仅当 CONSTITUTION 技术栈表未填时补填，不覆盖用户已配置内容）
+  try {
+    const { enhanceConstitutionTechStack } = require('../core/constitution-builder') as typeof import('../core/constitution-builder');
+    await enhanceConstitutionTechStack(projectRoot, { freshTemplate: false });
+  } catch { /* 检测失败不影响 update 主流程 */ }
+
   // v6.98.0+: 同步 AGENTS.md — 将 .speccore/ 规范数据库投影到 AGENTS.md
   // v8.3.46+: force 模式 — 重新生成手动区，不保留旧内容（用户自定义内容需手动备份）
   await syncAgentsMd(projectRoot, true);

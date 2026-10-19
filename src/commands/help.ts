@@ -85,6 +85,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     params: [
       { flag: '-f, --file <path>', meaning: '需求文档路径（.md 直接切；.docx/.pdf 先 doc2spec 转换）' },
       { flag: '--files "a.md=端1,b.md"', meaning: '多文档批量切分，可指定端' },
+      { flag: '-c, --content <text>', meaning: '一段文档内容直接切分（自动落盘 converted/，配合 --title 定文档名）' },
       { flag: '--on-duplicate <mode>', meaning: '同名单元三选一（v8.3.275+）：ask/skip/overwrite（备份可回滚）/rename/abort' },
       { flag: '--translate-en <mode>', meaning: '标题英译：auto（默认，LLM+拼音兜底）/ off / host（接力模式）' },
     ],

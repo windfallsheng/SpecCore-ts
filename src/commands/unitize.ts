@@ -13,7 +13,7 @@
  * 匹配端名白名单的 {端名}.md / {端名}requirements.md），逐一切分；REQUIREMENT.md 总纲
  * 与无端文档不参与自动发现。显式指定 --file 时照旧只切点名的。
  */
-import { pathExists, readdir } from 'fs-extra';
+import { pathExists, readdir, ensureDir, writeFile } from 'fs-extra';
 import { join, basename } from 'path';
 import { logger } from '../utils/logger';
 import { loadProjectConfig } from '../core/unified-config';
@@ -23,11 +23,50 @@ import { detectActiveIteration } from '../core/context';
 interface UnitizeOptions {
   file?: string;
   files?: string; // batch: "a.md=平台1,b.md=平台2"
+  content?: string; // v8.3.318+: 直接切分一段文档内容（自动落盘 converted/）
+  title?: string;   // 内容切分时的文档名（缺省取内容首个 H1）
   iter?: string;
   platform?: string;
   translateEn?: string; // --translate-en: auto(默认) | host | off（单元标题英译）
   translateResponse?: string; // --translate-response: 接收宿主 AI 英译 JSON（配合 host）
   onDuplicate?: string; // --on-duplicate: 同名单元处理 ask(默认) | skip | overwrite | rename | abort
+}
+
+/**
+ * v8.3.318+: 内容切分入口——把一段文档内容落盘为 converted/{标题}.md 后走常规切分。
+ * 文档名优先 --title，缺省取内容首个 H1 标题（转 ASCII 文件名）；两者皆无则报错指路。
+ */
+async function unitizeContent(content: string, title: string | undefined, platform: string, iterName: string, options: UnitizeOptions): Promise<void> {
+  const text = content.trim();
+  if (!text) {
+    logger.error('--content 内容为空，无法切分');
+    return;
+  }
+  let docName = (title || '').trim().replace(/\.md$/i, '');
+  if (!docName) {
+    const h1 = text.match(/^#\s+(.+)$/m);
+    docName = (h1 ? h1[1] : '').trim();
+  }
+  if (!docName) {
+    logger.error('无法确定文档名：请用 --title 指定（如 --title 消息中心）');
+    return;
+  }
+  const iterDir = `Iteration-${iterName.replace(/^Iteration-/, '')}`;
+  if (!(await pathExists(iterDir))) {
+    logger.error(`迭代目录不存在: ${iterDir}`);
+    return;
+  }
+  const convDir = join(iterDir, '010-requirements', 'converted');
+  await ensureDir(convDir);
+  // 文件名 ASCII 化（中文标题转拼音，避免落盘中文文件名）
+  const { pinyin } = await import('pinyin-pro');
+  const ascii = docName.replace(/[^\x00-\x7F]+/g, (m) => pinyin(m, { toneType: 'none', type: 'array' }).join('-'));
+  const safeName = (ascii || 'doc').replace(/[^a-zA-Z0-9\u4e00-\u9fa5-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'doc';
+  const target = join(convDir, `${safeName}.md`);
+  await writeFile(target, text, 'utf-8');
+  logger.info(`📄 内容已落盘: 010-requirements/converted/${safeName}.md`);
+  logger.info(`\n🔪 切分: ${safeName}.md${platform ? `（端: ${platform}）` : ''}`);
+  await splitDocumentToUnits(iterDir, target, platform, basename(target), options.translateEn, options.translateResponse, options.onDuplicate);
 }
 
 /** 批量参数解析（与 doc2spec --files 同格式："path1.md=平台1,path2.md=平台2"） */
@@ -90,6 +129,17 @@ async function unitizeSingle(file: string, platform: string, iterName: string, t
 }
 
 export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
+  // ── 内容模式（v8.3.318+）：一段文档内容直接切分 ──
+  if (options.content !== undefined) {
+    const iterName = options.iter || (await detectActiveIteration());
+    if (!iterName) {
+      logger.error('请指定迭代: speccore unitize --content "..." --iter=<迭代>');
+      return;
+    }
+    await unitizeContent(options.content, options.title, options.platform || '', iterName, options);
+    return;
+  }
+
   // ── 批量模式 ──
   if (options.files) {
     const pairs = parseBatch(options.files);

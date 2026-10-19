@@ -13,7 +13,7 @@ import { existsSync, readFileSync, writeFileSync, ensureFileSync } from 'fs-extr
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { randomBytes } from 'crypto';
-import { loadRawProjectConfig } from './unified-config';
+import { loadRawProjectConfig, parseYaml } from './unified-config';
 import { getProjectRoot } from '../utils/task-utils';
 
 const gitMappingPath = () => join(getProjectRoot(), '.speccore', '.git-mapping.json');
@@ -29,7 +29,8 @@ interface GitMapping {
 /**
  * Git 配置 — 三级回退：子任务级 > 迭代级 > 全局级 > 默认值
  *
- * 继承链：命令行参数 > 子任务 .meta/git-config > 迭代级 PROJECT_GRAPH.md > 全局 CONSTITUTION.md > 默认值
+ * 继承链：命令行参数 > 子任务 .meta/git-config > 迭代级 PROJECT_GRAPH.md
+ *   > 全局 PROJECT.yaml git 段（机器事实源，v8.3.322+）> CONSTITUTION.md（AI 契约回退）> 默认值
  */
 export interface GitConfig {
   /** 默认基础分支（如 main/master） */
@@ -86,10 +87,110 @@ const DEFAULT_GIT_CONFIG: GitConfig = {
 };
 
 /**
+ * 同步读取 PROJECT.yaml 的 Git 配置（v8.3.322+）
+ *
+ * Git 配置单向收敛：PROJECT.yaml 是机器事实源，CONSTITUTION.md 是 AI 阅读契约与兼容回退。
+ * 只认用户显式声明的字段（不合并 DEFAULT_PROJECT_CONFIG 默认值），未声明返回 undefined，
+ * 由调用方按字段独立回退 CONSTITUTION / 默认值。
+ *
+ * 与 resolveTaskBaseBranch 的 loadRawProjectConfig 同源同语义，但本函数是同步版——
+ * loadGitConfig / getProtectedBranches 是同步接口，不能 await。
+ */
+function loadRawProjectGitSync(): {
+  defaultBase?: string;
+  protectedBranches?: string[];
+  /** v8.3.323: 用户是否显式声明了 protected_branches（含显式清空 []）——声明即准，不再回退 CONSTITUTION */
+  declaredProtected?: boolean;
+} | null {
+  try {
+    const projectPath = join(getProjectRoot(), '.speccore', 'PROJECT.yaml');
+    if (!existsSync(projectPath)) return null;
+    const raw = parseYaml(readFileSync(projectPath, 'utf-8')) as {
+      git?: { default_base?: unknown; protected_branches?: unknown };
+      platforms?: Array<{ protected_branches?: unknown }>;
+    };
+    if (!raw?.git) return null;
+    const result: {
+      defaultBase?: string;
+      protectedBranches?: string[];
+      declaredProtected?: boolean;
+    } = {};
+    if (typeof raw.git.default_base === 'string' && raw.git.default_base.trim()) {
+      result.defaultBase = raw.git.default_base.trim();
+    }
+    // 全局 + 端级 protected_branches 合并；「声明」= git 段键存在 或 任一端声明
+    const declared = raw.git.protected_branches !== undefined && raw.git.protected_branches !== null
+      || (raw.platforms || []).some((p) => p?.protected_branches !== undefined && p?.protected_branches !== null);
+    if (declared) result.declaredProtected = true;
+    const merged = new Set<string>();
+    for (const b of (raw.git.protected_branches as string[]) || []) {
+      if (b != null) merged.add(String(b).trim());
+    }
+    for (const p of raw.platforms || []) {
+      for (const b of (p?.protected_branches as string[]) || []) {
+        if (b != null) merged.add(String(b).trim());
+      }
+    }
+    if (merged.size > 0) result.protectedBranches = [...merged];
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+/** Git 源不一致告警标记文件（指纹去重，避免每个任务刷屏） */
+const gitSourceWarnPath = () => join(getProjectRoot(), '.speccore', 'local', '.git-source-warn.json');
+
+/**
+ * Git 配置双源不一致告警（v8.3.323）
+ *
+ * 存量项目升级后，PROJECT.yaml 与 CONSTITUTION 可能残留两份不一致的 Git 配置。
+ * 机器已切到「PROJECT.yaml 声明即准」，此处把不一致摆到明面上，按指纹只告警一次：
+ * 同一不一致不重复刷屏；用户修平后标记清除，未来再不一致可再次告警。
+ */
+function warnGitSourceMismatch(): void {
+  try {
+    const constitutionPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
+    if (!existsSync(constitutionPath)) return;
+    const content = readFileSync(constitutionPath, 'utf-8');
+    const cnDefault = content.match(/^[-•]\s*\**默认分支\**\s*[：:]\s*([A-Za-z0-9._\/-]+)/m)?.[1] ?? null;
+    const cnProtectRaw = content.match(/^[-•]\s*\**保护分支\**\s*[：:]\s*(.+)$/m)?.[1] ?? null;
+    const cnProtect = cnProtectRaw ? cnProtectRaw.split(',').map((s: string) => s.trim()).filter(Boolean) : null;
+
+    const projectGit = loadRawProjectGitSync();
+    const mismatches: string[] = [];
+    if (projectGit?.defaultBase && cnDefault && projectGit.defaultBase !== cnDefault) {
+      mismatches.push(`默认分支：PROJECT.yaml=${projectGit.defaultBase}，CONSTITUTION=${cnDefault}`);
+    }
+    if (projectGit?.declaredProtected && cnProtect) {
+      const py = [...(projectGit.protectedBranches || [])].sort().join(',');
+      const cn = [...cnProtect].sort().join(',');
+      if (py !== cn) mismatches.push(`保护分支：PROJECT.yaml=[${py}]，CONSTITUTION=[${cn}]`);
+    }
+
+    const markerPath = gitSourceWarnPath();
+    const fingerprint = mismatches.join(' || ');
+    let warned = '';
+    try { warned = readFileSync(markerPath, 'utf-8').trim(); } catch {}
+
+    if (mismatches.length === 0) {
+      if (warned) { try { writeFileSync(markerPath, ''); } catch {} } // 已修平，清除标记
+      return;
+    }
+    if (warned === fingerprint) return; // 同一不一致已告警过
+    try { ensureFileSync(markerPath); writeFileSync(markerPath, fingerprint); } catch {}
+    for (const m of mismatches) {
+      console.warn(`⚠️ SpecCore: Git 配置两处不一致（机器以 PROJECT.yaml 为准）— ${m}`);
+    }
+    console.warn('   请修正 CONSTITUTION.md「Git 分支策略」或 PROJECT.yaml git 段，使两处一致');
+  } catch {}
+}
+
+/**
  * 为任务创建 Git 分支
  *
  * 分支名按子任务级/迭代级/全局配置生成，支持自定义前缀和格式模板
- * 三级回退：子任务 .meta/git-config > 迭代 PROJECT_GRAPH.md > 全局 CONSTITUTION.md
+ * 三级回退：子任务 .meta/git-config > 迭代 PROJECT_GRAPH.md > 全局 PROJECT.yaml > CONSTITUTION 回退
  *
  * v8.3.87+: 增加 cwd 参数，支持 speccore 与工程代码分离的目录结构
  */
@@ -317,48 +418,71 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
  * 配置来源优先级：
  * 1. 子任务级 .meta/git-config    任务自身配置
  * 2. 迭代级 PROJECT_GRAPH.md      frontmatter 字段
- * 3. 全局 CONSTITUTION.md          Git 分支策略章节
- * 4. 默认值
+ * 3. 全局 PROJECT.yaml git 段     机器事实源（v8.3.322+）
+ * 4. 全局 CONSTITUTION.md         「Git 分支策略」章节（AI 契约回退）
+ * 5. 默认值
  *
  * 每个字段独立回退：子任务只配了 branchPrefix，defaultBranch 仍从迭代/全局继承
  */
 export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
   const config: Partial<GitConfig> = {};
 
-  // ── 1. 读取全局 CONSTITUTION.md ──
+  // v8.3.323: 双源不一致告警（指纹去重，仅在 PROJECT.yaml 与 CONSTITUTION 值冲突时提示一次）
+  warnGitSourceMismatch();
+
+  // ── 1. 全局层：PROJECT.yaml git 段（机器事实源）> CONSTITUTION.md「Git 分支策略」（AI 契约回退） ──
+  // v8.3.322: Git 配置单向收敛——PROJECT.yaml 是唯一机器事实源；CONSTITUTION 保留为
+  // AI 阅读契约与兼容回退，同一字段仅在 PROJECT.yaml 未显式声明时才从 CONSTITUTION 取值。
+
+  // 1a. PROJECT.yaml（同步读原始文件；branch_prefix 是旧语义兼容字段，其现代语义
+  //     已由 getEffectiveGitConfig 端级路径消费，此处不注入以免与 branchType 双拼）
+  const projectGit = loadRawProjectGitSync();
+  if (projectGit) {
+    if (projectGit.defaultBase) config.defaultBranch = projectGit.defaultBase;
+    // v8.3.323: 声明即准（含显式清空 [] = 无保护分支）
+    if (projectGit.declaredProtected) config.protectedBranches = projectGit.protectedBranches || [];
+  }
+
+  // 1b. CONSTITUTION.md 回退（每字段独立：仅当上面未取到值）
   try {
     const constitutionPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
     if (existsSync(constitutionPath)) {
       const content = readFileSync(constitutionPath, 'utf-8');
 
       // 默认分支（v8.3.300: 行首锚定 + 兼容「**默认分支**」双侧加粗格式，避开「> - **默认分支**：如 main...」字段说明行误匹配）
-      const branchMatch = content.match(/^[-•]\s*\**默认分支\**\s*[：:]\s*([A-Za-z0-9._\/-]+)/m);
-      if (branchMatch) config.defaultBranch = branchMatch[1];
+      if (!config.defaultBranch) {
+        const branchMatch = content.match(/^[-•]\s*\**默认分支\**\s*[：:]\s*([A-Za-z0-9._\/-]+)/m);
+        if (branchMatch) config.defaultBranch = branchMatch[1];
+      }
 
       // 任务分支类型段（从"任务分支: feature/{Task-ID}"提取，兼容加粗格式）
       // v8.3.306: 语义矫正——「任务分支」的 X/ 段是分支类型而非前缀；此前误存
       // branchPrefix，与 {type} 段重复拼出 feature/feature-Task-XXX，导致分支名与
       // 子任务 ID 不一致。标准类型名写入 branchType，自定义值（兼容保留）仍入 branchPrefix。
-      const taskBranchMatch = content.match(/^[-•]\s*\**任务分支\**\s*[：:]\s*(\S+?)\//m);
-      if (taskBranchMatch) {
-        const extracted = taskBranchMatch[1];
-        // v8.3.293+: 模板变量（如 {type}）不是真实值，忽略以免污染分支命名
-        if (!extracted.includes('{') && !extracted.includes('}')) {
-          if (STANDARD_BRANCH_TYPES.has(extracted)) {
-            config.branchType = extracted;
-          } else {
-            config.branchPrefix = extracted;
+      if (!config.branchType) {
+        const taskBranchMatch = content.match(/^[-•]\s*\**任务分支\**\s*[：:]\s*(\S+?)\//m);
+        if (taskBranchMatch) {
+          const extracted = taskBranchMatch[1];
+          // v8.3.293+: 模板变量（如 {type}）不是真实值，忽略以免污染分支命名
+          if (!extracted.includes('{') && !extracted.includes('}')) {
+            if (STANDARD_BRANCH_TYPES.has(extracted)) {
+              config.branchType = extracted;
+            } else if (config.branchPrefix === undefined) {
+              config.branchPrefix = extracted;
+            }
           }
         }
       }
 
       // 保护分支（行首锚定，兼容「**保护分支**」双侧加粗格式，避开字段说明行）
-      const protectMatch = content.match(/^[-•]\s*\**保护分支\**\s*[：:]\s*(.+)$/m);
-      if (protectMatch) {
-        config.protectedBranches = protectMatch[1]
-          .split(',')
-          .map((s: string) => s.trim())
-          .filter(Boolean);
+      if (!config.protectedBranches) {
+        const protectMatch = content.match(/^[-•]\s*\**保护分支\**\s*[：:]\s*(.+)$/m);
+        if (protectMatch) {
+          config.protectedBranches = protectMatch[1]
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+        }
       }
 
       // v8.3.209+: 依赖合并策略（auto/manual/off）+ 黑白名单
@@ -604,23 +728,34 @@ export function generatePRDescription(taskId: string, taskName: string, cwd?: st
 }
 
 /**
- * 从 CONSTITUTION.md 读取保护分支列表
+ * 读取保护分支列表
+ * v8.3.323: 严格收敛——PROJECT.yaml 声明了（含显式清空 []）就以其为准；
+ * 未声明则回退 CONSTITUTION「保护分支」；两处都无则兜底默认 main/master。
  */
 export function getProtectedBranches(): string[] {
+  const projectGit = loadRawProjectGitSync();
+  if (projectGit?.declaredProtected) {
+    // 声明即准：显式清空 = 无保护分支，尊重用户意图，不回退 CONSTITUTION
+    return projectGit.protectedBranches || [];
+  }
+  // 2. CONSTITUTION.md「保护分支」（AI 契约回退）
+  const merged = new Set<string>();
   try {
     const constitutionPath = join(getProjectRoot(), '.speccore', 'CONSTITUTION.md');
-    if (!existsSync(constitutionPath)) return [];
-    const content = readFileSync(constitutionPath, 'utf-8');
-    // v8.3.300: 行首锚定 + 兼容「**保护分支**」双侧加粗格式（此前匹配不到导致保护分支检查失效）
-    const match = content.match(/^[-•]\s*\**保护分支\**\s*[：:]\s*(.+)$/m);
-    if (!match) return [];
-    return match[1]
-      .split(',')
-      .map((s: string) => s.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+    if (existsSync(constitutionPath)) {
+      const content = readFileSync(constitutionPath, 'utf-8');
+      // v8.3.300: 行首锚定 + 兼容「**保护分支**」双侧加粗格式（此前匹配不到导致保护分支检查失效）
+      const match = content.match(/^[-•]\s*\**保护分支\**\s*[：:]\s*(.+)$/m);
+      if (match) {
+        for (const s of match[1].split(',')) {
+          const v = s.trim();
+          if (v) merged.add(v);
+        }
+      }
+    }
+  } catch {}
+  const list = [...merged];
+  return list.length > 0 ? list : DEFAULT_GIT_CONFIG.protectedBranches;
 }
 
 /** 单个保护分支规则匹配（精确匹配 + 通配符如 release/*） */
@@ -647,23 +782,14 @@ export function isProtectedBranch(branchName: string): boolean {
 }
 
 /**
- * 合并 PROJECT.yaml 全局 + 端级 protected_branches（v8.3.300）
- * 此前 PROJECT.yaml 配置的保护分支从未生效（getEffectiveGitConfig 无消费方），
- * pr/execute 只认 CONSTITUTION.md。此处以 PROJECT.yaml 为主源、CONSTITUTION.md 回退。
+ * 获取拦截用保护分支（v8.3.323: 严格收敛，与同步版 getProtectedBranches 同口径）
+ * PROJECT.yaml 声明即准（含显式清空）；未声明回退 CONSTITUTION；两处都无兜底默认。
+ * 此前为「CONSTITUTION + PROJECT.yaml 合并」——PROJECT.yaml 已声明时残留的
+ * CONSTITUTION 旧值仍会拦截，用户删改 PROJECT.yaml 无法解除保护，与唯一事实源矛盾。
  */
 export async function getProtectedBranchesMerged(): Promise<string[]> {
-  const merged = new Set<string>(getProtectedBranches());
-  try {
-    const { loadProjectConfig } = await import('../core/unified-config');
-    const pc = await loadProjectConfig();
-    for (const b of pc.git?.protected_branches || []) merged.add(b);
-    for (const p of pc.platforms || []) {
-      for (const b of p.protected_branches || []) merged.add(b);
-    }
-  } catch {
-    // PROJECT.yaml 读取失败时仅用 CONSTITUTION.md 结果
-  }
-  return [...merged];
+  warnGitSourceMismatch();
+  return getProtectedBranches();
 }
 
 /** isProtectedBranch 的异步合并版（含 PROJECT.yaml 全局/端级配置） */
@@ -696,6 +822,11 @@ export function installGitHooks(cwd?: string): { preCommit: boolean; prePush: bo
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
 if [ -n "$CURRENT_BRANCH" ] && [ -f ".speccore/CONSTITUTION.md" ]; then
   PROTECTED=$(grep '保护分支' .speccore/CONSTITUTION.md | sed 's/.*[：:]\\s*//' | tr ',' '\\n' | sed 's/^[ \\t]*//')
+  # v8.3.322: PROJECT.yaml（git 段 + 端级）protected_branches 一并纳入（机器事实源）
+  if [ -f ".speccore/PROJECT.yaml" ]; then
+    PY_PROTECTED=$(sed -n '/^[[:space:]]*protected_branches:/,/^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*:/p' .speccore/PROJECT.yaml | grep '^[[:space:]]*- ' | sed 's/^[[:space:]]*- //; s/[[:space:]]*#.*$//; s/[[:space:]]*$//')
+    PROTECTED="$PROTECTED $PY_PROTECTED"
+  fi
   for PATTERN in $PROTECTED; do
     # 精确匹配
     if [ "$CURRENT_BRANCH" = "$PATTERN" ]; then
@@ -731,6 +862,11 @@ git diff --cached --name-only | grep -q "@spec" && echo "✅ Spec annotations fo
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
 if [ -n "$CURRENT_BRANCH" ] && [ -f ".speccore/CONSTITUTION.md" ]; then
   PROTECTED=$(grep '保护分支' .speccore/CONSTITUTION.md | sed 's/.*[：:]\\s*//' | tr ',' '\\n' | sed 's/^[ \\t]*//')
+  # v8.3.322: PROJECT.yaml（git 段 + 端级）protected_branches 一并纳入（机器事实源）
+  if [ -f ".speccore/PROJECT.yaml" ]; then
+    PY_PROTECTED=$(sed -n '/^[[:space:]]*protected_branches:/,/^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*:/p' .speccore/PROJECT.yaml | grep '^[[:space:]]*- ' | sed 's/^[[:space:]]*- //; s/[[:space:]]*#.*$//; s/[[:space:]]*$//')
+    PROTECTED="$PROTECTED $PY_PROTECTED"
+  fi
   for PATTERN in $PROTECTED; do
     if [ "$CURRENT_BRANCH" = "$PATTERN" ]; then
       echo "❌ SpecCore: 保护分支 '$CURRENT_BRANCH' 禁止 push"

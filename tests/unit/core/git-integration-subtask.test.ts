@@ -6,12 +6,13 @@
  * 测试分支名格式（含 {type}/{prefix}/{hash4} 变量）
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import {
   loadSubtaskGitConfig,
   loadGitConfig,
+  getProtectedBranches,
   TASK_TYPE_TO_BRANCH_TYPE,
   GitConfig,
 } from '@/core/git-integration';
@@ -339,6 +340,187 @@ describe('loadGitConfig — three-level fallback', () => {
       expect(config.defaultBranch).toBe('develop');
       // autoPull: inherited from iteration
       expect(config.autoPull).toBe(true);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+});
+
+describe('Git 配置收敛（v8.3.322: PROJECT.yaml 为机器事实源）', () => {
+  beforeEach(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  function setupProjectYaml(content: string): void {
+    mkdirSync(join(TEST_DIR, '.speccore'), { recursive: true });
+    writeFileSync(join(TEST_DIR, '.speccore', 'PROJECT.yaml'), content);
+  }
+
+  it('PROJECT.yaml git.default_base / protected_branches 覆盖 CONSTITUTION「Git 分支策略」', () => {
+    setupProjectYaml([
+      'schema_version: 1',
+      'git:',
+      '  default_base: develop',
+      '  protected_branches:',
+      '    - develop',
+      '    - release/*',
+    ].join('\n'));
+    setupGlobal([
+      '# 技术宪法',
+      '## Git 分支策略',
+      '- 默认分支: main',
+      '- 保护分支: main, master',
+    ].join('\n'));
+
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      const config = loadGitConfig();
+      expect(config.defaultBranch).toBe('develop');
+      expect(config.protectedBranches).toEqual(['develop', 'release/*']);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+
+  it('PROJECT.yaml 未声明 default_base 时回退 CONSTITUTION「默认分支」（每字段独立）', () => {
+    setupProjectYaml([
+      'schema_version: 1',
+      'git:',
+      '  protected_branches:',
+      '    - master',
+    ].join('\n'));
+    setupGlobal([
+      '# 技术宪法',
+      '## Git 分支策略',
+      '- 默认分支: develop',
+      '- 任务分支: bugfix/{Task-ID}',
+      '- 保护分支: main, master',
+    ].join('\n'));
+
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      const config = loadGitConfig();
+      expect(config.defaultBranch).toBe('develop');
+      expect(config.branchType).toBe('bugfix');
+      expect(config.protectedBranches).toEqual(['master']);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+
+  it('getProtectedBranches 声明即准：PROJECT.yaml 全局 + 端级，不回退 CONSTITUTION', () => {
+    setupProjectYaml([
+      'schema_version: 1',
+      'git:',
+      '  protected_branches:',
+      '    - main',
+      'platforms:',
+      '  - name: admin-web',
+      '    type: frontend',
+      '    protected_branches:',
+      '      - release/admin-*',
+    ].join('\n'));
+    setupGlobal([
+      '# 技术宪法',
+      '## Git 分支策略',
+      '- 保护分支: production',
+    ].join('\n'));
+
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      // v8.3.323: 声明即准——CONSTITUTION 的 production 不再参与
+      expect(getProtectedBranches().sort()).toEqual(['main', 'release/admin-*'].sort());
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+
+  it('getProtectedBranches 显式清空 [] = 无保护分支（不回退 CONSTITUTION）', () => {
+    setupProjectYaml([
+      'schema_version: 1',
+      'git:',
+      '  default_base: main',
+      '  protected_branches: []',
+    ].join('\n'));
+    setupGlobal([
+      '# 技术宪法',
+      '## Git 分支策略',
+      '- 保护分支: main, master',
+    ].join('\n'));
+
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      expect(getProtectedBranches()).toEqual([]);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+
+  it('getProtectedBranches 两处都无声明时兜底默认 main/master', () => {
+    setupGlobal([
+      '# 技术宪法',
+      '## Git 分支策略',
+      '- 默认分支: main',
+    ].join('\n'));
+
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      expect(getProtectedBranches().sort()).toEqual(['main', 'master'].sort());
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+
+  it('双源不一致告警只提示一次（指纹去重）', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    setupProjectYaml([
+      'schema_version: 1',
+      'git:',
+      '  default_base: develop',
+      '  protected_branches:',
+      '    - develop',
+    ].join('\n'));
+    setupGlobal([
+      '# 技术宪法',
+      '## Git 分支策略',
+      '- 默认分支: main',
+      '- 保护分支: main, master',
+    ].join('\n'));
+
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      loadGitConfig();
+      const firstCount = warnSpy.mock.calls.length;
+      expect(firstCount).toBeGreaterThan(0);
+      loadGitConfig(); // 同一不一致第二次：不再刷屏
+      expect(warnSpy.mock.calls.length).toBe(firstCount);
+    } finally {
+      process.chdir(origCwd);
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('getProtectedBranches 无 PROJECT.yaml 时仅 CONSTITUTION（兼容回退）', () => {
+    setupGlobal([
+      '# 技术宪法',
+      '## Git 分支策略',
+      '- 保护分支: main, master',
+    ].join('\n'));
+
+    const origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+    try {
+      expect(getProtectedBranches().sort()).toEqual(['main', 'master'].sort());
     } finally {
       process.chdir(origCwd);
     }
