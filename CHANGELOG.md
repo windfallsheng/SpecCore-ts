@@ -1,3 +1,13 @@
+# Changelog
+
+## v8.3.330 (2026-10-19) — 修复知识图谱双重 join：loadCodeGraph 从未成功加载（+ 阅读清单行号锚点真实生效）
+
+- **根因**：`GRAPH_DIR` 定义为 `join(getProjectRoot(), '.speccore', 'code-graph')`（绝对路径），而 `path.join` 拼接绝对段不重置（只有 `path.resolve` 重置），`join(root, GRAPH_DIR, ...)` 拼出「root + 绝对路径」双份路径——`loadCodeGraph` 永远返回 null，知识图谱读取侧全面瘫痪（smart-recommend / analyze-graph-plugin / execute-graph-plugin / requirement-linker / graph 命令全部静默降级走「无图谱」分支）。
+- **修复**：三个文件（code-graph/index.ts、requirement-linker.ts、incremental-build.ts）的 `GRAPH_DIR` 改为相对常量 `join('.speccore', 'code-graph')`，与调用方传入的 projectRoot join 后路径自然正确；不再依赖模块加载时的 getProjectRoot（顺带免疫加载期 cwd 变化）。
+- **阅读清单锚点真实生效**：v8.3.329 的行号锚点因 loadCodeGraph 失败从未产出过——修复后实测 `符号 findRelevantCode:L276 readRelevantSource:L544` 精确指向导出符号。
+- **锚点质量**：symbolMap 不再截断前 5 个节点（import 变量抢占名额导致导出符号漏出），改为非 variable 优先排序 + 渲染层按 exports 名定向匹配；仅当前两层均无命中时才兜底任意节点。
+- **测试**：+2（loadCodeGraph 绝对 projectRoot 加载回归 + 锚点导出符号优先）→ 499/499 全绿。
+
 ## v8.3.329 (2026-10-19) — 源码零拼接：所有 AI 上下文统一「阅读清单」指针式交付
 
 - **根因**：prompt 层早已阅读清单化，但分析报告（ANALYSIS.md）、代码审查（review）、执行缺口补充（INFO_GAP）、单元上下文组装（unit-context-assembler）四处仍读源码原文拼接（截断 preview / 4KB 切片 / truncateCodeFile）。

@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mkdtemp, writeFile, mkdirp, remove } from 'fs-extra';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { formatSourceReadingList } from '../../../src/core/code-scanner';
+import { loadCodeGraph } from '../../../src/core/code-graph';
+import * as taskUtils from '../../../src/utils/task-utils';
 
 // ═══════════════════════════════════════════════════════════
 // 源码阅读清单（v8.3.329）：CLI 导航 + 宿主 AI 按需深读
@@ -63,5 +68,56 @@ describe('formatSourceReadingList - 源码阅读清单（v8.3.329）', () => {
     const list = await formatSourceReadingList(matches, { maxEntries: 3 });
     expect(list).toContain('| P0 | `src/services/booking.service.ts`');
     expect(list).toContain('深读协议');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// v8.3.330 回归：GRAPH_DIR 曾为绝对路径，path.join(root, GRAPH_DIR)
+// 会拼接出「root + 绝对路径」双份路径，导致 loadCodeGraph 永远返回 null。
+// 修复后 GRAPH_DIR 为相对常量，join 拼接自然正确。
+// ═══════════════════════════════════════════════════════════
+describe('code-graph 双重 join 回归（v8.3.330）', () => {
+  const tmpDirs: string[] = [];
+
+  async function makeGraphWith(relPath: string, nodes: unknown[]) {
+    const dir = await mkdtemp(join(tmpdir(), 'spec-graph-'));
+    tmpDirs.push(dir);
+    const graphDir = join(dir, '.speccore', 'code-graph');
+    await mkdirp(graphDir);
+    await writeFile(
+      join(graphDir, 'graph.json'),
+      JSON.stringify({ nodes, edges: [], communities: [], godNodes: [] }),
+    );
+    return dir;
+  }
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await Promise.all(tmpDirs.splice(0).map((d) => remove(d)));
+  });
+
+  it('loadCodeGraph 传入绝对 projectRoot 能读到 graph.json', async () => {
+    const dir = await makeGraphWith('src/a.ts', [
+      { id: 'a', name: 'BookingService', type: 'class', filePath: 'src/a.ts', line: 42, column: 1, snippet: '' },
+    ]);
+    const g = await loadCodeGraph(dir);
+    expect(g).not.toBeNull();
+    expect(g!.nodes).toHaveLength(1);
+    expect(g!.nodes[0].name).toBe('BookingService');
+  });
+
+  it('行号锚点优先导出符号：import 变量行号不抢占', async () => {
+    const dir = await makeGraphWith('src/services/booking.service.ts', [
+      { id: 'm', name: 'booking.service.ts', type: 'module', filePath: 'src/services/booking.service.ts', line: 1, column: 1, snippet: '' },
+      { id: 'i', name: 'readFile', type: 'variable', filePath: 'src/services/booking.service.ts', line: 11, column: 1, snippet: '' },
+      { id: 'c', name: 'BookingService', type: 'class', filePath: 'src/services/booking.service.ts', line: 42, column: 1, snippet: '' },
+    ]);
+    vi.spyOn(taskUtils, 'getProjectRoot').mockReturnValue(dir);
+    const list = await formatSourceReadingList(
+      [{ file: 'src/services/booking.service.ts', exports: ['BookingService'], apis: [], score: 52 }],
+      { maxEntries: 3 },
+    );
+    expect(list).toContain('BookingService:L42');
+    expect(list).not.toContain('readFile:L11');
   });
 });

@@ -852,7 +852,14 @@ export async function formatSourceReadingList(
             list = [];
             symbolMap.set(node.filePath, list);
           }
-          if (list.length < 5) list.push({ name: node.name, line: node.line, type: node.type });
+          list.push({ name: node.name, line: node.line, type: node.type });
+        }
+        // 每文件非 variable 节点优先（import 变量行号对深读价值低），不截断——
+        // 渲染时按 exports 名定向匹配再取前 3，截断会漏掉靠后的导出符号
+        for (const [, list] of symbolMap) {
+          list.sort(
+            (a, b) => (a.type === 'variable' ? 1 : 0) - (b.type === 'variable' ? 1 : 0) || a.line - b.line,
+          );
         }
       }
     } catch { /* 符号行号失败不阻断 */ }
@@ -875,11 +882,25 @@ export async function formatSourceReadingList(
     else if (m.score >= 25) reasons.push('Spec 技术关键词匹配');
     else reasons.push('关键词匹配');
     const clues: string[] = [];
-    if (m.exports.length > 0) clues.push(`导出 \`${m.exports.slice(0, 4).join(' ')}\``);
+    if (m.exports.length > 0) clues.push(`导出 \`${m.exports.slice(0, 4).join(' ').trim()}\``);
     if (m.apis.length > 0) clues.push(`API \`${m.apis.slice(0, 3).join(' ')}\``);
     const syms = symbolMap.get(m.file);
     if (syms && syms.length > 0) {
-      clues.push(`符号 ${syms.slice(0, 3).map((s) => `${s.name}:L${s.line}`).join(' ')}`);
+      // 锚点优先展示本文件导出符号（import 变量行号对深读价值低），再按类型兜底
+      const byName = new Map(syms.map((s) => [s.name, s]));
+      const picked: { name: string; line: number; type: string }[] = [];
+      for (const e of m.exports) {
+        const hit = byName.get(e);
+        if (hit && !picked.includes(hit)) picked.push(hit);
+      }
+      for (const s of syms) {
+        if (!picked.includes(s) && s.type !== 'variable') picked.push(s);
+      }
+      // 仅当前两层均无命中时，才兜底用任意节点（含 import 变量）
+      if (picked.length === 0) {
+        for (const s of syms) picked.push(s);
+      }
+      clues.push(`符号 ${picked.slice(0, 3).map((s) => `${s.name}:L${s.line}`).join(' ')}`);
     }
     const priority = m.score >= 40 ? 'P0' : (m.score >= 25 ? 'P1' : 'P2');
     lines.push(`| ${priority} | \`${m.file}\` | ${reasons.join(' / ')} (score:${m.score}) | ${clues.join('；') || '—'} |`);

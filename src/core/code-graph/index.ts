@@ -17,7 +17,6 @@ import { join } from 'path';
 import { ensureDir, writeFile, pathExists } from 'fs-extra';
 import { glob } from 'glob';
 import { logger } from '../../utils/logger';
-import { getProjectRoot } from '../../utils/task-utils';
 import { parseProject } from './parser';
 import { buildCodeGraph } from './builder';
 import { generateGraphReport } from './reporter';
@@ -25,7 +24,9 @@ import { buildCodeGraphHtml } from './visualizer';
 import { extractMultimodalNodes } from './multimodal';
 import type { CodeGraph } from './types';
 
-const GRAPH_DIR = join(getProjectRoot(), '.speccore', 'code-graph');
+// 相对路径常量：与调用方传入的 projectRoot 做 join 拼接
+// （若用绝对路径，path.join 会拼接出 projectRoot + 绝对路径 的双份路径）
+const GRAPH_DIR = join('.speccore', 'code-graph');
 
 export interface BuildGraphOptions {
   scope?: string;

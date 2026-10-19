@@ -5,11 +5,11 @@
 import { join } from 'path';
 import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
 import { logger } from '../../utils/logger';
-import { getProjectRoot } from '../../utils/task-utils';
 import { loadCodeGraph } from './index';
 import type { CodeGraph, CodeNode } from './types';
 
-const GRAPH_DIR = join(getProjectRoot(), '.speccore', 'code-graph');
+// 相对路径常量：与调用方传入的 root 做 join 拼接
+const GRAPH_DIR = join('.speccore', 'code-graph');
 
 export interface ReqCodeLink {
   /** 需求来源文件 */
