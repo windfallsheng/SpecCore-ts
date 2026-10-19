@@ -1,4 +1,15 @@
-## v8.3.328 (2026-10-19) — analyze 链路接入知识库：L2 规范注入 + RAG 语义召回兑底
+## v8.3.329 (2026-10-19) — 源码零拼接：所有 AI 上下文统一「阅读清单」指针式交付
+
+- **根因**：prompt 层早已阅读清单化，但分析报告（ANALYSIS.md）、代码审查（review）、执行缺口补充（INFO_GAP）、单元上下文组装（unit-context-assembler）四处仍读源码原文拼接（截断 preview / 4KB 切片 / truncateCodeFile）。
+- **共享工具**：新增 `formatSourceReadingList`（code-scanner），把 findRelevantCode 命中转为「优先级 P0/P1/P2 + 匹配原因 + 导出符号/API + code-graph 符号行号锚点 + 深读协议」阅读清单，绝不含源码正文。
+- **analyze 报告**：`readRelevantSource` 不再调用；「关联代码现状」→「关联代码导航」（阅读清单 + Read/Grep/LSP 深读协议）；「源码分析清单」删除 preview 拼接；`summarizeSources` 调用链移除（tree-sitter 摘要仅 java/go/py/rs，TS/JS 原文拼接是主噪音源）。
+- **review 命令**：`findRelatedSource` 30KB/5 文件原文拼接 → 阅读清单。
+- **execute INFO_GAP**：P1 源码回退不再写 4KB 切片，改为「缺口相关源码」阅读清单注入 supplement 文件；结构化精确匹配（DTO/Service 带 filePath:line）保留。
+- **单元上下文组装**：`findRelatedCodeForUnit` 只记录路径与符号线索（知识图谱关联 40 分/P0）；`truncateCodeFile` 删除；`truncateByBudget` 源码段改为路径列表。
+- **健壮性**：`loadCodeIndex` 对空/半写/损坏索引 JSON.parse 容错，返回 null 自动重建，不阻断分析（测试抓出的真实崩溃点）。
+- **测试**：+7（formatSourceReadingList 6 用例 + analyze 阅读清单集成用例）→ 497/497 全绿。
+
+## v8.3.328 (2026-10-19) — analyze 链路接入知识库：L2 规范注入 + RAG 语义召回兑 底
 
 - **根因**：此前 analyze 链路的 RAG 索引只刷新不检索（索引只被体检从未被使用）；L2 规范（loadGlobalContext）也只注入 taskify/execute 的 prompt，analyze 完全未接入。
 - **L2 规范注入**：新增 `collectKnowledgeContext`，分析时自动加载 `.speccore/GLOBAL/` 必读 + BUSINESS_RULES + RULES/（按 priority），注入分析报告「全局知识库」节。

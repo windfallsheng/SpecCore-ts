@@ -18,7 +18,7 @@ import { join, relative, basename } from 'path';
 import { logger } from '../utils/logger';
 import { isTimestampBackup, getProjectRoot } from '../utils/task-utils';
 import { resolveUnitSourcePath } from './feature-source';
-import { buildCodeIndex, findRelevantCode, readRelevantSource, isIndexStale, loadFullIndex, resolveIterationScope, ensureCodeIndexFresh } from './code-scanner';
+import { buildCodeIndex, findRelevantCode, isIndexStale, loadFullIndex, resolveIterationScope, ensureCodeIndexFresh, formatSourceReadingList, SourceReadingMatch } from './code-scanner';
 // v8.3.183+: tree-sitter 结构化摘要，替代原文 slice(0,N) 硬切
 import { summarizeSources } from './multi-lang-parser';
 // v8.3.125+: 同义词扩展，解决中英文/缩写匹配失败问题
@@ -197,10 +197,10 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   const issues = scanCompleteness(fullContent);
   const archImpact = await analyzeArchitectureImpact(fullContent);
 
-  // ── 需求分析时默认读取关联代码（避免分析不接地气 + 减少重复 token 消耗） ──
-  // v8.3.122+: 增加文件数和字节配额，确保深入阅读业务逻辑
-  let sourceContents: Record<string, string> = {};
-  let sourceSummaries: Record<string, string> = {};
+  // ── 需求分析默认关联代码（v8.3.329：阅读清单模式，不拼源码原文） ──
+  // findRelevantCode 相关性导航 → 报告输出「源码阅读清单」（路径+优先级+符号行号），
+  // 全文由宿主 AI 用 Read / Grep / LSP 工具按需获取。
+  let sourceMatches: SourceReadingMatch[] = [];
   const shouldReadSource = input.readSource !== false;
   if (shouldReadSource && (input.iteration || input.taskId)) {
     // v8.3.3xx+: 消费前兜底——索引缺失/过期时自动重建 + 无索引告警
@@ -208,23 +208,19 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
     await ensureCodeIndexFresh(codeIndexScope);
 
     const limit = input.depth === 'deep' ? 25 : (input.depth === 'quick' ? 5 : 12);
-    const maxBytes = input.depth === 'deep' ? 150000 : (input.depth === 'quick' ? 30000 : 70000);
-    const rawMatches = await findRelevantCode(fullContent, limit, input.sourceScope, input.iteration, input.taskId);
-    sourceContents = await readRelevantSource(rawMatches, maxBytes, limit);
-    if (Object.keys(sourceContents).length > 0) {
+    sourceMatches = await findRelevantCode(fullContent, limit, input.sourceScope, input.iteration, input.taskId);
+    if (sourceMatches.length > 0) {
       const scopeHint = input.sourceScope ? ` (范围: ${input.sourceScope})` : '';
-      const totalChars = Object.values(sourceContents).reduce((a, c) => a + c.length, 0);
-      logger.info(`   📖 需求分析已关联 ${Object.keys(sourceContents).length} 个源码文件 (${Math.round(totalChars / 1000)}K 字符)${scopeHint}`);
-      // tree-sitter 结构化摘要（替代原文硬切，失败静默降级原文截断）
-      try { sourceSummaries = await summarizeSources(sourceContents); } catch {}
+      logger.info(`   📖 需求分析已关联 ${sourceMatches.length} 个源码文件（阅读清单模式，原文按需深读）${scopeHint}`);
     }
   }
+  const sourceReadingList = sourceMatches.length > 0 ? await formatSourceReadingList(sourceMatches) : '';
 
   let outputPath: string;
   let report: string;
 
   // v8.3.328: L2 规范注入 + RAG 兑底召回（此前需求分析链路未接入知识库）
-  const kctx = await collectKnowledgeContext(input, sourceContents, fullContent);
+  const kctx = await collectKnowledgeContext(input, sourceMatches.length, fullContent);
 
   if (input.scope === 'global') {
     outputPath = join(getProjectRoot(), '.speccore', 'GLOBAL', input.output || 'REQ_CONSISTENCY.md');
@@ -232,12 +228,12 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
   } else if (input.scope === 'task') {
     // task scope — 已在入口校验
     outputPath = join(getProjectRoot(), `Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
-    report = buildTaskReqReport(input, issues, archImpact, sourceContents, sourceSummaries, kctx);
+    report = buildTaskReqReport(input, issues, archImpact, sourceReadingList, kctx);
   } else {
     // iteration (default)
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
-    report = buildIterationReqReport(input, issues, archImpact, sourceContents, sourceSummaries, kctx);
+    report = buildIterationReqReport(input, issues, archImpact, sourceReadingList, kctx);
 
     // 按端分目录输出
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
@@ -273,7 +269,7 @@ async function analyzeRequirements(input: AnalyzeInput): Promise<AnalysisResult>
     summary: {
       issues: issues.length,
       blockers: issues.filter(i => i.severity === 'blocker').length,
-      filesAnalyzed: input.requirements.length + Object.keys(sourceContents).length,
+      filesAnalyzed: input.requirements.length + sourceMatches.length,
       apisFound: archImpact.apis?.length || 0,
       risks: archImpact.risks?.length || 0,
     },
@@ -375,35 +371,33 @@ async function analyzeCombined(input: AnalyzeInput): Promise<AnalysisResult> {
   logger.info(`   📁 源码文件: ${aiContext.totalFiles} 个`);
   logger.info(`   🔗 API: ${aiContext.totalApis} 个`);
 
-  // 默认读取相关源码内容注入分析（除非明确关闭）
+  // 默认关联相关代码（v8.3.329：阅读清单模式，不拼源码原文）
   // 解耦设计：从完整索引中按 sourceScope 筛选，不是按 scope 建索引
-  // v8.3.122+: 增加配额，确保深入阅读业务逻辑和公共模块
-  let sourceContents: Record<string, string> = {};
+  let sourceMatches: SourceReadingMatch[] = [];
   const shouldReadSource = input.readSource !== false;
   if (shouldReadSource) {
     const limit = input.depth === 'deep' ? 30 : (input.depth === 'quick' ? 8 : 15);
-    const maxBytes = input.depth === 'deep' ? 200000 : (input.depth === 'quick' ? 40000 : 100000);
-    const rawMatches = await findRelevantCode(fullReqContent, limit, input.sourceScope, input.iteration, input.taskId);
-    sourceContents = await readRelevantSource(rawMatches, maxBytes, limit);
-    if (Object.keys(sourceContents).length > 0) {
+    sourceMatches = await findRelevantCode(fullReqContent, limit, input.sourceScope, input.iteration, input.taskId);
+    if (sourceMatches.length > 0) {
       const scopeHint = input.sourceScope ? ` (范围: ${input.sourceScope})` : '';
-      logger.info(`   📖 已读取 ${Object.keys(sourceContents).length} 个源码文件${scopeHint} (${Object.values(sourceContents).reduce((a, c) => a + c.length, 0)} 字符)`);
+      logger.info(`   📖 已关联 ${sourceMatches.length} 个源码文件${scopeHint}（阅读清单模式，原文按需深读）`);
     }
   }
+  const sourceReadingList = sourceMatches.length > 0 ? await formatSourceReadingList(sourceMatches) : '';
 
   let outputPath: string;
   let report: string;
 
   if (input.scope === 'global') {
     outputPath = join('.speccore', 'GLOBAL', input.output || 'ARCH_IMPACT.md');
-    report = await buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents, reqContent: fullReqContent });
+    report = await buildAIEnhancedReport(input, 'global', { issues, archImpact, fileStats, apiInventory, aiContext, sourceMatches, sourceReadingList, reqContent: fullReqContent });
   } else if (input.scope === 'task') {
     outputPath = join(getProjectRoot(), `Iteration-${input.iteration}`, '030-tasks', input.taskId!, '00-specs', input.output || 'ANALYSIS.md');
-    report = await buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents, reqContent: fullReqContent });
+    report = await buildAIEnhancedReport(input, 'task', { issues, archImpact, fileStats, apiInventory, aiContext, sourceMatches, sourceReadingList, reqContent: fullReqContent });
   } else {
     const iterDir = `Iteration-${input.iteration || 'current'}`;
     outputPath = join(iterDir, '020-specs', input.output || 'ANALYSIS.md');
-    report = await buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents, reqContent: fullReqContent });
+    report = await buildAIEnhancedReport(input, 'iteration', { issues, archImpact, fileStats, apiInventory, aiContext, sourceMatches, sourceReadingList, reqContent: fullReqContent });
     await writePerPlatform(iterDir, report, input.output || 'ANALYSIS.md');
     await writePerFeature(iterDir, report, input.output || 'ANALYSIS.md');
   }
@@ -901,8 +895,7 @@ function buildIterationReqReport(
   input: AnalyzeInput,
   issues: Issue[],
   archImpact: ArchImpact,
-  sourceContents?: Record<string, string>,
-  sourceSummaries?: Record<string, string>,
+  sourceReadingList?: string,
   kctx?: KnowledgeContext,
 ): string {
   const now = new Date().toISOString().split('T')[0];
@@ -948,22 +941,12 @@ function buildIterationReqReport(
   for (const rk of archImpact.risks) r += `- [ ] ${rk}\n`;
   if (archImpact.newDependencies.length > 0) r += `- [ ] 确认新增依赖的引入方案和排期\n`;
 
-  // ── 代码关联分析（v6.8.0 新增：需求分析默认关联代码） ──
-  // v8.3.122+: 按深度动态调整代码展示配额，确保业务逻辑可见
-  if (sourceContents && Object.keys(sourceContents).length > 0) {
-    r += `\n---\n\n## 3.5 关联代码现状\n\n`;
-    r += `> 以下源码文件与当前需求相关，供技术方案参考\n\n`;
-    const previewLimit = input.depth === 'deep' ? 3000 : (input.depth === 'quick' ? 800 : 1500);
-    for (const [path, content] of Object.entries(sourceContents)) {
-      const summary = sourceSummaries?.[path];
-      if (summary) {
-        // 结构化摘要：签名 + 符号 + 接口，避免原文被按字符腰斩
-        r += `### \`${path}\`\n\n\`\`\`\n${summary}\n\`\`\`\n\n`;
-      } else {
-        const preview = content.slice(0, previewLimit).replace(/\n/g, '\n  ');
-        r += `### \`${path}\`\n\n\`\`\`${path.split('.').pop() || 'ts'}\n${preview}${content.length > previewLimit ? '\n  // ... 截断 ...' : ''}\n\`\`\`\n\n`;
-      }
-    }
+  // ── 代码关联分析（v8.3.329：源码阅读清单，不拼原文） ──
+  // CLI 负责导航（路径+优先级+符号行号），全文由宿主 AI 按需深读
+  if (sourceReadingList) {
+    r += `\n---\n\n## 3.5 关联代码导航\n\n`;
+    r += sourceReadingList;
+    r += `\n`;
   }
 
   r += `\n---\n\n## 4. 技术方案（待填写）\n\n`;
@@ -979,8 +962,7 @@ function buildTaskReqReport(
   input: AnalyzeInput,
   issues: Issue[],
   archImpact: ArchImpact,
-  sourceContents?: Record<string, string>,
-  sourceSummaries?: Record<string, string>,
+  sourceReadingList?: string,
   kctx?: KnowledgeContext,
 ): string {
   const now = new Date().toISOString().split('T')[0];
@@ -996,19 +978,11 @@ function buildTaskReqReport(
     for (const rk of archImpact.risks) r += `- ⚠️ ${rk}\n`;
   }
 
-  // ── 代码关联分析（v6.8.0 新增） ──
-  if (sourceContents && Object.keys(sourceContents).length > 0) {
-    r += `\n## 关联代码\n\n`;
-    r += `> 以下源码与当前任务相关\n\n`;
-    for (const [path, content] of Object.entries(sourceContents)) {
-      const summary = sourceSummaries?.[path];
-      if (summary) {
-        r += `- **\`${path}\`**\n\n  \`\`\`\n  ${summary}\n  \`\`\`\n\n`;
-      } else {
-        const preview = content.slice(0, 400).replace(/\n/g, '\n  ');
-        r += `- **\`${path}\`**\n\n  \`\`\`${path.split('.').pop() || 'ts'}\n  ${preview}${content.length > 400 ? '\n  // ... 截断 ...' : ''}\n  \`\`\`\n\n`;
-      }
-    }
+  // ── 代码关联分析（v8.3.329：源码阅读清单，不拼原文） ──
+  if (sourceReadingList) {
+    r += `\n## 关联代码导航\n\n`;
+    r += sourceReadingList;
+    r += `\n`;
   }
 
   return r;
@@ -1185,7 +1159,9 @@ interface AIEnhancedReportParams {
   fileStats: SourceStats;
   apiInventory: ApiEntry[];
   aiContext: AIContextResult;
-  sourceContents: Record<string, string>;
+  sourceMatches: SourceReadingMatch[];
+  /** 源码阅读清单（v8.3.329：不拼原文，导航 + 宿主 AI 按需深读） */
+  sourceReadingList?: string;
   /** 需求全文（用于 RAG 语义检索的查询词，v8.3.328） */
   reqContent?: string;
 }
@@ -1210,7 +1186,7 @@ export interface KnowledgeContext {
  */
 async function collectKnowledgeContext(
   input: AnalyzeInput,
-  sourceContents: Record<string, string>,
+  sourceMatchesCount: number,
   queryText: string,
 ): Promise<KnowledgeContext> {
   let globalContextStr = '';
@@ -1225,7 +1201,7 @@ async function collectKnowledgeContext(
       (gctx.toc && gctx.toc.length > 0)
     );
     globalContextStr = hasContent ? formatGlobalContext(gctx) : '';
-    if (Object.keys(sourceContents).length === 0) {
+    if (sourceMatchesCount === 0) {
       const { searchRagIndex } = await import('./rag-engine');
       ragHits = await searchRagIndex(process.cwd(), queryText, {
         iteration: input.iteration,
@@ -1260,7 +1236,7 @@ async function buildAIEnhancedReport(
   scope: 'global' | 'iteration' | 'task',
   params: AIEnhancedReportParams
 ): Promise<string> {
-  const { issues, archImpact, fileStats, apiInventory, aiContext, sourceContents } = params;
+  const { issues, archImpact, fileStats, apiInventory, aiContext, sourceMatches, sourceReadingList } = params;
   const now = new Date().toISOString().split('T')[0];
   const iter = input.iteration || 'current';
   const blockerCount = issues.filter(i => i.severity === 'blocker').length;
@@ -1268,7 +1244,7 @@ async function buildAIEnhancedReport(
   // v8.3.328: L2 规范注入 + RAG 兑底召回（此前 analyze 链路未接入；RAG 索引只被体检从未被使用）
   const kctx = await collectKnowledgeContext(
     input,
-    sourceContents,
+    sourceMatches.length,
     params.reqContent || input.requirements.join('\n'),
   );
 
@@ -1346,17 +1322,17 @@ async function buildAIEnhancedReport(
   // 6. 文件级变更预测
   r += `## 📄 预计变更文件\n\n`;
   r += `| 文件 | 变更类型 | 影响评估 | 风险等级 |\n| :--- | :--- | :--- | :--- |\n`;
-  if (Object.keys(sourceContents).length > 0) {
-    for (const [file] of Object.entries(sourceContents).slice(0, 8)) {
-      r += `| \`${file}\` | _AI 分析_ | _AI 分析_ | — |\n`;
+  if (sourceMatches.length > 0) {
+    for (const m of sourceMatches.slice(0, 8)) {
+      r += `| \`${m.file}\` | _AI 分析_ | _AI 分析_ | — |\n`;
     }
   }
   r += `| _其他_ | _待 AI 分析_ | — | — |\n\n`;
   r += `> 📌 请 AI 读取上下文文件完成文件级对标\n\n`;
 
-  // 6.5 源码分析清单（已读 + 未覆盖，方便用户发现遗漏并补充）
+  // 6.5 源码关联清单（已关联 + 未覆盖，方便用户发现遗漏并补充）
   {
-    const readFiles = Object.keys(sourceContents);
+    const readFiles = sourceMatches.map((m) => m.file);
     const fullIndex = await loadFullIndex();
     const allIndexedFiles = fullIndex?.files?.map(f => f.path) || [];
     const uncoveredFiles = allIndexedFiles.filter(f => !readFiles.includes(f));
@@ -1364,20 +1340,14 @@ async function buildAIEnhancedReport(
     if (readFiles.length > 0 || uncoveredFiles.length > 0) {
       r += `## 📚 源码分析清单\n\n`;
 
-      // 已分析文件
-      // v8.3.122+: 增加代码内容预览，确保 AI 能看到业务逻辑
+      // 已关联文件（阅读清单模式，不拼原文）
       if (readFiles.length > 0) {
-        r += `### ✅ 已分析（${readFiles.length} 个文件）\n\n`;
-        const previewLimit = input.depth === 'deep' ? 3000 : (input.depth === 'quick' ? 800 : 1500);
-        for (const [file, content] of Object.entries(sourceContents)) {
-          const lines = content.split('\n').length;
-          const size = (content.length / 1024).toFixed(1);
-          r += `- \`${file}\` (${lines} 行, ${size}KB)\n`;
-          // 展示代码预览
-          if (content.length > 0) {
-            const preview = content.slice(0, previewLimit).replace(/\n/g, '\n  ');
-            r += `\n  \`\`\`${file.split('.').pop() || 'ts'}\n  ${preview}${content.length > previewLimit ? '\n  // ... 截断 ...' : ''}\n  \`\`\`\n\n`;
-          }
+        r += `### ✅ 已关联（${readFiles.length} 个文件，阅读清单模式）\n\n`;
+        for (const file of readFiles) {
+          r += `- \`${file}\`\n`;
+        }
+        if (sourceReadingList) {
+          r += `\n${sourceReadingList}\n`;
         }
       }
 
@@ -1437,12 +1407,9 @@ async function buildAIEnhancedReport(
   r += `- [ ] **技术方案推荐**: 架构方案、DB 设计、API 设计建议\n`;
   r += `- [ ] **工时评估**: 基于改动范围的工时估算\n`;
 
-  if (Object.keys(sourceContents).length > 0) {
-    r += `\n### 相关源码摘要 (${Object.keys(sourceContents).length} 个文件)\n\n`;
-    for (const [file, content] of Object.entries(sourceContents).slice(0, 5)) {
-      const lines = content.split('\n').slice(0, 12).join('\n');
-      r += `<details><summary><code>${file}</code></summary>\n\n\`\`\`\n${lines}\n\`\`\`\n\n</details>\n\n`;
-    }
+  if (sourceMatches.length > 0) {
+    r += `\n### 相关源码导航 (${sourceMatches.length} 个文件)\n\n`;
+    r += `> 详情见上文「源码阅读清单」，全文请用 Read / Grep / LSP 按需深读。\n\n`;
   }
 
   // 8. 确认清单
@@ -2386,7 +2353,7 @@ export async function generateSpecsFromRequirements(
   const archImpactForAnalysis = await analyzeArchitectureImpact(fullContent);
   files.push({
     filename: 'ANALYSIS.md',
-    content: buildIterationReqReport({} as any, issues, archImpactForAnalysis, {}),
+    content: buildIterationReqReport({} as any, issues, archImpactForAnalysis, undefined),
   });
 
   // DEPS.md — 依赖清单（全局公共依赖）

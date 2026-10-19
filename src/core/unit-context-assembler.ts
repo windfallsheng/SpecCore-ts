@@ -13,7 +13,7 @@
 
 import { readFile, pathExists, readdir } from 'fs-extra';
 import { join, basename, resolve } from 'path';
-import { findRelevantCode } from './code-scanner';
+import { findRelevantCode, formatSourceReadingList, SourceReadingMatch } from './code-scanner';
 import { loadFreshKnowledgeGraph } from './knowledge-graph';
 import { unifiedSearch } from './unified-retrieval';
 import { GLOBAL_SPECS_DIR } from './spec-paths';
@@ -200,17 +200,14 @@ export async function assembleUnitContext(
   }
 
   // 2b. 相关源码文件（知识图谱 + 语义关键词双重关联）
-  const codeFiles = await findRelatedCodeForUnit(unit, iterDir, iteration, opts.maxCodeFiles, opts.codeCharsPerFile, opts.useKnowledgeGraph);
+  const codeFiles = await findRelatedCodeForUnit(unit, iterDir, iteration, opts.maxCodeFiles, opts.useKnowledgeGraph);
   if (codeFiles.length > 0) {
-    lines.push('## 相关源码文件');
-    lines.push('> 以下源码文件与当前功能单元相关，分析时请参考实现细节');
-    lines.push('');
-    for (const cf of codeFiles) {
-      const section = `### ${cf.path}\n\`\`\`${cf.language || 'ts'}\n${cf.content}\n\`\`\`\n`;
-      lines.push(section);
-      codeChars += section.length;
+    // v8.3.329: 源码阅读清单——不拼原文，导航 + 宿主 AI 按需深读
+    const readingList = await formatSourceReadingList(codeFiles, { title: '相关源码' });
+    if (readingList) {
+      lines.push(readingList);
+      codeChars += readingList.length;
     }
-    lines.push('');
   }
 
   // 2c. RAG 检索补充（相关文档片段）
@@ -273,7 +270,7 @@ export async function assembleUnitContext(
       ...unit,
       content: `${coreContent}${unitImgSection ? `\n\n${unitImgSection}` : ''}`,
     };
-    context = truncateByBudget(context, enhancedUnit, relatedUnits, codeFiles, globals, opts, charsPerToken);
+    context = truncateByBudget(context, enhancedUnit, relatedUnits, codeFiles.map(f => f.file), globals, opts, charsPerToken);
     totalChars = context.length;
     estimatedTokens = Math.ceil(totalChars / charsPerToken);
   }
@@ -288,7 +285,7 @@ export async function assembleUnitContext(
       totalChars,
       estimatedTokens,
       relatedUnits: relatedUnits.map(u => `${u.id} ${u.name}`),
-      codeFiles: codeFiles.map(f => f.path),
+      codeFiles: codeFiles.map(f => f.file),
     },
   };
 }
@@ -383,21 +380,23 @@ function extractKeywords(text: string): string[] {
 }
 
 /**
- * 查找与功能单元相关的源码文件
+ * 查找与功能单元相关的源码文件（v8.3.329：只记录路径与符号线索，不读原文）
  *
  * 双重关联策略：
  * 1. 知识图谱直接关联：通过 requirement → source-file 关系链
  * 2. findRelevantCode：语义关键词匹配 + 知识图谱增强评分
+ *
+ * 产出交给 formatSourceReadingList 渲染为阅读清单，
+ * 原文由宿主 AI 用 Read / Grep / LSP 工具按需获取。
  */
 async function findRelatedCodeForUnit(
   unit: UnitRef,
   iterDir: string,
   iteration: string,
   maxFiles: number,
-  charsPerFile: number,
   useKG: boolean,
-): Promise<{ path: string; language: string; content: string }[]> {
-  const results: { path: string; language: string; content: string }[] = [];
+): Promise<SourceReadingMatch[]> {
+  const results: SourceReadingMatch[] = [];
   const addedPaths = new Set<string>();
 
   // 1. 知识图谱直接关联（优先）
@@ -429,9 +428,8 @@ async function findRelatedCodeForUnit(
           if (addedPaths.has(fp) || addedPaths.size >= maxFiles) continue;
           if (!await pathExists(fp)) continue;
 
-          const content = await readFile(fp, 'utf-8');
-          const truncated = truncateCodeFile(content, charsPerFile);
-          results.push({ path: fp, language: detectLang(fp), content: truncated });
+          // v8.3.329: 只记录路径，不读原文（知识图谱关联 = P0）
+          results.push({ file: fp, exports: [], apis: [], score: 40 });
           addedPaths.add(fp);
         }
       }
@@ -448,9 +446,8 @@ async function findRelatedCodeForUnit(
       if (addedPaths.has(fp) || addedPaths.size >= maxFiles) continue;
       if (!await pathExists(fp)) continue;
 
-      const content = await readFile(fp, 'utf-8');
-      const truncated = truncateCodeFile(content, charsPerFile);
-      results.push({ path: fp, language: detectLang(fp), content: truncated });
+      // v8.3.329: 只记录路径与符号线索，不读原文
+      results.push({ file: fp, exports: match.exports, apis: match.apis, score: match.score });
       addedPaths.add(fp);
     }
   } catch (e) {
@@ -473,27 +470,6 @@ function detectLang(fp: string): string {
 }
 
 /** 截断源码文件：保留文件头注释 + 前 N 个 export + 截断标记 */
-function truncateCodeFile(content: string, maxChars: number): string {
-  const lines = content.split('\n');
-  const result: string[] = [];
-  let chars = 0;
-  let exportCount = 0;
-
-  for (const line of lines) {
-    if (chars + line.length > maxChars && exportCount >= 2) {
-      result.push('// ... (截断)');
-      break;
-    }
-    if (/^(export |class |function |interface |const |let |type |enum )/.test(line)) {
-      exportCount++;
-    }
-    result.push(line);
-    chars += line.length + 1;
-  }
-
-  return result.join('\n');
-}
-
 /** 提取全局约束：术语表、接口契约、数据模型 */
 async function extractGlobalConstraints(
   iterDir: string,
@@ -579,7 +555,7 @@ function truncateByBudget(
   fullContext: string,
   unit: UnitRef,
   relatedUnits: UnitRef[],
-  codeFiles: { path: string; language: string; content: string }[],
+  codeFiles: string[],
   globals: { terminology?: string; apiContract?: string; dataModel?: string },
   opts: Required<UnitContextOptions>,
   charsPerToken: number,
@@ -646,18 +622,14 @@ function truncateByBudget(
     }
   }
 
-  // 源码文件：按预算逐个添加
+  // 源码文件：按预算逐个列出（v8.3.329：只列路径，不拼原文，宿主 AI 按需深读）
   if (codeFiles.length > 0 && usedChars < maxChars * 0.9) {
-    lines.push('\n## 相关源码文件\n> 以下源码文件与当前功能单元相关\n\n');
+    lines.push('\n## 相关源码文件\n> 以下源码文件与当前功能单元相关，请用 Read / Grep / LSP 按需深读\n\n');
     usedChars += lines[lines.length - 1].length;
 
-    for (const cf of codeFiles) {
+    for (const fp of codeFiles) {
       if (usedChars >= maxChars * 0.95) break;
-      const remaining = maxChars - usedChars - 100; // 预留 100 字符缓冲
-      const codeContent = remaining < cf.content.length
-        ? cf.content.slice(0, remaining) + '\n// ... (截断)\n'
-        : cf.content;
-      const section = `### ${cf.path}\n\`\`\`${cf.language}\n${codeContent}\n\`\`\`\n\n`;
+      const section = `- \`${fp}\`\n`;
       lines.push(section);
       usedChars += section.length;
     }

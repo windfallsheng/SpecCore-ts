@@ -237,3 +237,50 @@ describe('runAnalysis - 知识库注入与 RAG 召回（v8.3.328）', () => {
     expect(result.report).toContain('会议室预订模式');
   });
 });
+
+describe('runAnalysis - 源码阅读清单模式（v8.3.329：不拼原文）', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let reqPath: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `speccore-reading-list-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(join(tempDir, '.speccore'), { recursive: true });
+    await writeFile(join(tempDir, '.speccore', 'CONSTITUTION.md'), `# 技术宪法（测试）\n\n## 端列表\n\n| 工程标识 | 端名 | 说明 |\n| :--- | :--- | :--- |\n| admin | admin | 管理端 |\n`);
+    await mkdir(join(tempDir, '010-requirements'), { recursive: true });
+    reqPath = join(tempDir, '010-requirements', 'REQUIREMENT.md');
+    await writeFile(reqPath, '# 会议室预订需求\n\n## 功能清单\n\n| # | 模块 | 涉及端 |\n| :--- | :--- | :--- |\n| 1 | 会议室预订 | admin |\n');
+    // 模拟源码工程（唯一特征串用于断言「不拼原文」）
+    await mkdir(join(tempDir, 'src'), { recursive: true });
+    await writeFile(
+      join(tempDir, 'src', 'booking.service.ts'),
+      'export class BookingService {\n  private uniqueSecretMarker = "never-paste-me-into-prompt";\n  book() {}\n}\n',
+    );
+    origCwd = process.cwd();
+    process.chdir(tempDir);
+  });
+
+  afterEach(async () => {
+    process.chdir(origCwd);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('readSource 开启：报告含阅读清单与深读协议，不含源码原文', async () => {
+    const result = await runAnalysis({
+      sources: [],
+      requirements: [reqPath],
+      scope: 'iteration',
+      iteration: 'test-iter',
+      depth: 'normal',
+      readSource: true,
+      sourceScope: 'src',
+    });
+    // 清单存在：导航 + 深读协议
+    expect(result.report).toContain('关联代码导航');
+    expect(result.report).toContain('CLI 不拼入源码全文');
+    // 源码正文绝不出现（文件内的唯一特征串）
+    expect(result.report).not.toContain('never-paste-me-into-prompt');
+    expect(result.report).not.toContain('uniqueSecretMarker');
+  });
+});

@@ -44,7 +44,7 @@ import { runArbitration, getArbitrationConfig } from '../core/arbitration/arbitr
 import { writeArbitrationReport } from '../core/arbitration/verdict-generator';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { PipelineEngine } from '../core/pipeline-engine';
-import { findRelevantCode, readRelevantSource } from '../core/code-scanner';
+import { findRelevantCode, formatSourceReadingList } from '../core/code-scanner';
 // v8.3.169+: Qoder SDK 子 Agent 调度
 import { dispatchSubagent } from '../core/agent-adapter';
 import type { AgentContext } from '../core/agent-adapter';
@@ -2894,8 +2894,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
 
     // ── 自动补充读取 ──
     const supplementStructured: string[] = [];   // v8.3.126+: 结构化精确匹配结果
-    const supplementFiles: string[] = [];
-    const supplementContents: Record<string, string> = {};
+    const supplementReadingLists: string[] = []; // v8.3.329: 源码阅读清单（不拼原文）
 
     // v8.3.126+: 预加载结构化数据，用于精确匹配
     // v8.3.160+: 如指定了 platform，优先读取分段文件
@@ -2960,7 +2959,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
         }
       }
 
-      // === P1: 源码模糊搜索回退 ===
+      // === P1: 源码模糊搜索回退（v8.3.329：阅读清单，不拼原文） ===
       if (!matched) {
         const queryWords = gap
           .replace(/缺少|缺失|未知|未找到|未提供|未定义/g, ' ')
@@ -2974,13 +2973,11 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
           try {
             const matches = await findRelevantCode(queryWords, 5, undefined, iteration, task);
             if (matches.length > 0) {
-              const contents = await readRelevantSource(matches, 15000, 3);
-              for (const [fp, content] of Object.entries(contents)) {
-                if (!supplementContents[fp]) {
-                  supplementContents[fp] = content;
-                  supplementFiles.push(fp);
-                }
-              }
+              const list = await formatSourceReadingList(matches, {
+                title: '缺口相关源码',
+                maxEntries: 5,
+              });
+              if (list) supplementReadingLists.push(list);
             }
           } catch {
             // 补充读取失败不阻断
@@ -2990,7 +2987,7 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
     }
 
     // 写入补充上下文文件
-    const hasContent = supplementStructured.length > 0 || supplementFiles.length > 0;
+    const hasContent = supplementStructured.length > 0 || supplementReadingLists.length > 0;
     if (hasContent) {
       try {
         const supplementDir = join(process.cwd(), '.speccore', 'cache');
@@ -3005,18 +3002,15 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
           lines.push('');
         }
 
-        // 再输出源码回退结果
-        for (const fp of supplementFiles) {
-          lines.push(`## ${fp}`, '');
-          lines.push('```');
-          lines.push(supplementContents[fp].slice(0, 4000));
-          lines.push('```', '');
+        // v8.3.329: 源码回退输出阅读清单（不拼原文，宿主 AI 按需深读）
+        if (supplementReadingLists.length > 0) {
+          lines.push(...supplementReadingLists);
         }
 
         await writeFile(supplementPath, lines.join('\n'));
         const matchSummary = [];
         if (supplementStructured.length > 0) matchSummary.push(`${supplementStructured.length} 个结构化匹配`);
-        if (supplementFiles.length > 0) matchSummary.push(`${supplementFiles.length} 个源码文件`);
+        if (supplementReadingLists.length > 0) matchSummary.push(`${supplementReadingLists.length} 份源码阅读清单`);
         logger.info(`   📎 自动补充上下文已写入: ${supplementPath}（${matchSummary.join(' + ')}）`);
         logger.info(`   💡 下一轮执行时，此补充内容会自动注入 Prompt`);
       } catch {

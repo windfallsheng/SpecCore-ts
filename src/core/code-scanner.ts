@@ -815,9 +815,95 @@ export async function readRelevantSource(
   return result;
 }
 
+// ─────────────────────────────────────────────────────────────
+// 源码阅读清单（v8.3.329+）：CLI 导航 + 宿主 AI 按需深读
+// 任何 AI 上下文都不拼源码原文——交付「路径 + 优先级 + 符号线索 + 行号锚点」，
+// 全文由宿主 AI 用 Read / Grep / LSP 工具按需获取。
+// ─────────────────────────────────────────────────────────────
+export interface SourceReadingMatch {
+  file: string;
+  exports: string[];
+  apis: string[];
+  score: number;
+}
+
+export async function formatSourceReadingList(
+  matches: SourceReadingMatch[],
+  opts?: { maxEntries?: number; title?: string; withSymbolLines?: boolean },
+): Promise<string> {
+  const maxEntries = opts?.maxEntries ?? 15;
+  const title = opts?.title ?? '源码阅读清单';
+  const withSymbolLines = opts?.withSymbolLines ?? true;
+
+  const sorted = [...matches].sort((a, b) => b.score - a.score).slice(0, maxEntries);
+  if (sorted.length === 0) return '';
+
+  // 符号行号锚点：从代码图谱取符号的精确行号（失败静默降级为纯符号名）
+  const symbolMap = new Map<string, { name: string; line: number; type: string }[]>();
+  if (withSymbolLines) {
+    try {
+      const { loadCodeGraph } = await import('./code-graph');
+      const graph = await loadCodeGraph(getProjectRoot());
+      if (graph) {
+        for (const node of graph.nodes) {
+          if (node.type === 'module') continue;
+          let list = symbolMap.get(node.filePath);
+          if (!list) {
+            list = [];
+            symbolMap.set(node.filePath, list);
+          }
+          if (list.length < 5) list.push({ name: node.name, line: node.line, type: node.type });
+        }
+      }
+    } catch { /* 符号行号失败不阻断 */ }
+  }
+
+  const lines: string[] = [
+    `### 📖 ${title}（CLI 导航 + 宿主 AI 按需深读）`,
+    '',
+    '> CLI 不拼入源码全文——全量拼接会撑爆上下文或截断失真。',
+    '> 请用你的 Read / Grep / LSP 工具按需打开深读。',
+    '',
+    '| 优先级 | 文件 | 匹配原因 | 代码线索 |',
+    '|:---|:---|:---|:---|',
+  ];
+  for (const m of sorted) {
+    const reasons: string[] = [];
+    if (m.score >= 50) reasons.push('@spec 注释直接关联');
+    else if (m.score >= 40) reasons.push('知识图谱 source-file 实体关联');
+    else if (m.score >= 35) reasons.push('业务模块 codeEntities 关联');
+    else if (m.score >= 25) reasons.push('Spec 技术关键词匹配');
+    else reasons.push('关键词匹配');
+    const clues: string[] = [];
+    if (m.exports.length > 0) clues.push(`导出 \`${m.exports.slice(0, 4).join(' ')}\``);
+    if (m.apis.length > 0) clues.push(`API \`${m.apis.slice(0, 3).join(' ')}\``);
+    const syms = symbolMap.get(m.file);
+    if (syms && syms.length > 0) {
+      clues.push(`符号 ${syms.slice(0, 3).map((s) => `${s.name}:L${s.line}`).join(' ')}`);
+    }
+    const priority = m.score >= 40 ? 'P0' : (m.score >= 25 ? 'P1' : 'P2');
+    lines.push(`| ${priority} | \`${m.file}\` | ${reasons.join(' / ')} (score:${m.score}) | ${clues.join('；') || '—'} |`);
+  }
+  lines.push('');
+  lines.push('**深读协议**');
+  lines.push('');
+  lines.push('1. **先读 P0**：用 Read 打开优先级最高的 2-3 个文件');
+  lines.push('2. **符号追踪**：用 LSP（goToDefinition / findReferences）追踪导出符号的定义与调用点');
+  lines.push('3. **路径检索**：对 API 路径 / 表名用 Grep 全仓检索关联实现');
+  lines.push('4. **按需扩展**：从已读文件的 import 出发追踪依赖链');
+  lines.push('');
+  return lines.join('\n');
+}
+
 export async function loadCodeIndex(): Promise<CodeIndex | null> {
   if (await pathExists(INDEX_PATH)) {
-    return JSON.parse(await readFile(INDEX_PATH, 'utf-8'));
+    try {
+      return JSON.parse(await readFile(INDEX_PATH, 'utf-8'));
+    } catch {
+      // v8.3.329: 空文件/半写/损坏索引容错——返回 null 走重建，不阻断分析
+      logger.debug(`代码索引解析失败，视为缺失（将自动重建）: ${INDEX_PATH}`);
+      return null;
+    }
   }
   return null;
 }

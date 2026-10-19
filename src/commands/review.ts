@@ -19,7 +19,7 @@ import { join, basename, dirname, relative } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration } from '../core/context';
 import { findProjectRoot } from '../utils/task-utils';
-import { findRelevantCode, readRelevantSource } from '../core/code-scanner';
+import { findRelevantCode, formatSourceReadingList } from '../core/code-scanner';
 import { loadFreshKnowledgeGraph } from '../core/knowledge-graph';
 import { ensureDir, writeFile } from 'fs-extra';
 
@@ -314,13 +314,8 @@ async function findRelatedSource(
     );
     if (matches.length === 0) return undefined;
 
-    const sourceContents = await readRelevantSource(matches, 30000, 5);
-    const entries = Object.entries(sourceContents);
-    if (entries.length === 0) return undefined;
-
-    return entries
-      .map(([path, content]) => `// ${path}\n${content}`)
-      .join('\n\n');
+    // v8.3.329: 阅读清单模式——不拼源码原文，导航 + 宿主 AI 按需深读
+    return formatSourceReadingList(matches, { title: '审查关联源码' });
   } catch {
     return undefined;
   }
