@@ -307,7 +307,9 @@ export function chunkByHeaders(content: string, filePath: string): DocumentChunk
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
-    const match = line.match(/^(#{2,4})\s+(.+)$/);
+    // v8.3.328: 一级标题也参与分块——此前 #{2,4} 会把「只有一级标题 + 正文」
+    // 的规范文档整体漏掉（如 # 安全规范 + 无子标题），索引 chunks 为 0
+    const match = line.match(/^(#{1,4})\s+(.+)$/);
     if (match) {
       foundFirstHeader = true;
       // 保存上一个块
@@ -553,7 +555,10 @@ export interface RagHit {
  * - chunk.title 命中 ×2
  * - chunk.summary 命中 ×1
  *
- * 索引文件优先级：rag-index-{iteration}.json → rag-index.json（全局）
+ * 索引选择（v8.3.328）：迭代专属 + 全局规范库**合并检索**——
+ * 迭代索引（rag-index-{iteration}.json）含迭代内已沉淀规格，
+ * 全局索引（rag-index-global.json）含 RULES/GLOBAL/SKILLS/PATTERNS 规范，
+ * 后者才是「知识库」主体，两者都参与打分后统一排序去重。
  */
 export async function searchRagIndex(
   cwd: string,
@@ -562,13 +567,20 @@ export async function searchRagIndex(
 ): Promise<RagHit[]> {
   const limit = options?.limit ?? 5;
 
-  // 1. 选索引文件（迭代专属优先，回退全局）
-  let index: RagIndex | null = null;
+  // 1. 选索引文件（迭代专属 + 全局规范库合并，旧 rag-index.json 兼容回退）
+  const indices: RagIndex[] = [];
   if (options?.iteration) {
-    index = await loadRagIndex(cwd, `rag-index-${options.iteration}.json`);
+    const iterIdx = await loadRagIndex(cwd, `rag-index-${options.iteration}.json`);
+    if (iterIdx) indices.push(iterIdx);
   }
-  if (!index) index = await loadRagIndex(cwd, 'rag-index.json');
-  if (!index || index.chunks.length === 0) return [];
+  const globalIdx =
+    (await loadRagIndex(cwd, 'rag-index-global.json')) ??
+    (await loadRagIndex(cwd, 'rag-index.json'));
+  if (globalIdx) indices.push(globalIdx);
+  if (indices.length === 0) return [];
+
+  const allChunks = indices.flatMap((idx) => idx.chunks);
+  if (allChunks.length === 0) return [];
 
   // 2. 提取查询词：连续中文串→双字组；英文→单词；中英文混合拆开
   const tokens: string[] = [];
@@ -583,7 +595,7 @@ export async function searchRagIndex(
 
   // 3. 加权打分（v8.3.328: 用 keywords/title/summary 三路，避免全 content 扫描）
   const hits: RagHit[] = [];
-  for (const chunk of index.chunks) {
+  for (const chunk of allChunks) {
     let score = 0;
     const kwLower = chunk.keywords.map((k) => k.toLowerCase()).join(' ');
     const titleLower = chunk.title.toLowerCase();

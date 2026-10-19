@@ -128,6 +128,22 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
   const hasSrc = effectiveInput.sources.length > 0;
   const type = hasReqs && hasSrc ? 'combined' : hasReqs ? 'req' : 'code';
 
+  // ── 统一刷新知识底座（RAG 索引 + 代码索引 + 知识图谱）──
+  // v8.3.184+: 收拢到 refresh-scheduler 统一调度（按 scope 分文件 + stale 判定）
+  // v8.3.328: 前移到分析之前——RAG 兑底召回依赖索引新鲜，首次分析即生效
+  try {
+    const { refreshKnowledgeBase } = await import('./refresh-scheduler');
+    await refreshKnowledgeBase({
+      cwd: process.cwd(),
+      iteration: effectiveInput.iteration,
+      scope: effectiveInput.scope,
+      taskId: effectiveInput.taskId,
+      force: true, // 分析命令强制刷新，保证上下文最新
+    });
+  } catch (e) {
+    logger.debug('知识底座刷新失败（非关键）:', e);
+  }
+
   let result: AnalysisResult;
   switch (type) {
     case 'req':  result = await analyzeRequirements(effectiveInput); break;
@@ -148,21 +164,6 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalysisResult> 
         depth: effectiveInput.depth,
       });
     } catch {} // 非关键，静默失败
-  }
-
-  // ── 统一刷新知识底座（RAG 索引 + 代码索引 + 知识图谱）──
-  // v8.3.184+: 收拢到 refresh-scheduler 统一调度（按 scope 分文件 + stale 判定）
-  try {
-    const { refreshKnowledgeBase } = await import('./refresh-scheduler');
-    await refreshKnowledgeBase({
-      cwd: process.cwd(),
-      iteration: effectiveInput.iteration,
-      scope: effectiveInput.scope,
-      taskId: effectiveInput.taskId,
-      force: true, // 分析命令强制刷新，保证上下文最新
-    });
-  } catch (e) {
-    logger.debug('知识底座刷新失败（非关键）:', e);
   }
 
   return result;

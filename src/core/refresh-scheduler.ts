@@ -124,6 +124,31 @@ export async function refreshKnowledgeBase(options: RefreshOptions = {}): Promis
   return report;
 }
 
+/**
+ * 刷新全局规范知识库索引（GLOBAL/RULES/SKILLS/PATTERNS → rag-index-global.json）
+ *
+ * v8.3.328: 迭代层分析也要调用此函数——此前只在 global scope 刷新，
+ * 导致迭代层 analyze 的 RAG 语义召回永远召不回规范文档。
+ *
+ * 注意：只索引四层架构目录，不回退整目录索引 .speccore（会把
+ * CONSTITUTION/PROJECT.yaml 等配置文件变成召回噪音）。
+ */
+async function refreshGlobalRagIndex(cwd: string): Promise<boolean> {
+  const dirs: string[] = [];
+  const globalDir = join(cwd, '.speccore', 'GLOBAL');
+  const rulesDir = join(cwd, '.speccore', 'RULES');
+  const skillsDir = join(cwd, '.speccore', 'SKILLS');
+  const patternsDir = join(cwd, '.speccore', 'PATTERNS');
+  if (await pathExists(globalDir)) dirs.push(globalDir);
+  if (await pathExists(rulesDir)) dirs.push(rulesDir);
+  if (await pathExists(skillsDir)) dirs.push(skillsDir);
+  if (await pathExists(patternsDir)) dirs.push(patternsDir);
+  // 四层目录都不存在 → 项目无规范库，不写索引（召回为空是正确语义）
+  if (dirs.length === 0) return false;
+  await indexDirectoryDocuments(cwd, dirs, 'GLOBAL_all_global_all', 'rag-index-global.json');
+  return true;
+}
+
 /** RAG 按 scope 分文件刷新（复用 runAnalysis 的既有策略） */
 async function refreshRagByScope(
   cwd: string,
@@ -133,11 +158,15 @@ async function refreshRagByScope(
 
   if (scope === 'task' && taskId && iteration) {
     const taskDir = join(getProjectRoot(), `Iteration-${iteration}`, '030-tasks', taskId);
+    let taskChanges = 0;
     if (await pathExists(taskDir)) {
       const { staleFiles, newFiles } = await checkRagIndexFreshness(cwd);
       await refreshRagIndex(cwd, taskDir, iteration);
-      return { refreshed: true, changes: staleFiles.length + newFiles.length };
+      taskChanges = staleFiles.length + newFiles.length;
     }
+    // v8.3.328: 无条件刷新全局规范知识库索引（analyze 时 RAG 兑底召回依赖）
+    const globalRefreshed = await refreshGlobalRagIndex(cwd);
+    return { refreshed: true, changes: taskChanges + (globalRefreshed ? 1 : 0) };
   } else if (scope === 'iteration' && iteration) {
     const specsDir = join(getProjectRoot(), `Iteration-${iteration}`, '020-specs');
     const reqDir = join(getProjectRoot(), `Iteration-${iteration}`, '010-requirements');
@@ -148,21 +177,13 @@ async function refreshRagByScope(
       const ragScope = `${iteration}_iteration_all`;
       const fileName = `rag-index-${iteration}.json`;
       await indexDirectoryDocuments(cwd, dirs, ragScope, fileName);
-      return { refreshed: true, changes: dirs.length };
     }
+    // v8.3.328: 无条件刷新全局规范知识库索引（与迭代目录无关，analyze 时 RAG 兑底召回依赖）
+    const globalRefreshed = await refreshGlobalRagIndex(cwd);
+    return { refreshed: true, changes: dirs.length + (globalRefreshed ? 1 : 0) };
   } else if (scope === 'global') {
-    const globalDir = join(cwd, '.speccore', 'GLOBAL');
-    const fallbackDir = join(cwd, '.speccore');
-    const targetDir = await pathExists(globalDir) ? globalDir : fallbackDir;
-    const dirs: string[] = [targetDir];
-    const rulesDir = join(cwd, '.speccore', 'RULES');
-    const skillsDir = join(cwd, '.speccore', 'SKILLS');
-    const patternsDir = join(cwd, '.speccore', 'PATTERNS');
-    if (await pathExists(rulesDir)) dirs.push(rulesDir);
-    if (await pathExists(skillsDir)) dirs.push(skillsDir);
-    if (await pathExists(patternsDir)) dirs.push(patternsDir);
-    await indexDirectoryDocuments(cwd, dirs, 'GLOBAL_all_global_all', 'rag-index-global.json');
-    return { refreshed: true, changes: dirs.length };
+    const refreshed = await refreshGlobalRagIndex(cwd);
+    return { refreshed, changes: refreshed ? 1 : 0 };
   }
 
   return { refreshed: false, changes: 0 };
