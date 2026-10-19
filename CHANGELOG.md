@@ -1,3 +1,9 @@
+## v8.3.326 (2026-10-19) — CI 发布通道修复：package-lock 同步恢复 npm ci 一致性
+
+- **根因**：package-lock.json 自 8.3.290 后未随版本 bump 同步，CI 的 `npm ci` 严格校验直接失败（Actions 长期红，npm 上线版本靠本地 web auth 绕行）。
+- **修复**：`npm install --package-lock-only` 同步 lock 至当前版本；发版流程自此包含 lock 同步步骤。
+- 注意：v8.3.325 已推 tag/release 但未发布成功（CI 红），由 8.3.326 承接发布。
+
 ## v8.3.325 (2026-10-19) — constitution-builder 接线：技术栈自动检测写入主 CONSTITUTION 决策式表
 
 - **constitution-builder 重构**：写入目标从 `.speccore/PROJECT/CONSTITUTION.md`（无人读取的副本）改为 `.speccore/CONSTITUTION.md` 主文件的「技术栈」节，与 v8.3.324 决策式表对齐；检测产出「语言/框架/数据存储/依据」四列，端名列留待用户拍板（不脑补）。
