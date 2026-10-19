@@ -10,8 +10,9 @@
 import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
 import { pathExists, ensureDir, readdir, stat, writeFile } from 'fs-extra';
-import { join, basename, extname } from 'path';
+import { join, basename, extname, dirname, relative } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
+import { imgTagsToMarkdown } from '../utils/markdown-image';
 import { findTaskDir } from '../core/task-paths';
 import { validateContent, generateReport } from '../core/doc-validator';
 import { loadConfig } from '../core/unified-config';
@@ -28,6 +29,23 @@ function getInstallCmd(tool: string): string {
     libreoffice: { macos: 'brew install libreoffice', linux: 'sudo apt install libreoffice', win: 'winget install LibreOffice.LibreOffice' },
   };
   return map[tool]?.[detectPlatform()] || tool;
+}
+
+/**
+ * 图片引用路径 rebase：实测 pandoc 解析图片相对路径的基准是 **cwd**（非输入文件目录），
+ * 源 md 里「相对源文件目录」的图片路径在转换时全部错位（图片静默丢失）。
+ * 把图片路径从 fromDir（源文件目录）rebase 到 toDir（pandoc 解析基准，即 cwd），统一正斜杠。
+ * 外链 / data URI / 锚点 / 绝对路径不动。
+ */
+export function rebaseImageRefs(content: string, fromDir: string, toDir: string): string {
+  const rebase = (p: string): string => {
+    if (/^(https?:|data:|#|\/)/.test(p)) return p;
+    const abs = join(fromDir, p);
+    return relative(toDir, abs).replace(/\\/g, '/');
+  };
+  return content
+    .replace(/(<img\b[^>]*?\bsrc=")([^"]+)(")/g, (_m, pre: string, path: string, post: string) => pre + rebase(path) + post)
+    .replace(/(!\[[^\]]*\]\()([^)]+)(\))/g, (_m, pre: string, path: string, post: string) => pre + rebase(path) + post);
 }
 
 export interface Spec2DocOptions {
@@ -213,24 +231,20 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   const pandocBin = customPandoc || 'pandoc';
 
   try {
-    if (sourceFiles.length === 1) {
-      // 单文件直接转
-      const src = sourceFiles[0];
-      const cmd = `"${pandocBin}" "${src.path}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
-      execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
-    } else {
-      // 多文件合并：先拼成临时文件
-      let merged = '';
-      for (const sf of sourceFiles) {
-        const content = await require('fs-extra').readFile(sf.path, 'utf-8');
-        merged += `\n\n<!-- === ${sf.label}: ${sf.path} === -->\n\n${content}`;
-      }
-      const tmpPath = join(process.cwd(), '.speccore', '.tmp_export.md');
-      await ensureDir(join(process.cwd(), '.speccore'));
-      await writeFile(tmpPath, merged);
-      const cmd = `"${pandocBin}" "${tmpPath}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
-      execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
+    // 实测 pandoc 图片路径基准是 cwd（非输入文件目录）——无论单/多文件，
+    // 都先把各源 md 的图片路径 rebase 到 cwd，再经临时文件转换，否则图片错位丢失
+    let merged = '';
+    for (const sf of sourceFiles) {
+      let content = await require('fs-extra').readFile(sf.path, 'utf-8');
+      content = imgTagsToMarkdown(rebaseImageRefs(content, dirname(sf.path), process.cwd()));
+      merged += `\n\n<!-- === ${sf.label}: ${sf.path} === -->\n\n${content}`;
     }
+    const tmpDir = join(process.cwd(), '.speccore');
+    const tmpPath = join(tmpDir, sourceFiles.length === 1 ? '.tmp_export_single.md' : '.tmp_export.md');
+    await ensureDir(tmpDir);
+    await writeFile(tmpPath, merged);
+    const cmd = `"${pandocBin}" "${tmpPath}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
+    execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
 
     spinner.stop('导出完成');
     const fileStat = await stat(outputPath);

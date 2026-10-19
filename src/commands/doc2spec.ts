@@ -25,6 +25,7 @@ import { existsSync } from 'fs';
 import { createInterface } from 'readline';
 import { tmpdir } from 'os';
 import { backupWithTimestamp, backupDirWithTimestamp, isTimestampBackup } from '../utils/task-utils';
+import { imgTagsToMarkdown } from '../utils/markdown-image';
 import { nextTaskId } from '../core/global-counters';
 import { resolveUnitSourcePath } from '../core/feature-source';
 import { detectProfessionalLevel } from '../core/requirement-clarifier';
@@ -71,6 +72,34 @@ function parseBatchFiles(files: string): [string, string][] {
     if (eq < 0) return [trimmed, ''] as [string, string];
     return [trimmed.substring(0, eq).trim(), trimmed.substring(eq + 1).trim()] as [string, string];
   }).filter(Boolean) as [string, string][];
+}
+
+/**
+ * 图片引用路径修正：把 pandoc 写出的图片路径统一转为「相对 MD 文件」的正斜杠路径。
+ *
+ * 实测 pandoc 行为（gfm writer + --extract-media=DIR）：
+ *   <img src="DIR/media/rId9.png" style=... />  —— 相对 cwd 的完整路径（HTML 标签）
+ *   ![x](DIR/media/rId9.png)                   —— 同上的 markdown 形态
+ *   旧版 pandoc 偶发简写 ![x](media/rId9.png)  —— 相对 MD 文件所在目录
+ * 而 MD 文件落在 converted/ 子目录——相对 cwd 的路径从 MD 文件位置解析是错的，
+ * 必须剥掉前缀换成「MD 文件 → assets/extracted」的相对路径。
+ * Windows 上 join 产出反斜杠，pandoc src 也会带反斜杠（Markdown 转义符，必裂），统一归一化。
+ */
+export function fixImageRefs(content: string, mdDir: string, imageDir: string): string {
+  const relAssets = relative(mdDir, imageDir).replace(/\\/g, '/');
+  const mediaPrefix = `${imageDir.replace(/\\/g, '/')}/media/`;
+  const fixPath = (raw: string): string => {
+    const posix = raw.replace(/\\/g, '/');
+    // pandoc 完整路径形态：剥掉相对 cwd 的 imageDir 前缀，换成相对 MD 文件
+    if (posix.startsWith(mediaPrefix)) return `${relAssets}/media/${posix.slice(mediaPrefix.length)}`;
+    // 简写形态 media/xxx
+    if (posix.startsWith('media/')) return `${relAssets}/${posix}`;
+    // 外链 / 锚点 / 绝对路径不动
+    return posix;
+  };
+  return content
+    .replace(/(<img\b[^>]*?\bsrc=")([^"]+)(")/g, (_m, pre: string, path: string, post: string) => pre + fixPath(path) + post)
+    .replace(/(!\[[^\]]*\]\()([^)]+)(\))/g, (_m, pre: string, path: string, post: string) => pre + fixPath(path) + post);
 }
 
 function detectPlatform(): 'macos' | 'linux' | 'win' {
@@ -320,11 +349,9 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // .md 文件直接复制导入，也需要后处理图片路径
     if (ext === 'md') {
       let converted = await readFile(sourceFile, 'utf-8');
-      // 修正 pandoc 风格的图片路径（如果有 media/ 引用）
-      // v8.3.75+: 使用 path.relative 动态计算，避免硬编码路径层级错误
-      const mdDir = require('path').dirname(outputPath);
-      const relAssets = require('path').relative(mdDir, join(iterDir, '010-requirements', 'assets', 'extracted'));
-      converted = converted.replace(/\]\(media\//g, '](' + relAssets + '/');
+      // 修正图片引用路径（pandoc 完整路径 / 简写 media/ / Windows 反斜杠 统一归一化）
+      const mdDir = dirname(outputPath);
+      converted = imgTagsToMarkdown(fixImageRefs(converted, mdDir, join(iterDir, '010-requirements', 'assets', 'extracted')));
       await writeFile(outputPath, converted);
       spinner.stop('📝 .md 直接导入');
     } else if (ext === 'doc') {
@@ -386,11 +413,10 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // 2. 空行清理
     content = content.replace(/\n{3,}/g, '\n\n');
 
-    // 3. 图片路径修正（pandoc 提取到 assets/extracted/media/，MD 引用 media/xxx.png）
-    //    根据 MD 文件所在的目录深度计算相对于 assets/extracted/ 的正确路径
-    const mdDir = require('path').dirname(outputPath);
-    const relAssets = require('path').relative(mdDir, join(iterDir, '010-requirements', 'assets', 'extracted'));
-    content = content.replace(/\]\(media\//g, '](' + relAssets + '/');
+    // 3. 图片路径修正：pandoc 写的是相对 cwd 的完整路径（<img src=...>），
+    //    从 MD 文件位置解析是错的——统一转为相对 MD 文件的正斜杠路径
+    const mdDir = dirname(outputPath);
+    content = imgTagsToMarkdown(fixImageRefs(content, mdDir, join(iterDir, '010-requirements', 'assets', 'extracted')));
 
     // 4. 接口表格检测 + 提示
     const hasInterfaceTable = /\|\s*方法\s*\|/i.test(content) || /\|\s*METHOD\s*\|/i.test(content);

@@ -1,5 +1,16 @@
 # Changelog
 
+## v8.3.331 (2026-10-19) — 修复文档转换图片路径：反斜杠、路径失配、图片静默丢失三连修
+
+- **根因 1（路径形态失配）**：doc2spec 的图片修正正则只匹配 `](media/`，但实测 pandoc 输出 `<img src="<相对cwd完整路径>" ...>`（HTML 标签 + 完整路径）——正则从未命中，md 里留下相对 cwd 的路径，从 md 文件位置解析必错。
+- **根因 2（反斜杠）**：Windows 上 `path.join` 产出反斜杠，pandoc src 也带反斜杠——Markdown 里 `\` 是转义符，图片必裂。
+- **根因 3（pandoc 图片基准是 cwd）**：实测 pandoc 解析图片相对路径的基准是 **cwd** 而非输入文件目录——spec2doc 单文件直转与多文件合并都会把图片路径错位解析（图片静默丢失）。
+- **根因 4（HTML img 不嵌入）**：pandoc 的 gfm reader 不解析 raw HTML `<img>`，只有 markdown 语法 `![]()` 才嵌入 docx——doc2spec 产物里的 HTML 图片标签在 spec2doc 导出时全部丢失。
+- **doc2spec 修复**：新增 `fixImageRefs`（pandoc 完整路径剥前缀 / 简写 media/ / 反斜杠归一化，统一转为「相对 MD 文件」正斜杠路径）+ `imgTagsToMarkdown`（`<img>` → `![alt](src)`，`<figure>` 图注剥 p 标签保留文本，丢弃 style 宽度属性）；两处调用点（.md 直接导入 + pandoc 后处理）全部接入。
+- **spec2doc 修复**：新增 `rebaseImageRefs`（图片路径从源文件目录 rebase 到 cwd，外链/锚点/绝对路径不动）；单文件与多文件分支统一「rebase + img 转 markdown + 临时文件」路径。
+- **共享工具**：`src/utils/markdown-image.ts`。
+- **测试**：+11（fixImageRefs 5 / rebaseImageRefs 2 / imgTagsToMarkdown 4）→ 510/510 全绿；隔离项目端到端实测：docx → md 图片路径正确、md → docx 图片成功嵌入。
+
 ## v8.3.330 (2026-10-19) — 修复知识图谱双重 join：loadCodeGraph 从未成功加载（+ 阅读清单行号锚点真实生效）
 
 - **根因**：`GRAPH_DIR` 定义为 `join(getProjectRoot(), '.speccore', 'code-graph')`（绝对路径），而 `path.join` 拼接绝对段不重置（只有 `path.resolve` 重置），`join(root, GRAPH_DIR, ...)` 拼出「root + 绝对路径」双份路径——`loadCodeGraph` 永远返回 null，知识图谱读取侧全面瘫痪（smart-recommend / analyze-graph-plugin / execute-graph-plugin / requirement-linker / graph 命令全部静默降级走「无图谱」分支）。
