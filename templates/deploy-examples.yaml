@@ -12,6 +12,25 @@
 #   speccore deploy --env production --platform h5 --dry-run   # 预览模式
 #
 # ═══════════════════════════════════════════════════════════
+# 公共字段字典（所有部署类型通用，按需选用）
+# ═══════════════════════════════════════════════════════════
+#   type         → 部署类型：ssh / sftp / static / script / docker / pm2 / k8s / helm / vercel / serverless
+#   build_cmd    → 构建命令（部署前执行，如 npm run build:staging）
+#   output_dir   → 构建产物目录（上传/部署的对象，如 dist）
+#   host         → 远程主机（格式 user@host[:port]，配置后走远程部署）
+#   key          → SSH 私钥路径（密钥认证，推荐；与 password 二选一）
+#   password     → SSH 密码（v8.3.91+，需安装 sshpass；与 key 二选一）
+#   remote_dir   → 远程目录（上传目标，须有写权限）
+#   script       → 部署后执行的命令/脚本路径（远程重启服务等）
+#   pre_deploy   → 部署前钩子（命令列表，逐条执行）
+#   post_deploy  → 部署后钩子（命令列表，逐条执行）
+#   target       → 目标位置（static=本地目录/S3/rsync 地址，k8s/helm=namespace，serverless=函数名）
+#   dockerfile   → Dockerfile 路径（docker 类型，默认 ./Dockerfile）
+#   registry     → 镜像仓库地址（docker 类型，远程部署必须配置）
+#   image        → 镜像名（docker 类型）
+#   tag          → 镜像标签（docker 类型）
+#   pm2_config   → PM2 配置文件（pm2 类型，默认 ecosystem.config.js）
+# ═══════════════════════════════════════════════════════════
 
 # ─────────────────────────────────────────
 # 1. SSH 部署（推荐：有独立服务器的场景）
@@ -32,15 +51,24 @@
 #     2) 配置 password 字段
 #
 ssh_key_example:
+  # type: 部署类型
   type: ssh
+  # build_cmd: 部署前构建命令
   build_cmd: npm run build:staging
+  # output_dir: 构建产物目录
   output_dir: dist
+  # host: 远程主机（user@host:port）
   host: deployer@192.168.1.100:22
+  # key: SSH 私钥路径（密钥认证）
   key: ~/.ssh/id_rsa
+  # remote_dir: 远程上传目录
   remote_dir: /var/www/html/h5
+  # script: 部署后命令（重载 Nginx）
   script: sudo nginx -s reload
+  # pre_deploy: 部署前钩子
   pre_deploy:
     - echo "开始部署到 staging..."
+  # post_deploy: 部署后钩子
   post_deploy:
     - echo "部署完成"
 
@@ -50,7 +78,7 @@ ssh_password_example:
   build_cmd: npm run build:staging
   output_dir: dist
   host: deployer@192.168.1.100:22
-  password: your-password-here          # SSH 密码（v8.3.91+，需安装 sshpass）
+  password: your-password-here          # SSH 密码（v8.3.91+，需安装 sshpass；与 key 二选一）
   remote_dir: /var/www/html/h5
   script: sudo nginx -s reload
 
@@ -138,10 +166,10 @@ script_ftp_example:
 # 基础 Docker：仅本地构建并推送到仓库（适合 CI/CD 场景）
 docker_push_only:
   type: docker
-  dockerfile: ./Dockerfile
-  registry: registry.example.com
-  image: my-project/h5
-  tag: staging
+  dockerfile: ./Dockerfile                       # Dockerfile 路径
+  registry: registry.example.com                 # 镜像仓库地址（远程部署必须配置）
+  image: my-project/h5                           # 镜像名
+  tag: staging                                   # 镜像标签
 
 # 前端 Docker + 远程部署（Nginx 托管）
 docker_frontend_remote:

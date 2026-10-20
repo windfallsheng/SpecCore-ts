@@ -22,14 +22,20 @@ import { detectActiveIteration } from '../core/context';
 
 interface UnitizeOptions {
   file?: string;
-  files?: string; // batch: "a.md=平台1,b.md=平台2"
+  files?: string; // batch: "a.md=平台1,b.md=平台2"（v8.3.334+ 支持 a.md=端@标题1|标题2）
   content?: string; // v8.3.318+: 直接切分一段文档内容（自动落盘 converted/）
   title?: string;   // 内容切分时的文档名（缺省取内容首个 H1）
+  titles?: string;  // v8.3.334+: 仅切分指定标题的章节（逗号/顿号分隔，模糊包含匹配）
   iter?: string;
   platform?: string;
   translateEn?: string; // --translate-en: auto(默认) | host | off（单元标题英译）
   translateResponse?: string; // --translate-response: 接收宿主 AI 英译 JSON（配合 host）
   onDuplicate?: string; // --on-duplicate: 同名单元处理 ask(默认) | skip | overwrite | rename | abort
+}
+
+/** v8.3.334+: 标题列表解析——逗号/顿号/竖线/分号均可作分隔（宽松兼容手写与 ask 生成） */
+export function parseTitles(raw: string): string[] {
+  return raw.split(/[,，、|;；]/).map(s => s.trim()).filter(Boolean);
 }
 
 /**
@@ -66,15 +72,23 @@ async function unitizeContent(content: string, title: string | undefined, platfo
   await writeFile(target, text, 'utf-8');
   logger.info(`📄 内容已落盘: 010-requirements/converted/${safeName}.md`);
   logger.info(`\n🔪 切分: ${safeName}.md${platform ? `（端: ${platform}）` : ''}`);
-  await splitDocumentToUnits(iterDir, target, platform, basename(target), options.translateEn, options.translateResponse, options.onDuplicate);
+  const titles = options.titles ? parseTitles(options.titles) : [];
+  if (titles.length > 0) logger.info(`   🎯 仅切分指定标题: ${titles.join('、')}`);
+  await splitDocumentToUnits(iterDir, target, platform, basename(target), options.translateEn, options.translateResponse, options.onDuplicate, titles);
 }
 
-/** 批量参数解析（与 doc2spec --files 同格式："path1.md=平台1,path2.md=平台2"） */
-function parseBatch(files: string): [string, string][] {
-  const pairs: [string, string][] = [];
+/** 批量参数解析（与 doc2spec --files 同格式："path1.md=平台1,path2.md=平台2"）
+ * v8.3.334+: 支持每文档挂标题组——a.md=端@标题1|标题2（@ 后为仅切分标题，|/顿号分隔） */
+function parseBatch(files: string): [string, string, string[]][] {
+  const pairs: [string, string, string[]][] = [];
   for (const item of files.split(/[,，]/)) {
-    const [file, platform] = item.split('=').map(s => s.trim());
-    if (file) pairs.push([file, platform || '']);
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const at = trimmed.indexOf('@');
+    const main = at >= 0 ? trimmed.slice(0, at).trim() : trimmed;
+    const titles = at >= 0 ? parseTitles(trimmed.slice(at + 1)) : [];
+    const [file, platform] = main.split('=').map(s => s.trim());
+    if (file) pairs.push([file, platform || '', titles]);
   }
   return pairs;
 }
@@ -93,7 +107,7 @@ export function matchPlatformDoc(filename: string, platformNames: Set<string>): 
   return { matched: false };
 }
 
-async function unitizeSingle(file: string, platform: string, iterName: string, translateEn?: string, translateResponse?: string, onDuplicate?: string): Promise<void> {
+async function unitizeSingle(file: string, platform: string, iterName: string, translateEn?: string, translateResponse?: string, onDuplicate?: string, titles?: string[]): Promise<void> {
   if (!(await pathExists(file))) {
     logger.error(`文件不存在: ${file}`);
     return;
@@ -125,7 +139,10 @@ async function unitizeSingle(file: string, platform: string, iterName: string, t
     return;
   }
   logger.info(`\n🔪 切分: ${basename(file)}${platform ? `（端: ${platform}）` : ''}`);
-  await splitDocumentToUnits(iterDir, file, platform, basename(file), translateEn, translateResponse, onDuplicate);
+  if (titles && titles.length > 0) {
+    logger.info(`   🎯 仅切分指定标题: ${titles.join('、')}`);
+  }
+  await splitDocumentToUnits(iterDir, file, platform, basename(file), translateEn, translateResponse, onDuplicate, titles);
 }
 
 export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
@@ -153,8 +170,8 @@ export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
       return;
     }
     logger.info(`📦 批量切分 ${pairs.length} 个文档...`);
-    for (const [file, platform] of pairs) {
-      await unitizeSingle(file, platform, iterName, options.translateEn, options.translateResponse, options.onDuplicate);
+    for (const [file, platform, titles] of pairs) {
+      await unitizeSingle(file, platform, iterName, options.translateEn, options.translateResponse, options.onDuplicate, titles);
     }
     return;
   }
@@ -196,6 +213,10 @@ export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
     for (const { file } of platformFiles) {
       logger.info(`   · ${file}`);
     }
+    // v8.3.334+: --titles 需配合 --file/--files 使用（多文档共用同一标题组易切错端，不做隐式共享）
+    if (options.titles && options.titles.trim()) {
+      logger.warn('   ⚠️  --titles 需配合 --file/--files 使用（自动发现模式不支持标题过滤，已忽略）');
+    }
     const skipped = allFiles.filter(f => !platformFiles.some(p => p.file === f));
     if (skipped.length > 0) {
       logger.info('⏭️  以下文档非端命名需求，未自动切分（总纲/无端文档可 --file 显式切分）:');
@@ -215,5 +236,6 @@ export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
     logger.error('请指定迭代: speccore unitize --file=<md 路径> --iter=<迭代>');
     return;
   }
-  await unitizeSingle(options.file, options.platform || '', iterName, options.translateEn, options.translateResponse, options.onDuplicate);
+  const titles = options.titles ? parseTitles(options.titles) : [];
+  await unitizeSingle(options.file, options.platform || '', iterName, options.translateEn, options.translateResponse, options.onDuplicate, titles);
 }

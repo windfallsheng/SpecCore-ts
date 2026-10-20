@@ -10,100 +10,192 @@
 #   1. project → 已迁至 .speccore/PROJECT.yaml；tech_stack/team → 已废弃（升级自动清理）
 #   2. tests/stages/pipeline 测试环境段 → 归属 .speccore/environments/{env}.yaml（见 VERIFY-EXAMPLE.yaml）
 #   3. 新增：logging / tools / settings.pipeline / with_code / gates
+#
+# 📖 本示例为「字典」——每个字段配定义式注释（含义/枚举/默认/影响），
+#    直接复制需要的段到你的 .speccore.yml 再改值即可。
 # ═══════════════════════════════════════════════════════════
 
+# schema_version：配置结构版本号，config --upgrade 自动维护，勿手动修改
 schema_version: 1
 
-# ── 日志（文件日志开关，输出到 .speccore/local/logs/）──
+# ─────────────────────────────────────────────────────────────
+# 本地文件日志（v8.3.253+）
+# ─────────────────────────────────────────────────────────────
+# 开关三级优先级：--log 参数 > SPECCORE_LOG=1 环境变量 > logging.enabled
+# 开启后所有 logger 输出同步写盘 .speccore/local/logs/speccore-<日期>.log
+# 排查问题时可直接把日志文件发给 AI 分析。默认关闭，零开销。
 logging:
+  # enabled: 是否启用本地文件日志（true/false，默认 false）
   enabled: false
 
-# ── 质量门禁 ──
+# ─────────────────────────────────────────────────────────────
+# 质量门禁（Quality Gates）
+# ─────────────────────────────────────────────────────────────
+# 三道闸的开关都在这里：测试闸、审查闸、PR 闸。
 quality_gates:
-  enforce_testing: true       # true → execute 前检查 TEST.md，缺失则阻断
-  enforce_review: true        # true → 执行完自动进入 review 流程
-  require_pr: true            # true → 禁止直接 push 保护分支，走 speccore pr
-  # 阻塞级别：standard（编译+单测+契约都阻断，默认）/ compile（仅编译阻断）
+  # enforce_testing: 是否强制要求每个任务包含测试用例
+  #   true  → execute 前检查 TEST.md，缺失则阻断
+  #   false → 仅警告，不阻断
+  enforce_testing: true
+  # enforce_review: 是否强制代码审查
+  #   true  → 执行完自动进入 review 流程
+  #   false → 审查可选
+  enforce_review: true
+  # require_pr: 是否强制通过 PR 合并代码
+  #   true  → 禁止直接 push 保护分支，必须走 speccore pr
+  #   false → 允许直接 push（本地单人开发常用）
+  require_pr: true
+  # block_level: 阻断级别（质量门禁失败时阻断什么）
+  #   standard → 编译 + 单测 + 契约任一失败都阻断（默认，最严格）
+  #   compile  → 仅编译失败才阻断
   block_level: standard
-  # v8.3.95+: UI 验证默认行为（speccore verify --ui）
+  # verify_ui: UI 验证默认行为（speccore verify --ui 时的缺省参数，v8.3.95+）
   verify_ui:
-    enabled: false            # 演示默认关闭，按需 true
-    smoke_test: true          # 冒烟测试
-    visual_check: true        # 视觉检查
-    headed: false             # 有头浏览器（调试用）
-    # threshold: strict 任何微小差异 / normal 明显差异（默认）/ loose 仅严重问题
+    # enabled: 是否默认执行 UI 验证
+    enabled: false
+    # smoke_test: 是否执行冒烟测试
+    smoke_test: true
+    # visual_check: 是否执行视觉检查（截图 + 像素/模型比对）
+    visual_check: true
+    # headed: 是否使用有头浏览器（显示浏览器窗口，便于调试，默认 false 无头）
+    headed: false
+    # threshold: 视觉检查的检测严格度
+    #   strict → 任何微小差异都视为问题
+    #   normal → 明显差异视为问题（默认）
+    #   loose  → 仅严重问题
     threshold: normal
-    devices: [desktop]        # desktop / mobile / iPhone13 / Pixel5 ...
+    # devices: 测试设备列表（viewport 预设：desktop / mobile / iPhone13 / Pixel5 等）
+    devices: [desktop]
+    # browsers: 测试浏览器列表（chromium / firefox / webkit）
     browsers: [chromium]
-    timeout: 30000            # 单场景超时（毫秒）
-    # v8.3.50+: 视觉模型（看图判断走外部模型）
+    # timeout: 单场景超时（毫秒）
+    timeout: 30000
+    # visual_model: 视觉模型配置（v8.3.50+，看图判断走外部模型）
     visual_model:
-      provider: qwen-vl       # qwen-vl / openai / anthropic / local
+      # provider: 视觉模型提供方 qwen-vl(默认) / openai / anthropic / local
+      provider: qwen-vl
+      # model: 模型名称（可选，留空用 provider 默认模型）
       model: qwen-vl-max
+      # apiKey: API Key（可选，支持 ${ENV_VAR} 环境变量引用）
+      # endpoint: 自定义端点（可选）
+      # timeout: 请求超时（毫秒，可选）
 
-# ── 契约裁决：full 全流程 / l1-only / report-only ──
+# ─────────────────────────────────────────────────────────────
+# 契约冲突裁决（Arbitration）
+# ─────────────────────────────────────────────────────────────
 arbitration:
+  # enabled: 是否启用三级冲突裁决机制
+  #   true → analyze/taskify/execute 各阶段自动检测并裁决契约冲突
   enabled: true
+  # mode: 裁决模式
+  #   full        → 完整三级裁决（Spec 层 → 代码层 → 运行时层）
+  #   l1-only     → 仅 Spec 层冲突检测
+  #   report-only → 只报告冲突不裁决
   mode: full
 
-# ── 运行时行为 ──
+# ─────────────────────────────────────────────────────────────
+# 通用设置（Settings）
+# ─────────────────────────────────────────────────────────────
 settings:
-  # 指派策略：strict 阻断不一致 / loose 自动填+警告 / off 关闭
+  # ── 指派策略（Assignee）──
   assignee:
+    # enabled: 是否启用自动指派（taskify 时按 STAFFING.md 分配负责人）
     enabled: true
+    # mode: 指派严格度
+    #   strict → 每个子任务必须指定 owner，缺失则阻断
+    #   loose  → 仅任务级指定 owner，子任务可共享（默认）
+    #   off    → 关闭指派
     mode: loose
-  # 双向追溯 + @spec 注释
+  # ── 追踪（Trace）──
   trace:
+    # enabled: 是否启用全链路追踪（需求→规格→任务→代码 双向追溯）
     enabled: true
+    # auto_annotate: 是否自动在代码中插入 @spec 追踪注解
     auto_annotate: true
-  # 归档时自动清理
+  # ── 归档（Archive）──
   archive:
+    # auto_cleanup: 迭代完成后是否自动清理临时文件
     auto_cleanup: false
-  # 并行执行建议
+  # ── 计划（Plan）──
   plan:
+    # parallel_suggest: 是否建议并行执行无依赖任务（plan 输出里提示可并行项）
     parallel_suggest: true
-  # 严格校验模式
+  # ── 校验（Validation）──
   validation:
+    # strict_mode: 是否启用严格校验模式
+    #   true  → 任何格式错误都阻断执行
+    #   false → 仅记录警告，尽量继续
     strict_mode: false
-  # 自动检查规范库最新
+  # ── 同步（Sync）──
   sync:
+    # auto_check: 执行前是否自动检查配置/规范库是否为最新（有新版提示升级）
     auto_check: true
-  # 模式沉淀：off / smart / aggressive
+  # ── 模式沉淀（Patterns）──
   patterns:
+    # auto_save: 是否自动将分析中发现的模式保存到 .speccore/PATTERNS/
+    #   smart  → 仅置信度高时自动保存（默认）
+    #   aggressive → 全部自动保存
+    #   off    → 不自动保存，仅手动
     auto_save: smart
-  # 审查时检查执行人签名
+  # ── 审查（Review）──
   review:
+    # check_assignee: 审查时是否检查指派人与执行人一致（不一致则警告）
     check_assignee: false
-  # v8.3.94+: 视觉模型（specs 文档图片理解，默认关闭）
+  # ── 视觉模型（Vision，v8.3.94+）──
+  # specs 文档图片理解（PNG/JPG/GIF/WebP 位图自动转文本注入 AI prompt）。默认关闭。
   vision:
+    # enabled: 是否启用视觉模型
     enabled: false
+    # provider: qwen-vl / openai / anthropic / local
     provider: qwen-vl
+    # model: 模型名称
     model: qwen-vl-plus
+    # maxImagesPerPrompt: 单次 prompt 最多注入图片数
     maxImagesPerPrompt: 10
+    # imageMaxSizeKb: 单张图片大小上限（KB）
     imageMaxSizeKb: 2048
-  # 流水线模式开关
+  # ── 流水线（Pipeline）──
+  # pipeline: 是否默认启用 Pipeline 模式（true 时 run 默认走流水线）
   pipeline: false
-  # 分析时附带源码（from-source 场景）
+  # ── 关联代码（with_code）──
+  # with_code: 分析时是否默认关联源码（from-source 场景）
   with_code: false
-  # 非必要流水线步骤三态开关：auto（智能，默认）/ on 强制 / off 跳过
+  # ── 非必要流水线步骤开关（三态）──
+  #   auto = 按内置逻辑智能判定（默认） | on = 强制执行 | off = 跳过
   optional_steps:
-    clarify: auto             # 文档专业就跳过澄清
+    # clarify: 需求澄清（auto=按文档专业度判定，专业就跳过）
+    clarify: auto
+    # verify: 验证（代码 review + 契约/性能 + UI）
     verify: auto
+    # pipeline: 部署（合并→构建→测试→部署）
     pipeline: auto
+    # pr: 合并请求（本地开发可不 PR）
     pr: auto
+    # done: 归档复盘（可延后）
     done: auto
+    # spec2doc: 导出文档（Word/PDF/HTML）
     spec2doc: auto
-  # 命名流水线（run --preset <name>）
+  # ── 命名流水线（Pipelines）──
   pipelines:
-    default: develop          # full/import/spec/analyze/develop/deliver/deploy/docs
-    custom: {}                # 自定义: { my-flow: analyze,validate,taskify,plan,execute }
-  # 质量门禁模式
+    # default: 默认流水线名（内置 full/import/spec/analyze/develop/deliver/deploy/docs 或自定义名）
+    default: develop
+    # custom: 自定义命名流水线（名称: 逗号分隔的阶段串）
+    #   示例: { my-flow: analyze,validate,taskify,plan,execute }
+    custom: {}
+  # ── 流水线 review 闸口模式（Gates）──
   gates:
+    # mode: 质量门禁闸口行为
+    #   manual = 闸口 A/B/C 都软停人工确认（默认，最安全）
+    #   auto   = 三闸口都跳过（含 C 部署，自动执行，谨慎使用）
     mode: manual
-  # v8.3.193+: 统一 LLM provider 池（host=宿主AI / llm=自配 / auto=宿主优先）
-  # 演示条目，默认 providers: []——自配时按此结构填写
+  # ── AI 内容生成来源（v8.3.193+）──
   ai:
+    # provider: 内容生成提供方
+    #   host = 宿主 AI（Qoder SDK / Headless，默认）
+    #   llm  = 自配 LLM（走下方 providers 池）
+    #   auto = 宿主优先，失败回退自配 LLM
     provider: host
+    # providers: 自配 LLM 池（定义一次，各功能按 name 引用；演示条目，默认 providers: []）
     providers:
       - name: local
         type: ollama
@@ -115,35 +207,57 @@ settings:
         model: gpt-4o
         apiKey: "${OPENAI_API_KEY}"
         priority: 2
-    defaults: {}              # 按阶段指定 provider: { analyze: gpt4o }
+    # defaults: 各功能的默认 provider name（示例: { analyze: gpt4o }）
+    defaults: {}
+    # fallback: 兜底 provider name（可选，主 provider 失败时启用）
     fallback: local
-  # v8.3.301+: 子 Agent SDK 派单开关
+  # ── 子 Agent SDK 派单（v8.3.301+，第七层「窗口物理隔离」增强通道）──
   #   auto = Qoder 宿主 + token 可用（PAT 或 CLI 登录态）时启用（默认）
   #   on   = 强制尝试 SDK 派单（失败回退标记模式）
   #   off  = 禁用 SDK 派单，永远走标记模式
   agent_dispatch:
     mode: auto
-  # v8.3.217+: 冒烟三时机开关 + 范围（run --smoke / --skip-smoke / --scope 单次覆盖）
+  # ── 冒烟测试统一配置（三时机开关 + 范围 + 按环境差异化，v8.3.217+）──
   smoke:
     points:
-      local: auto             # 开发完本地冒烟
-      pre-deploy: auto        # 部署前门禁
-      post-deploy: auto       # 部署后确认环境活着
-    scope: module             # full 全量 / module 当前功能模块
-    scope_by_env: {}          # 按环境覆盖: { production: full }
+      # local: ①本地冒烟（开发完成后、提交前）
+      local: auto
+      # pre-deploy: ②部署前冒烟（critical 阻断）
+      pre-deploy: auto
+      # post-deploy: ③环境冒烟（只报告）
+      post-deploy: auto
+    # scope: 冒烟范围 full=全量 / module=当前功能模块（默认）
+    scope: module
+    # scope_by_env: 按环境覆盖范围（示例: { production: full }）
+    scope_by_env: {}
 
-# ── Ask 引擎 ──
+# ─────────────────────────────────────────────────────────────
+# Ask 引擎路由配置（控制 speccore ask 的行为）
+# ─────────────────────────────────────────────────────────────
 ask:
+  # ── 路由策略（Routing）──
   routing:
-    mode: hybrid              # hybrid / cli-only / host-ai-only
+    # mode: 意图识别路由模式
+    #   hybrid → 混合路由（本地规则 + LLM 兜底，默认）
+    #   cli-only   → 仅本地规则匹配
+    #   host-ai-only → 仅宿主 AI 识别
+    mode: hybrid
+    # high_threshold: 高置信度阈值（≥此值直接执行，不询问确认）
     high_threshold: 70
+    # low_threshold: 低置信度阈值（<此值进入模糊拦截，询问用户）
     low_threshold: 45
+    # auto_host_ai: 是否在无法识别时自动调用宿主 AI（Qoder/Cursor 等）
     auto_host_ai: true
+    # cache_enabled: 是否缓存意图识别结果
     cache_enabled: true
+    # cache_min_hits: 缓存生效最小命中次数（命中 ≥N 次后才走缓存）
     cache_min_hits: 3
+  # ── 规则覆盖（Rules）──
   rules:
+    # force_host_ai: 是否强制所有意图走宿主 AI（调试用，默认 false）
     force_host_ai: false
-  # 自配 LLM 池（演示条目，默认 []）
+  # ── 自配 LLM 池（演示条目，默认 []）──
+  # 结构与 settings.ai.providers 一致：name/type/endpoint/model/priority
   llm_providers:
     - name: ollama-local
       enabled: false
@@ -158,10 +272,16 @@ ask:
       model: gpt-4o-mini
       priority: 2
 
-# ── 工具路径（doc2spec 转换依赖，留空自动探测）──
+# ─────────────────────────────────────────────────────────────
+# 工具路径（doc2spec 转换依赖，留空自动探测）
+# ─────────────────────────────────────────────────────────────
 tools:
+  # pandoc: pandoc 可执行文件路径（Word/PDF 转换用，留空自动探测 PATH）
   pandoc: ''
+  # libreoffice: LibreOffice 可执行文件路径（PDF 转换用，留空自动探测）
   libreoffice: ''
 
-# ── 配置变更历史（speccore config --upgrade 自动维护，勿手动编辑）──
+# ─────────────────────────────────────────────────────────────
+# 配置变更历史（speccore config --upgrade 自动维护，勿手动编辑）
+# ─────────────────────────────────────────────────────────────
 config_history: []

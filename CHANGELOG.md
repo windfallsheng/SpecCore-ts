@@ -1,5 +1,26 @@
 # Changelog
 
+## v8.3.334 (2026-10-20) — unitize 标题过滤 + 配置示例注释全量详化
+
+切需求从「整文档一刀切」升级为「点名单切」：可以指定哪个文档的哪些标题，一次说完多个文档及其各自标题组，自然语言直接识别。另把四份配置示例的注释全面详化（含义/枚举/默认/影响），升级自动带出。
+
+- **--titles 单文档标题过滤**：`speccore unitize --file x.md --titles "预订管理,消息中心"` 仅切指定标题章节。匹配语义为归一化（去章节编号）双向包含——「预订管理」命中「3.1 预订管理」「预订管理流程」；未命中标题 CLI 警告。
+- **--files 多文档各自标题组**：`--files "a.md=端1@标题1|标题2,b.md=端2@标题3"`——文档与标题绑定，一次切多个文档的不同章节。
+- **ask 引擎识别标题过滤**：「切 admin-web.md 里的预订管理、消息中心」→ `--titles`；「只切 a.md 的订单确认和 b.md 的扫码签到」→ 多文档 `--files @` 语法；新增 `.md 路径 + 切分动词` 锚点规则（裸「切分 xxx.md」不再依赖「需求文档」字样）。
+- **全局章节不受影响**：标题过滤只作用于功能单元；产品定位/名词/验收标准等照常归 overview/。
+- **默认发现模式防护**：`--titles` 仅配合 --file/--files 使用，自动发现模式提示忽略（多文档共用同一标题组易切错端）。
+- **测试**：+11 用例（标题归一化匹配 5 + 分隔符解析 2 + 意图识别语料 4）→ 530/530 全绿；端到端实测：4 个候选只切出指定 2 个单元、多文档各自标题组分别命中。
+
+## 配置示例注释全量详化（本版本第二批）
+
+用户反馈示例书注释太精简，逐字段补齐：
+
+- **SPECCORE-YML-EXAMPLE.yml（167→288 行）**：主配置每个字段配定义式注释——含义/枚举值/默认值/行为影响（如 block_level 的 standard/compile 差异、agent_dispatch 三态语义、smoke 三时机）。字段路径与取值逐项对账零差异，只添注释不碰字段。
+- **VERIFY-EXAMPLE.yaml（142→208 行）**：头部新增三大字典——顶层字段、12 种 action 类型（navigate/fill/cookie/script/iframe/waitForRequest…）、5 种 assertion 类型（url/visible/text/count/style）；6 个场景逐 action 补注。
+- **DEPLOY-EXAMPLE.yaml（511→540 行）**：头部新增 17 项公共字段字典（type/build_cmd/host/key/target/dockerfile/registry…）；ssh 旗舰示例逐字段注释。
+- **PROJECT-EXAMPLE.yaml**：首个端配全量行内注释示范（端名/类型/源码路径/业务名逐字段）。
+- **升级带出**：注释全部写在生成源（templates/ 静态模板 + init.ts 内联模板），`config --upgrade` 经 generateExampleConfigs 刷新 .speccore/examples/，下次升级自然带出；config-example-alignment 守护测试保证模板↔落地副本逐字节一致。
+
 ## v8.3.333 (2026-10-20) — 示例参考文件全线同步：升级时自动刷新 + CI 模板去幽灵命令
 
 用户仿照修改的参考书（.speccore/examples/）此前只在 init 时生成一次，之后随版本凝固——本次全线对账并修复：

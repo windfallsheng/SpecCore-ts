@@ -2809,20 +2809,21 @@ project:
 # notes：额外信息
 # ─────────────────────────────────────────────────────────────────────────────
 platforms:
-  - name: admin-web
-    type: Web管理后台
-    description: 后台管理
-    code_path: ./packages/admin
-    project_name: 运营后台
-    project_desc: 运营人员使用的后台管理系统
-    requirement_unit: 后台管理端需求文档
-    notes: 核心系统
+  # 第一个端配全量行内注释示范，其余端简洁写（字段含义见上方块注释）
+  - name: admin-web            # 工程标识：全小写无空格短横线分隔，全局唯一（端名必须用它）
+    type: Web管理后台           # 工程类型：AI 据此生成针对性内容
+    description: 后台管理       # 端简述（仪表盘/列表展示用）
+    code_path: ./packages/admin # 源码路径：相对项目根目录
+    project_name: 运营后台      # 业务名称（给人和 AI 看）
+    project_desc: 运营人员使用的后台管理系统  # 工程详细说明
+    requirement_unit: 后台管理端需求文档     # 需求文档名称/标识，仅 AI 参考不校验
+    notes: 核心系统            # 额外信息（可选）
 
-  - name: h5-mobile
+  - name: h5-mobile            # 端名=工程标识（下同）
     type: H5移动端
     description: H5商城
-    code_path: ./packages/h5
-    project_name: 移动商城
+    code_path: ./packages/h5    # 源码路径
+    project_name: 移动商城      # 业务名称
     project_desc: 用户端H5购物页面
     requirement_unit: 移动端需求文档
     notes: 高优先级

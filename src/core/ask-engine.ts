@@ -92,8 +92,8 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore plan [--all] [--task <id>] [--interactive]', examples: ['speccore plan --all', 'speccore plan --interactive'], related: ['execute'], triggers: ['计划', 'plan', '安排', '规划'] },
   { name: 'taskify', aliases: [], description: '拆分需求为开发任务（任务化）：默认 AI 智能分析（--prompt）→ AI 输出 JSON → 自动创建；也可传统模式按 REQUIREMENT.md 章节拆分',
     usage: 'speccore iteration taskify [--prompt] [--response <json>] [-f <file>] [--preview] [--iteration <name>]', examples: ['speccore iteration taskify --prompt', 'speccore iteration taskify --response "<ai_json>"', 'speccore iteration taskify -f REQUIREMENT.md', 'speccore iteration taskify --preview'], related: ['task', 'plan'], triggers: ['拆分', '分解', '划分', '拆', '拆需求', '拆任务', '任务拆分', '需求拆分', '任务化', 'split'] },
-  { name: 'unitize', aliases: ['unitz'], description: '切分需求文档为功能单元（单元化，区别于 taskify 拆任务）：按标题结构+维度识别切分 converted/*.md → 010-requirements/features/{单元}/（SOURCE.md 切片+端覆盖矩阵+类型标记）',
-    usage: 'speccore unitize --file <md路径> [--iter <迭代>] [--platform <端名>] [--files "a.md=端1,b.md"]', examples: ['speccore unitize --file 010-requirements/converted/admin-web.md --iter meeting-system', 'speccore unitize --files "admin-web.md=admin-web,h5-mobile.md=h5-mobile" -i Q3'], related: ['doc2spec', 'analyze', 'taskify'], triggers: ['切分', '切需求', '切需求文档', '切分功能单元', '单元化', '功能单元', '切片', 'unitize', '切功能'] },
+  { name: 'unitize', aliases: ['unitz'], description: '切分需求文档为功能单元（单元化，区别于 taskify 拆任务）：按标题结构+维度识别切分 converted/*.md → 010-requirements/features/{单元}/（SOURCE.md 切片+端覆盖矩阵+类型标记），支持 --titles 仅切指定标题章节',
+    usage: 'speccore unitize --file <md路径> [--iter <迭代>] [--platform <端名>] [--files "a.md=端1,b.md=端2@标题1|标题2"] [--titles "标题1,标题2"]', examples: ['speccore unitize --file 010-requirements/converted/admin-web.md --iter meeting-system', 'speccore unitize --file admin-web.md --titles "预订管理,消息中心"', 'speccore unitize --files "admin-web.md=admin-web@预订管理|消息中心,h5-mobile.md=h5-mobile@订单确认" -i Q3'], related: ['doc2spec', 'analyze', 'taskify'], triggers: ['切分', '切需求', '切需求文档', '切分功能单元', '单元化', '功能单元', '切片', 'unitize', '切功能'] },
   { name: 'pr', aliases: ['mr'], description: '创建 Pull Request：提交预览+文件选择+交互确认',
     usage: 'speccore pr [--task <id>] [--auto]', examples: ['speccore pr', 'speccore pr --task T-01 --auto'], related: ['done', 'execute'], triggers: ['pr', 'pull request', '提交', '合并', 'MR'] },
   // v8.3.95+: verify 命令
@@ -896,10 +896,29 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
         ? ` --iter "${params.iteration}"`
         : ` --iteration "${params.iteration}"`;
     }
-    // v8.3.317+: unitize 提取文档路径（「切分需求文档 docs/新需求.md」等）
-    if (best.command === 'unitize' && params.file) {
+    // v8.3.334+: unitize 多文档各自标题（fileTitles: "a.md:t1|t2;b.md:t3"）→ --files @语法；
+    // 无标题多文档（files）→ 批量切分；单文档标题（titles）→ --titles；单文档无标题 → --file
+    if (best.command === 'unitize' && params.fileTitles) {
+      const segs = params.fileTitles.split(';').filter(Boolean).map(seg => {
+        const idx = seg.indexOf(':');
+        if (idx < 0) return seg;
+        const f = seg.slice(0, idx);
+        const ts = seg.slice(idx + 1);
+        return ts ? `${f}@${ts}` : f;
+      });
+      fullCommand += ` --files "${segs.join(',')}"`;
+      paramNotes.push(`📦 文档+标题组: ${params.fileTitles}`);
+    } else if (best.command === 'unitize' && params.files && params.files.split(',').length > 1) {
+      fullCommand += ` --files "${params.files}"`;
+      paramNotes.push(`📦 多文档批量切分: ${params.files}`);
+    } else if (best.command === 'unitize' && params.file) {
       fullCommand += ` --file "${params.file}"`;
       paramNotes.push(`📄 文档: ${params.file}`);
+    }
+    // v8.3.334+: 单文档标题过滤（--titles）——文件+标题组合；与 --content 内容模式互斥
+    if (best.command === 'unitize' && params.titles && !params.fileTitles && !params.content) {
+      fullCommand += ` --titles "${params.titles.replace(/"/g, '\\"')}"`;
+      paramNotes.push(`🎯 仅切分标题: ${params.titles}`);
     }
     // v8.3.318+: unitize 直接切分一段文档内容（「把这段内容切分成功能单元：...」）——
     // 双引号转义防注入；宿主可从 user 消息中带内容时同时给 --title 定文档名

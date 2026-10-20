@@ -883,7 +883,8 @@ export async function splitDocumentToUnits(
   sourceFileName: string,
   translateEn?: string,
   translateResponse?: string,
-  onDuplicate?: string
+  onDuplicate?: string,
+  titles?: string[]
 ): Promise<void> {
   const content = await readFile(outputPath, 'utf-8');
   // v8.3.263: 收集同目录其它文档名（端级文档）——总纲文档（如 overview-requirements.md）
@@ -997,6 +998,23 @@ export async function splitDocumentToUnits(
     }
   } catch {}
   
+  // v8.3.334+: 标题过滤——用户指定只切某些标题的章节时，其余功能单元不参与
+  // 英译/写盘（不占序号）；globalSections 不受影响，照常归 overview
+  if (titles && titles.length > 0) {
+    const { kept, dropped, unmatched } = filterUnitsByTitles(units, titles);
+    units = kept;
+    if (dropped.length > 0) {
+      logger.info(`   🎯 标题过滤: 指定 ${titles.length} 个标题，保留 ${kept.length}/${kept.length + dropped.length} 个单元`);
+      logger.info(`   ⏭️  跳过 ${dropped.length} 个非指定单元: ${dropped.join('、')}`);
+    }
+    if (unmatched.length > 0) {
+      logger.warn(`   ⚠️  以下标题未在文档中命中（检查名字/编号）: ${unmatched.join('、')}`);
+    }
+    if (units.length === 0) {
+      logger.warn('   ⏹️  标题过滤后无剩余功能单元，仅处理全局章节（如有）');
+    }
+  }
+
   let written = 0;
   let skipped = 0;
   // v8.3.272+: 标题英译（循环外批量：LLM 翻译 + 缓存，失败回落拼音）
@@ -1783,6 +1801,39 @@ function stripSectionPrefix(t: string): string {
     .replace(/^[A-Za-z]-\d+[、.．\s]+/, '')
     .replace(/^[（(][一二三四五六七八九十百\d]+[）)][、.．\s]*/, '')
     .trim();
+}
+
+/**
+ * v8.3.334+: 标题过滤——用户指定只切某些标题的章节时，过滤功能单元列表。
+ *
+ * 匹配语义：归一化（去章节编号前缀/去空白/小写）后双向包含——
+ *   「预订管理」命中「3.1 预订管理」「预订管理流程」；「预订管理」与「会议预订管理」也命中。
+ * 返回 kept（保留）/ dropped（被过滤的单元标题）/ unmatched（用户指定但未命中的标题名）。
+ */
+export function filterUnitsByTitles(
+  units: ScannedUnit[],
+  titles: string[]
+): { kept: ScannedUnit[]; dropped: string[]; unmatched: string[] } {
+  const norm = (t: string) =>
+    stripSectionPrefix(t).toLowerCase().replace(/[\s　·•・]+/g, '');
+  const wanted = titles.map((t) => norm(t)).filter(Boolean);
+  const kept: ScannedUnit[] = [];
+  const dropped: string[] = [];
+  for (const u of units) {
+    const nt = norm(u.title);
+    const hit = nt.length > 0 && wanted.some((w) => w.includes(nt) || nt.includes(w));
+    if (hit) kept.push(u);
+    else dropped.push(u.title);
+  }
+  const unmatched = titles.filter((t) => {
+    const w = norm(t);
+    if (!w) return false;
+    return !units.some((u) => {
+      const nt = norm(u.title);
+      return nt.length > 0 && (w.includes(nt) || nt.includes(w));
+    });
+  });
+  return { kept, dropped, unmatched };
 }
 
 function sanitizeUnitName(name: string): string {

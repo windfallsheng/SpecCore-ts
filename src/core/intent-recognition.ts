@@ -253,9 +253,9 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     intent: 'split-units',
     priority: 89,
     triggers: ['切分功能单元', '切分单元', '切需求文档', '切需求', '单元化', '功能单元', 'unitize'],
-    patterns: ['切分(.+)文档', '切(.+)需求文档', '把(.+)切分'],
-    description: '单元化 — 需求文档 → 功能单元（SOURCE.md 切片 + 类型标记 + 端覆盖矩阵）',
-    args: '--file <md路径> [--iter <迭代>] [--platform <端名>] [--files "a.md=端1,b.md"]',
+    patterns: ['切分(.+)文档', '切(.+)需求文档', '把(.+)切分', '只切(.+)里的(.+)', '切(.+)的(.+?)章节'],
+    description: '单元化 — 需求文档 → 功能单元（SOURCE.md 切片 + 类型标记 + 端覆盖矩阵；支持 --titles 仅切指定标题章节）',
+    args: '--file <md路径> [--iter <迭代>] [--platform <端名>] [--files "a.md=端1,b.md=端2@标题1|标题2"] [--titles "标题1,标题2"]',
   },
   // 任务拆分（任务化）
   {
@@ -746,6 +746,14 @@ const ANCHOR_RULES: AnchorRule[] = [
     verbs: /(?:切分|切)/,
     bonus: 20,
   },
+  // v8.3.334+: .md 路径锚点——「切分 admin-web.md 里的预订管理」虽无「需求文档」
+  // 字样，但 .md 文件是切分对象强信号（与任务拆分/文档编辑区分）
+  {
+    kind: 'anchor', intent: 'split-units',
+    anchors: /\.(?:md|markdown)/i,
+    verbs: /(?:切分|切|单元化)/,
+    bonus: 25,
+  },
   // 增量切分强锚点（v8.3.317+）：「重新切分/再切/补切 + 功能单元/需求文档」
   // 语义明确指向对已有单元体系的增量切分，而非新建任务
   {
@@ -1045,6 +1053,44 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
   const fileMatch = input.match(/([^\s，,。；;：:"“”'']+\.(?:md|markdown))/i);
   if (fileMatch) {
     params.file = fileMatch[1];
+  }
+
+  // v8.3.334+: unitize 标题过滤——「切 admin-web.md 里的预订管理、消息中心」
+  // 「只切 a.md 的订单确认和 b.md 的扫码签到」——单文件多标题 / 多文件各自标题
+  // （标题名按顿号/逗号/「和」切分；「把/将/按」等动作词与章节边界词截断）
+  if (mapping.intent === 'split-units' && !params.content) {
+    const allFiles = [...input.matchAll(/([^\s，,。；;：:"“”'']+\.(?:md|markdown))/gi)].map(m => m[1]);
+    const splitTitles = (raw: string): string[] =>
+      raw
+        .replace(/^[，,。；;\s]*(?:把|将|按|对)/, '')
+        .split(/[、，,和及与]/)
+        .map(s => s.trim().replace(/[。；;！!？?]+$/, '').replace(/[一两三]\d*个$/, ''))
+        .filter(s => s && s.length <= 24
+          && !/^(文档|需求|功能|章节|部分|标题|模块|单元)$/.test(s)
+          && !/^(这个|这些|该|整个|上述)/.test(s)
+          && !/文档/.test(s));
+    const pickTitles = (rest: string): string | null => {
+      // 空白先行再匹配「里/中/的」，避免「 的订单确认」前导空格挡住「的」
+      const m = rest.match(/^[\s　]*(?:里|中|里面|内部|之中)?的?[\s　]*(.+?)(?:章节|部分|标题|模块|单元|切|提|分成|$)/);
+      if (!m || !m[1]) return null;
+      const titles = splitTitles(m[1]);
+      return titles.length > 0 ? titles.join(',') : null;
+    };
+    if (allFiles.length === 1) {
+      const idx = input.indexOf(allFiles[0]) + allFiles[0].length;
+      const titles = pickTitles(input.slice(idx));
+      if (titles) params.titles = titles;
+    } else if (allFiles.length > 1) {
+      const segs: string[] = [];
+      for (let i = 0; i < allFiles.length; i++) {
+        const start = input.indexOf(allFiles[i]) + allFiles[i].length;
+        const end = i + 1 < allFiles.length ? input.indexOf(allFiles[i + 1]) : input.length;
+        const titles = pickTitles(input.slice(start, end));
+        segs.push(titles ? `${allFiles[i]}:${titles.replace(/,/g, '|')}` : allFiles[i]);
+      }
+      params.fileTitles = segs.join(';');
+      params.files = allFiles.join(',');
+    }
   }
 
   // v8.3.318+: 一段文档内容直接切分（「把这段内容切分成功能单元：## 1. …」）——

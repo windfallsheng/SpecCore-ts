@@ -15,32 +15,76 @@
 # v8.3.95+ 支持: cookie / localStorage / script / scroll / upload / iframe / waitForRequest / waitForResponse
 # v8.3.294+ 推荐: 选择器优先用 data-testid（UI_SPEC 元素标识约定 {模块}-{页面}-{元素}），
 #   冒烟装配四阶段会自动从 UI_SPEC 提取元素清单生成场景，失败时输出自愈提示。
+#
+# ═══════════════════════════════════════════════════════════
+# 顶层字段字典
+# ═══════════════════════════════════════════════════════════
+#   name        → 测试套件名（报告展示用）
+#   platform    → 端名（须与 CONSTITUTION.md 端列表一致）
+#   url         → 站点根路径（相对路由前缀，navigate 时与 value 拼接）
+#   scenarios   → 场景列表（每个场景 = 若干 action + 若干 assertion）
+#
+# ═══════════════════════════════════════════════════════════
+# actions 类型字典（场景内按顺序执行的操作）
+# ═══════════════════════════════════════════════════════════
+#   navigate  → 页面跳转，value=路由（如 /login），selector=完整 URL
+#   fill      → 输入文本，selector=选择器，value=输入值
+#   click     → 点击元素，selector=选择器，waitFor=点击后等待出现的元素
+#   cookie    → 注入登录态 Cookie（selector=键名，value=值，domain/path/secure/httpOnly 可选）
+#   localStorage → 注入 Token（selector=键名，value=值，免登录走受保护页面）
+#   wait      → 等待，delay=毫秒数
+#   scroll    → 滚动页面，selector=bottom（滚到底）或元素选择器
+#   upload    → 上传文件，selector=文件输入框，value=文件路径
+#   script    → 执行 JS 脚本，value=脚本内容（返回 Promise 可等待）
+#   iframe    → 切换到 iframe 内操作（配合 selector 定位 iframe）
+#   waitForRequest  → 等待网络请求，value=URL 片段
+#   waitForResponse → 等待网络响应，value=URL 片段
+#
+# ═══════════════════════════════════════════════════════════
+# assertions 类型字典（场景结束后逐条校验的结果断言）
+# ═══════════════════════════════════════════════════════════
+#   url     → 当前 URL 校验，contains=期望包含的片段
+#   visible → 元素可见性，selector=选择器（存在且可见才通过）
+#   text    → 文本内容，selector=选择器，contains=期望包含的文字
+#   count   → 元素数量，selector=选择器，count=期望个数
+#   style   → 样式校验，selector=选择器，style=属性名（如 background-color），value=期望值
+# ═══════════════════════════════════════════════════════════
 
+# name: 测试套件名（报告展示用）
 name: 示例项目冒烟测试
+# platform: 端名（须与 CONSTITUTION.md 端列表一致）
 platform: h5-mobile
+# url: 站点根路径（navigate 相对路由的前缀）
 url: /
 
 scenarios:
+  # ══ 场景字段：name=场景名 | description=模块归属（模块:xxx 页面:/yyy，供 --module 过滤）══
   # ── 场景1: 登录流程（data-testid 选择器，推荐）──
   # 登录态也可由 environments 配置的 tests.auth 自动装配（v8.3.215+），
   # 本场景演示手工登录写法；受保护页面免登录可用 cookie/localStorage 注入（见场景2/3）。
   - name: 登录-账号密码登录
     description: 模块:auth 页面:/login
     actions:
+      # 跳转到登录页
       - type: navigate
         value: /login
+      # 填充用户名
       - type: fill
         selector: "[data-testid='login-username-input']"
         value: test_user
+      # 填充密码
       - type: fill
         selector: "[data-testid='login-password-input']"
         value: test_password
+      # 点击登录按钮，waitFor=点击后等待仪表盘出现（元素未出现则超时失败）
       - type: click
         selector: "[data-testid='login-submit-btn']"
         waitFor: "[data-testid='dashboard-page']"
     assertions:
+      # URL 断言：登录成功后跳转到 /dashboard
       - type: url
         contains: /dashboard
+      # 可见性断言：仪表盘元素存在且可见
       - type: visible
         selector: "[data-testid='dashboard-page']"
 
@@ -49,7 +93,7 @@ scenarios:
   - name: 预订列表-免登录(cookie注入)
     description: 模块:booking 页面:/booking/list
     actions:
-      # 注入登录 Cookie（跳过登录页）
+      # 注入登录 Cookie（跳过登录页；secure/httpOnly 按真实 Cookie 属性填）
       - type: cookie
         selector: session_token
         value: eyJhbGciOiJIUzI1NiIs...
@@ -57,13 +101,17 @@ scenarios:
         path: /
         secure: true
         httpOnly: true
+      # 进入受保护页面（免登录）
       - type: navigate
         value: /booking/list
+      # 等待页面渲染（delay=毫秒）
       - type: wait
         delay: 1000
     assertions:
+      # 列表容器可见
       - type: visible
         selector: '.booking-list'
+      # 数量断言：列表项恰好 5 个
       - type: count
         selector: '.booking-item'
         count: 5
@@ -73,16 +121,20 @@ scenarios:
   - name: 个人中心-Token注入
     description: 模块:user 页面:/profile
     actions:
+      # localStorage 注入 JWT Token（适用于 Token 存 localStorage 的前端）
       - type: localStorage
         selector: accessToken
         value: Bearer eyJhbGciOiJIUzI1NiIs...
+      # 进入个人中心页（免登录）
       - type: navigate
         value: /profile
       - type: wait
         delay: 500
     assertions:
+      # 页面容器可见
       - type: visible
         selector: '.profile-header'
+      # 文本断言：用户名渲染为 test_user
       - type: text
         selector: '.username'
         contains: test_user
@@ -92,25 +144,33 @@ scenarios:
   - name: 预订表单-提交预订
     description: 模块:booking 页面:/booking/create
     actions:
+      # 打开预订创建页
       - type: navigate
         value: /booking/create
+      # 填写入住日期
       - type: fill
         selector: 'input[name="checkIn"]'
         value: '2026-10-01'
+      # 填写退房日期
       - type: fill
         selector: 'input[name="checkOut"]'
         value: '2026-10-05'
+      # 点击搜索，等待房型列表出现
       - type: click
         selector: '.search-btn'
         waitFor: '.room-list'
+      # 选择第一个房型
       - type: click
         selector: '.room-item:first-child .select-btn'
+      # 提交预订，等待成功提示出现
       - type: click
         selector: '.submit-booking-btn'
         waitFor: '.booking-success'
     assertions:
+      # 成功提示可见
       - type: visible
         selector: '.booking-success'
+      # 文本断言：提示文案包含「预订成功」
       - type: text
         selector: '.booking-success'
         contains: 预订成功
@@ -119,13 +179,16 @@ scenarios:
   - name: 首页-滚动加载
     description: 模块:home 页面:/
     actions:
+      # 打开首页
       - type: navigate
         value: /
+      # 滚动到底部（触发无限加载）
       - type: scroll
         selector: bottom
       - type: wait
         delay: 1000
     assertions:
+      # 页脚可见（滚动加载完成）
       - type: visible
         selector: '.footer'
 
@@ -133,9 +196,11 @@ scenarios:
   - name: 按钮-样式检查
     description: 模块:ui 页面:/
     actions:
+      # 打开首页
       - type: navigate
         value: /
     assertions:
+      # 样式断言：主按钮背景色为指定蓝色
       - type: style
         selector: '.primary-btn'
         style: background-color

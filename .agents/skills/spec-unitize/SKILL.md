@@ -5,7 +5,8 @@ description: >
   /unitize 等关键词，或明确要求通过 speccore 切分需求文档为功能单元（unitize）时使用。
   参数提取与前置校验（输入文件格式：.md 可直接切、
   .docx/.pdf 需先 doc2spec 转换；端名须与 CONSTITUTION.md 端列表一致；
-  features/ 已有同名单元时重切会覆盖旧切片；多文档可批量 --files "a.md=端1,b.md"）由 speccore ask 引擎执行；
+  features/ 已有同名单元时重切会覆盖旧切片；多文档可批量 --files "a.md=端1,b.md"；
+  支持 --titles 仅切指定标题章节、--files 多文档各自挂标题组 a.md=端@标题1|标题2）由 speccore ask 引擎执行；
   参数缺失时引擎输出 [SPECCORE_NEEDS_INFO] 交互式提示（参数说明 + 使用示例）。
   不处理一般性的"切分/拆分"讨论（如"帮我切一下这段文本"），只处理 speccore 上下文中的切分。
   与 spec-taskify 的区别：unitize 切需求（文档→功能单元 features/），taskify 拆任务（功能单元→开发任务 Task-*）。
@@ -26,6 +27,13 @@ disable-model-invocation: false
 - `[SPECCORE_CONTINUE: <path>]` → 优先在同一会话继续下一批（按标记中的命令执行）；上下文紧张时开新对话，先读取 <path> 恢复上下文
 - `[SPECCORE_INTENT]` / `[SPECCORE_RESULT]` → 原样转达用户
 - 其他 `[SPECCORE_*]` 标记 → 参照 speccore-router 的 SKILL.md 处理
+
+## 标题过滤（v8.3.334+：仅切指定标题章节）
+
+用户说「切 admin-web.md 里的预订管理、消息中心」「只切 a.md 的订单确认和 b.md 的扫码签到」时，ask 引擎自动提取文档与标题组合生成命令，无需宿主改写：
+- 单文档：speccore unitize --file x.md --titles "标题1,标题2"
+- 多文档各自标题：--files "a.md=端1@标题1|标题2,b.md=端2@标题3"
+- 匹配语义：模糊包含（「预订管理」命中「3.1 预订管理」），未命中标题 CLI 会警告；全局章节不受过滤影响照常归 overview/
 
 ## 英译接力剧本（宿主 AI 接手翻译）
 
