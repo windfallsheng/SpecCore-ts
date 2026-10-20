@@ -891,6 +891,7 @@ program
   .option('--task <task>', '导入到指定 Task 目录')
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
   .option('--no-ai', '纯 pandoc 机械转换（终端快速模式）')
+  .option("--no-normalize", "跳过 AI 标题规范化（默认转换后按标准标题体系重写标题）")
     .option("--prompt", "输出验证 Prompt 到 stdout（Skill 协作模式）")
   .option("--response <response>", "接收 AI 修正内容写入文件")
   .option("--classify", "AI 智能分类 sources/ 文档 → staging/（按类型提取）")

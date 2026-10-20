@@ -572,6 +572,7 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
 
 - 默认分支: main（可选: master / develop / trunk）
 - 任务分支: {branch_prefix}{Task-ID}（如 feature/Task-001）
+- 分支名格式: {type}/{prefix}{taskId}（全局兜底配置 branch_format；前缀/后缀按任务类型从 branch_types 查表，迭代/子任务未配置时生效）
 - 发布分支: release/{version}
 - 热修复分支: hotfix/{description}
 - 保护分支: main, master, release/*, production
@@ -2852,22 +2853,31 @@ platforms:
 # default_base：默认基础分支（PR 合并目标）
 # branch_prefix：功能分支前缀
 # protected_branches：受保护分支（禁止直接 push，只能通过 PR 合并）
+# branch_format：分支名格式模板（全局兜底，可选）
+#   - 迭代 PROJECT_GRAPH / 子任务 git-config 未配置时从这里取（全自动执行兜底）
+#   - 支持变量: {type} 分支类型, {prefix} 前缀, {taskId} 任务 ID, {name} 任务名,
+#     {date} 日期（YYYYMMDD）, {hash4} 随机 4 位 hex
+#   - 示例: {type}/{prefix}{taskId}-{name} → feature/api-Task-001-用户管理
 # branch_types：分支类型定义
 #   - 类型名自带前缀（如 hotfix/、feature/）
-#   - prefix：任务名前的前缀（可选），如 api-、backend-
-#   - suffix：任务名后的后缀（可选），如 urgent、review
+#   - prefix：任务名前的前缀（可选，包含分隔符），如 api-、backend_
+#   - suffix：任务名后的后缀（可选，包含分隔符），如 -urgent、_review
 #   - source：创建源分支，如 develop、main
+#   - ⭐ 全局兜底：迭代/子任务未配置时，全自动执行按任务分支类型查本表
+#     prefix/suffix 生成分支名（如 feature 配 prefix=api- → feature/api-Task-XXX）
 # ─────────────────────────────────────────────────────────────────────────────
 git:
   # 默认基础分支（PR 合并目标）
   default_base: main
   # 功能分支前缀
   branch_prefix: feature/
+  # 分支名格式模板（全局兜底，可选；不配默认 {type}/{prefix}{taskId}）
+  # branch_format: "{type}/{prefix}{taskId}-{name}"
   # 受保护分支（禁止直接 push，只能通过 PR 合并）
   protected_branches:
     - main
     - master
-  # 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选
+  # 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选（全局兜底）
   branch_types:
     feature:
       source: develop

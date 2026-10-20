@@ -268,6 +268,8 @@ export interface ProjectConfig {
     protected_branches: string[];
     /** v8.3.113+: 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选。如 hotfix: { source: 'main', prefix: 'api-', suffix: '-urgent' } */
     branch_types?: Record<string, { prefix?: string; suffix?: string; source: string }>;
+    /** v8.3.336+: 分支名格式模板（全局兜底），支持变量 {type} {prefix} {taskId} {name} {date} {hash4}。迭代/子任务未配置时从这里取 */
+    branch_format?: string;
   };
   code_scope: string[];
   /** v8.3.58+: 验证相关配置 */
@@ -1407,6 +1409,7 @@ function validateProjectConfig(obj: Record<string, unknown>): ValidationResult {
   if (isObject(obj.git)) {
     if (typeof obj.git.default_base !== 'string') issues.push('git.default_base 必须是字符串');
     if (typeof obj.git.branch_prefix !== 'string') issues.push('git.branch_prefix 必须是字符串');
+    if (obj.git.branch_format !== undefined && typeof obj.git.branch_format !== 'string') issues.push('git.branch_format 必须是字符串');
     if (!Array.isArray(obj.git.protected_branches)) issues.push('git.protected_branches 必须是数组');
     // v8.3.111+: branch_types 校验
     if (obj.git.branch_types !== undefined) {
@@ -2118,6 +2121,12 @@ export function toProjectYaml(config: ProjectConfig): string {
   yaml += `  default_base: ${config.git.default_base}\n`;
   yaml += '  # 功能分支前缀（旧语义，兼容保留）\n';
   yaml += `  branch_prefix: ${config.git.branch_prefix}\n`;
+  // v8.3.336+: 分支名格式模板（全局兜底，迭代/子任务未配置时从这里取）
+  if (config.git.branch_format) {
+    yaml += '  # 分支名格式模板（全局兜底）：迭代 PROJECT_GRAPH / 子任务 git-config 未配置时生效\n';
+    yaml += '  # 支持变量: {type} 分支类型, {prefix} 前缀, {taskId} 任务 ID, {name} 任务名, {date} 日期, {hash4} 随机 4 位\n';
+    yaml += `  branch_format: ${config.git.branch_format}\n`;
+  }
   yaml += '  # 受保护分支（禁止直接 push，只能通过 PR 合并）\n';
   yaml += '  # 支持通配符：如 release/* 匹配 release/1.0.0\n';
   yaml += '  protected_branches:\n';

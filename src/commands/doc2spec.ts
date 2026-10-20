@@ -172,6 +172,7 @@ interface Word2SpecOptions {
   task?: string;     // --task: 导入到指定 Task 目录
   files?: string;    // batch: "path1.docx=平台1,path2.docx=平台2"
   ai?: boolean;
+  normalize?: boolean; // --no-normalize: 跳过 AI 标题规范化（默认转换后自动执行）
   prompt?: boolean;   // --prompt: 输出验证 Prompt 到 stdout
   response?: string;  // --response: 接收 AI 修正后的内容
   classify?: boolean; // --classify: AI 智能分类 → staging/
@@ -418,18 +419,31 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const mdDir = dirname(outputPath);
     content = imgTagsToMarkdown(fixImageRefs(content, mdDir, join(iterDir, '010-requirements', 'assets', 'extracted')));
 
-    // 4. 接口表格检测 + 提示
-    const hasInterfaceTable = /\|\s*方法\s*\|/i.test(content) || /\|\s*METHOD\s*\|/i.test(content);
-    if (!hasInterfaceTable) {
-      content += `\n---\n> ⚠️ Word 自动转换，请在下方补充接口定义表格后运行 speccore execute：\n\n| 方法 | 路径 | 说明 |\n| :--- | :--- | :--- |\n| | | |\n`;
-    }
-
-    // 5. 图片引用注释（告知 Task 如何引用这些图）
+    // 4. 图片引用注释（告知 Task 如何引用这些图）
     // v8.3.75+: 修正 Task 引用路径（从 030-tasks/Task-NNN/00-specs/ 出发需 ../../../）
     content = content.replace(
       /^#/,
       `# ${platform || '通用'}需求\n\n<!-- \n  原型图片路径: 010-requirements/assets/extracted/\n  converted/ 引用方式: ![原型](../assets/extracted/xxx.png)\n  Task 引用方式: ![原型](../../../010-requirements/assets/extracted/xxx.png)\n  所有 Task 共享此目录，无需重复存放。\n-->\n\n#`
     );
+
+    // 5. AI 标题规范化（v8.3.335+）：产品原文档标题常不规范，转换后按 SpecCore
+    //     标准标题体系 AI 语义重写标题（正文一字不动，H1 文档标题也由 AI 给出）。
+    //     调整前版本快照到 backup/。--no-normalize / --no-ai / --task 跳过；
+    //     AI 不可用时静默降级不阻断
+    let normalizeReport: { applied: number; skipped: number; backupPath: string | null } | null = null;
+    if (options.normalize !== false && options.ai !== false && !taskId) {
+      const result = await normalizeTitlesWithAI(content, platform || sourceBase, outputPath);
+      if (result) {
+        content = result.content;
+        normalizeReport = { applied: result.applied, skipped: result.skipped.length, backupPath: result.backupPath };
+      }
+    }
+
+    // 6. 接口表格检测 + 提示
+    const hasInterfaceTable = /\|\s*方法\s*\|/i.test(content) || /\|\s*METHOD\s*\|/i.test(content);
+    if (!hasInterfaceTable) {
+      content += `\n---\n> ⚠️ Word 自动转换，请在下方补充接口定义表格后运行 speccore execute：\n\n| 方法 | 路径 | 说明 |\n| :--- | :--- | :--- |\n| | | |\n`;
+    }
 
     await writeFile(outputPath, content);
 
@@ -481,6 +495,18 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     const fileStat = await stat(outputPath);
     logger.success(`输出: ${outputPath} (${fileStat.size} bytes)`);
     logger.info(`图片: ${imageCount} 张 → ${imageDir}/`);
+    // 标题规范化结果汇报（AI 重写统计 + 调整前快照位置）
+    if (normalizeReport) {
+      logger.info(`📝 标题规范化: ${normalizeReport.applied} 处重写`);
+      if (normalizeReport.skipped > 0) {
+        logger.info(`   ⚠️ ${normalizeReport.skipped} 处 AI 映射未匹配（章节原样保留）`);
+      }
+      if (normalizeReport.backupPath) {
+        logger.info(`   💾 调整前快照: ${normalizeReport.backupPath}`);
+      }
+    } else if (options.normalize !== false && options.ai !== false && !taskId) {
+      logger.info('💡 标题规范化跳过（未配置 AI provider）——可配置 SPECCORE_LLM_KEY 后重试');
+    }
     logger.info(`接口表: ${hasInterfaceTable ? '✅' : '⚠️ 缺失（已追加提示）'}`
     );
     logger.info(`🔍 质量: ${grade} ${report.score}/100 (${report.errors}错误 ${report.warnings}警告)`);
@@ -513,6 +539,197 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
   } catch (error) {
     spinner.fail(`转换失败: ${error}`);
     throw error;
+  }
+}
+
+// ================================================================
+// AI 标题规范化（v8.3.335+）：转换后按 SpecCore 标准标题体系重写标题
+//
+// 设计原则：
+//   1. AI 只产「标题映射」，CLI 确定性回写——正文一字不动、行数不变，天然防丢章节
+//   2. 应用前把「规范化前版本」快照到 backup/，随时可回溯（用户要求「以防要用」）
+//   3. AI 不可用 / 映射质量差 → 静默跳过，绝不阻断转换主链路
+// ================================================================
+
+/** SpecCore 标准需求文档标题体系（AI 标题规范化的参照规范） */
+const STANDARD_DOC_TITLES = {
+  docTitleSuffix: '需求', // H1 格式：{文档名}需求
+  globalSections: [
+    // 全局章节标准名（项目级通用信息，不构成功能单元）
+    '文档概述', '产品定位', '项目背景', '目标用户', '用户画像',
+    '名词约定', '术语表', '功能架构', '非功能需求', '验收标准',
+    '上线计划', '风险与缓解', '关联文档',
+  ],
+  featurePrefix: '功能模块', // 功能章节格式：功能模块{中文序号}：{功能名}
+  featureSubsections: [
+    // 功能模块下常用子节标准名
+    '用户场景', '页面布局', '操作步骤', '业务规则', '异常场景处理', '验收标准',
+  ],
+};
+
+export interface TitleRename { from: string; to: string }
+
+/** 提取文档标题大纲（含原层级），供 AI 参照重写（导出供测试） */
+export function buildTitleOutline(content: string): string {
+  return content.split('\n').filter((l) => /^#{1,6}\s+/.test(l)).join('\n');
+}
+
+/** 提取各章节开头内容（标题 + 首 3 行正文），给 AI 提供语义依据 */
+function buildSectionHeads(content: string): string {
+  const lines = content.split('\n');
+  const heads: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^#{1,6}\s+/.test(lines[i])) continue;
+    const body: string[] = [];
+    for (let j = i + 1; j < lines.length && body.length < 3 && !/^#{1,6}\s+/.test(lines[j]); j++) {
+      const t = lines[j].trim();
+      if (t) body.push(t.slice(0, 80));
+    }
+    heads.push(`${lines[i]}\n${body.join('\n')}`);
+  }
+  return heads.join('\n\n');
+}
+
+/** 解析 AI 返回的标题映射 JSON（容忍 markdown 代码围栏等噪声，导出供测试） */
+export function parseTitleRenames(text: string): { renames: TitleRename[]; docTitle: string } | null {
+  try {
+    const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
+    const renames: TitleRename[] = (Array.isArray(parsed.renames) ? parsed.renames : [])
+      .filter((r: any) => r && typeof r.from === 'string' && typeof r.to === 'string' && r.from.trim() && r.to.trim())
+      .map((r: any) => ({ from: r.from.trim(), to: r.to.trim() }));
+    const docTitle = typeof parsed.docTitle === 'string' && parsed.docTitle.trim() ? parsed.docTitle.trim() : '';
+    return renames.length > 0 ? { renames, docTitle } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * CLI 确定性回写标题映射：只替换标题行文字，正文一字不动。
+ * from 匹配时两侧都剥离章节编号（容忍 AI 带不带编号），同名标题按出现顺序一一对应。
+ * 未匹配到的 from 记入 skipped（章节原样保留），绝不静默丢章节。
+ */
+export function applyTitleRenames(
+  content: string,
+  renames: TitleRename[],
+  docTitle: string
+): { content: string; applied: number; skipped: string[] } {
+  const lines = content.split('\n');
+  const used = new Set<number>();
+  const skipped: string[] = [];
+  let applied = 0;
+  let h1Done = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(#{1,6})\s+(.+)$/);
+    if (!m) continue;
+    const level = m[1].length;
+    const rawText = m[2].trim();
+
+    // H1：整行替换为 docTitle（文档唯一标题；AI 未给出时保持原样）
+    if (level === 1) {
+      if (!h1Done && docTitle) {
+        lines[i] = `# ${docTitle}`;
+        h1Done = true;
+        applied++;
+      }
+      continue;
+    }
+
+    // 其余标题：strip 编号前缀后与 from 精确匹配
+    const normalized = stripSectionNo(rawText).trim();
+    const idx = renames.findIndex((r, j) => !used.has(j) && stripSectionNo(r.from).trim() === normalized);
+    if (idx < 0) continue;
+    used.add(idx);
+    // to 需为完整标题行（含 # 前缀，层级由 AI 决定）；未带前缀时沿用原层级兜底
+    lines[i] = /^#{1,6}\s+/.test(renames[idx].to) ? renames[idx].to : `${'#'.repeat(level)} ${renames[idx].to}`;
+    applied++;
+  }
+
+  for (let j = 0; j < renames.length; j++) {
+    if (!used.has(j)) skipped.push(renames[j].from);
+  }
+  return { content: lines.join('\n'), applied, skipped };
+}
+
+/** 标题规范化前，把「规范化前版本」快照到 010-requirements/backup/ */
+async function backupPreNormalizeContent(content: string, outputPath: string): Promise<string | null> {
+  try {
+    const backupDir = join(dirname(dirname(outputPath)), 'backup');
+    await ensureDir(backupDir);
+    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const backupPath = join(backupDir, `${basename(outputPath, '.md')}-${ts}.md`);
+    await writeFile(backupPath, content);
+    return backupPath;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * AI 标题规范化主编排：调用 LLM 产标题映射 → 回写 → 快照。
+ * 返回 null 表示跳过（AI 不可用/无有效映射），调用方原样保留文档。
+ */
+async function normalizeTitlesWithAI(
+  content: string,
+  docLabel: string,
+  outputPath: string
+): Promise<{ content: string; applied: number; skipped: string[]; backupPath: string | null } | null> {
+  try {
+    const outline = buildTitleOutline(content);
+    // 标题太少（<3 个）时文档无结构可调，直接跳过
+    if (outline.split('\n').filter(Boolean).length < 3) return null;
+
+    const systemPrompt = [
+      '你是资深产品需求文档编辑。任务：把 PRD 文档的章节标题按 SpecCore 标准标题体系重写，正文一字不动。',
+      '',
+      'SpecCore 标准标题体系：',
+      `1. 文档唯一 H1 标题：{文档名}${STANDARD_DOC_TITLES.docTitleSuffix}（如「${docLabel}需求」）`,
+      `2. 全局章节（项目级通用信息，不算功能单元）归 H2，标准名：${STANDARD_DOC_TITLES.globalSections.join('、')}`,
+      `3. 功能模块归 H2，标题格式「${STANDARD_DOC_TITLES.featurePrefix}{中文序号}：{功能名}」（序号从「一」连续递增）`,
+      `   功能模块下子节归 H3，常用标准名：${STANDARD_DOC_TITLES.featureSubsections.join('、')}`,
+      '4. 层级理顺：H1 只留文档标题一个；层级不跳级（### 后不能直接 #####）',
+      '',
+      '重写规则：',
+      '- 只改标题行文字与层级，不改章节顺序，不增删章节',
+      '- 原标题语义映射到最接近的标准名（「背景介绍」→「项目背景」；「会议管理」→「功能模块一：会议室管理」）',
+      '- 编号连续：全局章节与功能模块共用同一组中文序号（一、二、三…），子节编号 x.1、x.2 连续',
+      '- 无法归类的章节保留原意、统一格式，不要强行套标准名',
+      '',
+      '严格只返回 JSON，不要输出任何 JSON 以外的文字：',
+      '{"renames":[{"from":"原标题文字","to":"## 新标题行"}],"docTitle":"新文档标题"}',
+      '- from：文档中该标题去掉「#」与编号前缀后的精确文字',
+      '- to：完整新标题行（必须含 # 前缀，层级由你决定）',
+      '- 覆盖除 H1 外的所有标题；H1 的新内容放 docTitle',
+    ].join('\n');
+
+    // 大文档只传前 20000 字符的章节抽样（大纲仍覆盖全文，语义依据够用）
+    const truncated = content.length > 20000;
+    const sample = truncated ? content.slice(0, 20000) : content;
+    const userPrompt = `文档标题大纲（含原层级）：\n\n${outline}\n\n` +
+      `各章节开头内容（语义依据${truncated ? '，文档较长仅抽样' : ''}）：\n\n${buildSectionHeads(sample)}`;
+
+    const providers = await resolveAiProviders('doc2spec');
+    const response = await callLlm(systemPrompt, userPrompt, providers, 3000);
+    if (!response) return null;
+
+    const parsed = parseTitleRenames(response);
+    if (!parsed) return null;
+
+    // 防丢章节：AI 映射命中过少说明输出质量差，放弃本次规范化（宁可不动也别改错）
+    const before = content;
+    const applied = applyTitleRenames(content, parsed.renames, parsed.docTitle);
+    if (applied.applied < Math.min(3, Math.ceil(parsed.renames.length / 2))) return null;
+
+    // 应用前快照「规范化前版本」（用户要求备份以防要用）
+    const backupPath = await backupPreNormalizeContent(before, outputPath);
+    return { content: applied.content, applied: applied.applied, skipped: applied.skipped, backupPath };
+  } catch {
+    return null;
   }
 }
 

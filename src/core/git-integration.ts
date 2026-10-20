@@ -101,12 +101,16 @@ function loadRawProjectGitSync(): {
   protectedBranches?: string[];
   /** v8.3.323: 用户是否显式声明了 protected_branches（含显式清空 []）——声明即准，不再回退 CONSTITUTION */
   declaredProtected?: boolean;
+  /** v8.3.336+: 分支名格式模板（全局兜底） */
+  branchFormat?: string;
+  /** v8.3.336+: 分支类型定义（全局兜底，按任务分支类型取 prefix/suffix） */
+  branchTypes?: Record<string, { prefix?: string; suffix?: string; source?: string }>;
 } | null {
   try {
     const projectPath = join(getProjectRoot(), '.speccore', 'PROJECT.yaml');
     if (!existsSync(projectPath)) return null;
     const raw = parseYaml(readFileSync(projectPath, 'utf-8')) as {
-      git?: { default_base?: unknown; protected_branches?: unknown };
+      git?: { default_base?: unknown; protected_branches?: unknown; branch_format?: unknown; branch_types?: unknown };
       platforms?: Array<{ protected_branches?: unknown }>;
     };
     if (!raw?.git) return null;
@@ -114,9 +118,32 @@ function loadRawProjectGitSync(): {
       defaultBase?: string;
       protectedBranches?: string[];
       declaredProtected?: boolean;
+      branchFormat?: string;
+      branchTypes?: Record<string, { prefix?: string; suffix?: string; source?: string }>;
     } = {};
     if (typeof raw.git.default_base === 'string' && raw.git.default_base.trim()) {
       result.defaultBase = raw.git.default_base.trim();
+    }
+    // v8.3.336+: 分支名格式模板（全局兜底，用户显式声明才生效）
+    if (typeof raw.git.branch_format === 'string' && raw.git.branch_format.trim()) {
+      result.branchFormat = raw.git.branch_format.trim();
+    }
+    // v8.3.336+: 分支类型定义（全局兜底，prefix/suffix 按任务分支类型取）
+    if (raw.git.branch_types && typeof raw.git.branch_types === 'object' && !Array.isArray(raw.git.branch_types)) {
+      const types: Record<string, { prefix?: string; suffix?: string; source?: string }> = {};
+      for (const [name, def] of Object.entries(raw.git.branch_types as Record<string, unknown>)) {
+        if (def && typeof def === 'object' && !Array.isArray(def)) {
+          const d = def as { prefix?: unknown; suffix?: unknown; source?: unknown };
+          const entry: { prefix?: string; suffix?: string; source?: string } = {};
+          if (typeof d.prefix === 'string') entry.prefix = d.prefix;
+          if (typeof d.suffix === 'string') entry.suffix = d.suffix;
+          if (typeof d.source === 'string') entry.source = d.source;
+          if (entry.prefix !== undefined || entry.suffix !== undefined || entry.source !== undefined) {
+            types[name] = entry;
+          }
+        }
+      }
+      if (Object.keys(types).length > 0) result.branchTypes = types;
     }
     // 全局 + 端级 protected_branches 合并；「声明」= git 段键存在 或 任一端声明
     const declared = raw.git.protected_branches !== undefined && raw.git.protected_branches !== null
@@ -205,13 +232,14 @@ export function createTaskBranch(
 ): string | null {
   const gitCwd = cwd || process.cwd();
   try {
-    // 读取 Git 配置（子任务级 > 迭代级 > 全局 > 默认）
-    const gitConfig = loadGitConfig(iteration, taskDir);
+    // 任务类型 → 分支类型（taskType 存在时直接映射，无需先读配置）
+    let branchType: string | undefined;
+    if (taskType) branchType = TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType;
 
-    // 任务类型 → 分支类型
-    const branchType = taskType
-      ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType)
-      : gitConfig.branchType;
+    // 读取 Git 配置（子任务级 > 迭代级 > 全局 > 默认）
+    // v8.3.336+: 传入 branchType，供全局 branch_types 的 prefix/suffix 兜底查表
+    const gitConfig = loadGitConfig(iteration, taskDir, branchType);
+    if (!branchType) branchType = gitConfig.branchType;
 
     // 任务名安全处理（保留 {name} 格式模板变量使用）
     const safeName = taskName.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '-');
@@ -254,7 +282,7 @@ export function createTaskBranch(
       // 用户手动调整过，重建名字不一定与已存在分支一致）；找不到时按当前配置重建。
       const existing = findBranchByTaskId(taskId, gitCwd);
       if (existing) return existing;
-      const cfg = loadGitConfig(iteration, taskDir);
+      const cfg = loadGitConfig(iteration, taskDir, taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : undefined);
       const bt = taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : cfg.branchType;
       // v8.3.306: 与主流程共用 composeBranchName，拼接规则一致
       return composeBranchName(cfg, bt, taskId, '');
@@ -424,7 +452,7 @@ export function loadSubtaskGitConfig(taskDir: string): Partial<GitConfig> {
  *
  * 每个字段独立回退：子任务只配了 branchPrefix，defaultBranch 仍从迭代/全局继承
  */
-export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
+export function loadGitConfig(iteration?: string, taskDir?: string, branchType?: string): GitConfig {
   const config: Partial<GitConfig> = {};
 
   // v8.3.323: 双源不一致告警（指纹去重，仅在 PROJECT.yaml 与 CONSTITUTION 值冲突时提示一次）
@@ -441,6 +469,17 @@ export function loadGitConfig(iteration?: string, taskDir?: string): GitConfig {
     if (projectGit.defaultBase) config.defaultBranch = projectGit.defaultBase;
     // v8.3.323: 声明即准（含显式清空 [] = 无保护分支）
     if (projectGit.declaredProtected) config.protectedBranches = projectGit.protectedBranches || [];
+    // v8.3.336+: 分支名格式模板全局兜底——迭代 PROJECT_GRAPH / 子任务 git-config
+    //     未配置时从这里取（全自动执行 / 未 taskify 场景的分支命名兜底）
+    if (projectGit.branchFormat) config.branchFormat = projectGit.branchFormat;
+    // v8.3.336+: 分支类型 prefix/suffix 全局兜底——按任务分支类型查表（如 feature 类型
+    //     配了 prefix: api- → 全自动建分支时自动产出 feature/api-Task-XXX），
+    //     迭代/子任务未配置时生效
+    if (projectGit.branchTypes && branchType) {
+      const typeDef = projectGit.branchTypes[branchType];
+      if (typeDef?.prefix !== undefined) config.taskPrefix = typeDef.prefix;
+      if (typeDef?.suffix !== undefined) config.taskSuffix = typeDef.suffix;
+    }
   }
 
   // 1b. CONSTITUTION.md 回退（每字段独立：仅当上面未取到值）
