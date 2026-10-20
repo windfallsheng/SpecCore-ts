@@ -1,7 +1,7 @@
 ## 字段对照总表
 
 > **AI 必读**：以下表格明确 CONSTITUTION.md 各字段与 PROJECT.yaml 的对应关系。
-> 人类只需填写 CONSTITUTION.md，PROJECT.yaml 由 CLI 自动生成/同步。
+> 机器执行以 PROJECT.yaml 为事实源（CLI 只读 PROJECT.yaml）；CONSTITUTION.md 是 AI 阅读契约，仅在 PROJECT.yaml 未声明对应字段时作兼容回退。两处内容需保持语义一致。
 
 ### 项目信息表字段
 
@@ -53,6 +53,8 @@
 
 ## 项目信息
 
+> ⚠️ **机器事实源是 `.speccore/PROJECT.yaml` 的 `platforms`**（v8.3.323+）：源码路径→端的映射（变更检测等）以 platforms[].code_path 为准；本表为 AI 契约与兼容回退，两处需保持一致。
+
 | 工程标识 | 工程类型 | 工程名 | 项目名称 | 项目描述 | 工程源码路径 | 涉及需求端 | 备注 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | admin-web | Web管理后台 | 后台管理 | 运营后台 | 运营人员使用的后台管理系统 | ./packages/admin | 后台管理端需求文档 | 核心系统 |
@@ -69,6 +71,35 @@
 > - **工程源码路径**：相对于项目根目录的代码位置（如 ./packages/backend）
 > - **涉及需求端**：需求文档名称/标识，仅作 AI 参考（如"后台管理端需求文档"、"订单系统PRD"）。说明本工程大概会出现在哪些需求文档中
 > - **备注**：额外信息、特殊说明、TODO 等
+
+---
+
+## 技术栈
+
+> 填写规则：**每端一行，只写「已选定」的技术与版本**（决策式声明，不是选项菜单）。
+> AI 生成代码时以本表为准；未填写的端回退到端级 TECH.md（analyze 产物）。
+
+| 端 | 语言 | 框架 | 数据存储 | 依据（依赖清单文件） |
+| :--- | :--- | :--- | :--- | :--- |
+| backend-api | Java 17 | Spring Boot 3.x | MySQL 8 | pom.xml |
+| admin-web | TypeScript | Vue 3 | — | package.json |
+| h5-mobile | TypeScript | Vue 3 | — | package.json |
+| miniapp | JavaScript | 原生小程序 | — | package.json |
+
+> 可选技术域（约束参考，非已选）：后端语言 Java/TypeScript/Go/Python；框架 Spring Boot/NestJS/Gin/FastAPI；前端框架 Vue/React/Angular；数据存储 MySQL/PostgreSQL/MongoDB；缓存 Redis。
+
+## 异常码体系
+
+> 错误码为 4 位数字，按段划分——**分段规则给 AI 的是「生成能力」，不是几个示例**：
+
+| 段 | 范围 | 归属 |
+| :--- | :--- | :--- |
+| 1xxx | 1000-1999 | 用户模块 |
+| 2xxx | 2000-2999 | 订单模块 |
+| 3xxx | 3000-3999 | 支付模块 |
+
+- 首位 = 模块段，后三位 = 段内序号；错误码全项目唯一，跨端共用同一套编号
+- 示例（演示用，按真实模块替换上表）：1001 用户不存在 / 2001 订单不存在 / 3001 支付超时
 
 ---
 
@@ -161,5 +192,5 @@
 
 > 📌 **使用说明**：
 > 1. 复制本示例内容到 `CONSTITUTION.md`，根据实际项目修改
-> 2. 修改后运行 `speccore update` 自动同步到 PROJECT.yaml
+> 2. 修改后运行 `speccore update` 更新配置结构（Git 策略以 `.speccore/PROJECT.yaml` 的 `git` 段为机器事实源）
 > 3. 子任务目录下的 `.meta/git-config` 可覆盖全局配置（见目录结构说明）

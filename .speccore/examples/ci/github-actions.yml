@@ -25,7 +25,7 @@ jobs:
 
       - name: Validate Specs
         run: |
-          speccore validate --full
+          speccore validate
           if [ $? -ne 0 ]; then
             echo "⚠️ Spec validation failed. Please fix the issues above."
             exit 1

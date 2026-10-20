@@ -1,5 +1,16 @@
 # Changelog
 
+## v8.3.333 (2026-10-20) — 示例参考文件全线同步：升级时自动刷新 + CI 模板去幽灵命令
+
+用户仿照修改的参考书（.speccore/examples/）此前只在 init 时生成一次，之后随版本凝固——本次全线对账并修复：
+
+- **升级时自动刷新示例**：`speccore config --upgrade` 现在会同步刷新 .speccore/examples/ 全部参考文件（原仅 init 生成一次，升级后示例永远停留在旧版）。刷新失败仅告警不影响配置升级。
+- **补齐缺失示例**：TEAM-EXAMPLE.md、STAFFING-EXAMPLE.md 代码早已生成但仓库/老项目缺失；README.md 目录声明与实际产物同步。
+- **CONSTITUTION-EXAMPLE.md 补全两章**：新增「技术栈」与「异常码体系」章节 + v8.3.323 机器事实源说明（platforms[].code_path 为准），共补 31 行。
+- **CI 模板去幽灵命令**：`speccore validate --full` 是 v5.3.0 遗留——现行 validate 选项为 --fix/--strict/--verify/--format，无 --full。用户照抄模板 CI 必报错，已改为 `speccore validate`。
+- **对齐防线加厚**：config-example-alignment 测试 2→6 用例——新增 PROJECT 示例 vs DEFAULT_PROJECT_CONFIG 逐字段锁、六件复制类示例与 templates 同源锁、TEAM/STAFFING 存在锁、CI 模板命令与 CLI 注册表自动对账（以后示例落后测试先红）。
+- **验证**：519/519 全绿；升级路径端到端冒烟（临时项目 → upgrade → 12 件示例全刷新）。
+
 ## v8.3.332 (2026-10-19) — 全面清查：图片路径类 bug 在其它功能中的同族变体（反斜杠进文本/基准错位/形态漏检）
 
 承接 v8.3.331 图片路径四连修，全仓地毯式排查「反斜杠进 AI 可见文本 / 正斜杠拆分失效 / 形态漏检」同族问题，修 9 处 + 增 5 测试：

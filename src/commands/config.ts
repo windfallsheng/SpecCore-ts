@@ -4,6 +4,7 @@
  */
 import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
+import { findProjectRoot } from '../utils/task-utils';
 import {
   loadConfig,
   loadConfigWithMeta,
@@ -71,6 +72,14 @@ export async function configCommand(options: ConfigOptions): Promise<void> {
         await upgradeProjectConfig();
       } else {
         await upgradeConfig();
+        // v8.3.333+: 升级时同步刷新示例参考文件（原仅 init 生成一次，示例随版本凝固）
+        try {
+          const { generateExampleConfigs } = require('./init');
+          await generateExampleConfigs(findProjectRoot() || process.cwd());
+          logger.info('📋 已同步刷新示例参考文件: .speccore/examples/');
+        } catch (error) {
+          logger.warn('⚠️ 示例参考文件刷新失败（不影响配置升级）: ' + error);
+        }
       }
       return;
     }
