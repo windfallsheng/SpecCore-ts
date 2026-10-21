@@ -60,8 +60,8 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     patterns: [/图谱不存在/i, /graph.*not found/i, /graph\.json.*不存在/i],
     message: '代码知识图谱尚未构建',
     suggestions: [
-      '运行 speccore code-index --graph 构建代码知识图谱',
-      '运行 speccore code-index --graph --incremental 增量更新',
+      '运行 speccore reindex 构建代码知识图谱',
+      '运行 speccore reindex 增量更新',
     ],
   },
   {

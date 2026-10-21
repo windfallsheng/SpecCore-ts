@@ -8,16 +8,18 @@ import { logger } from '../utils/logger';
 
 // v8.3.257: 与 cli.ts 实际注册命令对齐，移除已删命令（import/health/goal/bugfix/research/
 // template-add/demo/sync-global/global-status/new-task/platform-add/backup/hooks/current/trace/watch）
+// v8.3.341: 移除图谱/索引/基线/AI 辅助等边缘命令（graph/knowledge/rag-index/code-index/refresh/
+// baseline/diff/rollback/merge-check/audit/verdict/impact/history/handover/workspace/notify/recommend/track）
 const COMMANDS = [
   'init', 'doc2spec', 'unitize', 'taskify', 'analyze', 'global', 'spec-from-source',
   'validate', 'plan', 'execute', 'run', 'pipeline', 'verify', 'pr', 'done',
-  'status', 'progress', 'dashboard', 'doctor', 'report', 'handover', 'archive',
-  'config', 'constitution', 'iteration', 'task', 'change', 'sync', 'track',
-  'search', 'history', 'impact', 'baseline', 'rollback', 'pattern', 'audit',
-  'rename', 'retro', 'verdict', 'req-doc', 'workspace', 'iteration-from-global',
-  'context', 'update', 'migrate', 'diff', 'merge-check', 'delete', 'cleanup',
-  'code-index', 'rag-index', 'refresh', 'reindex', 'knowledge', 'graph',
-  'prompts', 'next', 'notify', 'recommend',
+  'status', 'progress', 'dashboard', 'doctor', 'report', 'archive',
+  'config', 'constitution', 'iteration', 'task', 'change', 'sync',
+  'search', 'pattern',
+  'rename', 'retro', 'req-doc', 'iteration-from-global',
+  'context', 'update', 'migrate', 'delete', 'cleanup',
+  'reindex',
+  'prompts', 'next',
   'help', 'about', 'welcome', 'ask', 'completion',
 ];
 

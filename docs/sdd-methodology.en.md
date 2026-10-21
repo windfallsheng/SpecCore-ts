@@ -89,8 +89,7 @@ All write operations are transaction-protected. No partial failures.
 Requirement → Iteration → Task → Code. Every line traces back.
 
 ```bash
-speccore trace --req=REQ-001   # Trace from requirement
-speccore impact --req=REQ-001  # Impact analysis
+speccore context --task=Task-001 # View task context and dependencies
 ```
 
 ### 4.5 Separation of Specs and Code

@@ -271,7 +271,7 @@ ${files.length > 0
 
 ---
 
-*💡 提示: 运行 \`speccore refresh\` 刷新检索层，运行 \`speccore rag-index\` 查看索引状态。*
+*💡 提示: 运行 \`speccore reindex\` 刷新检索层，运行 \`speccore reindex\` 查看索引状态。*
 `;
 
   await writeFile(summaryPath, summary);

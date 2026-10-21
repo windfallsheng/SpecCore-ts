@@ -66,30 +66,7 @@ speccore dashboard --scope global
 | **Unified retrieval** | Doc RAG + code slices + knowledge graph, three sources merged into one retrieval system |
 | **RAG index** | Title-chunked structured doc index, `.speccore/cache/rag-index*.json` |
 
-## Retrieval commands (v6.8.0+)
-
-```bash
-# Refresh all retrieval layers at once (code index + doc RAG + knowledge graph)
-speccore refresh
-speccore refresh --code      # code index only
-speccore refresh --rag       # doc RAG only
-speccore refresh --graph     # knowledge graph only
-
-# RAG index management
-speccore rag-index                    # show all index file status
-speccore rag-index --refresh --task Task-001   # incremental task index refresh
-speccore rag-index --full --task Task-001      # full task index rebuild
-```
-
-The retrieval layer is built and refreshed automatically during the `analyze` stage; manual commands are for instant sync after you edit documents.
-
-### 🧠 Knowledge graph visualization
-
-`speccore knowledge` generates an interactive HTML knowledge graph:
-
-![Knowledge Graph Full](screenshots/knowledge-graph-full.png)
-
-![Knowledge Graph Zoom](screenshots/knowledge-graph-zoom.png)
+The retrieval layer is built and refreshed automatically during the `analyze` stage; the unified entry is `speccore reindex` (full rebuild + decay detection).
 
 ## Output
 

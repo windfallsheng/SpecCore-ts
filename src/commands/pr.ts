@@ -8,19 +8,17 @@ import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
-import { isProtectedBranch, isProtectedBranchAsync } from '../core/git-integration';
+import { isProtectedBranch, isProtectedBranchAsync, extractBranchTypeFromBranchName } from '../core/git-integration';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { resolveEnvBranchRef } from '../core/environment-config';
 
 /**
- * 从当前分支名第一段提取分支类型（feature/xxx → feature），非任务分支（无类型段）返回 undefined。
- * v8.3.339+: PR 目标分支按类型区分的前提——从哪类分支发起 PR，就查该类分支的 pr_target。
+ * 当前分支的类型段（容错包装：execSync 失败返回 undefined，回退链继续走 git.pr_target 兜底）。
+ * 提取逻辑在 git-integration.extractBranchTypeFromBranchName（v8.3.341+ 统一）。
  */
 function currentBranchType(): string | undefined {
   try {
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
-    const seg = branch.split('/')[0];
-    return seg && seg !== branch ? seg : undefined;
+    return extractBranchTypeFromBranchName(execSync('git branch --show-current', { encoding: 'utf-8' }));
   } catch {
     return undefined;
   }

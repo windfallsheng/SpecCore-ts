@@ -67,7 +67,6 @@ const COMMON_CASES: CorpusCase[] = [
   { input: '用 speccore 拆分本迭代的任务', expect: 'split', note: '拆分任务' },
   { input: '检查一下这个需求有什么遗漏', expect: 'review', note: '检查需求' },
   { input: '全局分析项目架构', expect: 'global_analyze', note: '全局分析（不进迭代上下文加成）' },
-  { input: '回滚到上一个版本', expect: 'baseline', note: '基线回滚' },
   // ── 补子任务意图（v8.3.311+：不得再被宽词误路由为新建模块任务）──
   { input: '新建一个子任务', expect: 'task_append', note: '补端子任务（曾误判 task new）', minConf: 85 },
   { input: '给 Task-021 补一个 h5 端', expect: 'task_append', note: '补端原话', minConf: 85 },

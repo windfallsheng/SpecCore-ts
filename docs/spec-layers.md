@@ -298,10 +298,6 @@ AI 修改任何 Spec 文件前自动创建 `.bak` 备份，防止改坏：
 ```bash
 # 对话回滚
 "刚才改的 Task-001 不对，帮我回滚"  → AI 从 .bak 恢复
-
-# CLI 回滚
-speccore rollback --task=Task-001 --list       # 查看备份
-speccore rollback --task=Task-001 --confirm    # 确认恢复
 ```
 
 备份存在同目录下（如 `REQ.md.bak`），恢复后自动清理，24 小时后过期。

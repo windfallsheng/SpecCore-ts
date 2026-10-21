@@ -2085,7 +2085,7 @@ async function executionVerifyLoop(
             logger.info(`   👤 L3 架构契约: ${arbResult.report.L3.passed}/${arbResult.report.L3.total} 通过, ${arbResult.report.L3.pending} 待裁决`);
             if (arbResult.report.L3.pending > 0) {
               logger.warn(`      ⚠️ ${arbResult.report.L3.pending} 项需人工裁决`);
-              logger.info(`         执行: speccore verdict --list --task ${task.id}`);
+              logger.info(`         裁决入口: 任务目录 ARBITRATION_REPORT.md`);
               allPassed = false;
             }
           } else {
@@ -3197,7 +3197,7 @@ function outputPostSummary(iteration: string, task: string, fileCount: number, f
     logger.info('');
     logger.warn('🔄 检测到接口/实体变更，建议刷新全局层:');
     logger.info(`   → speccore global analyze --with-code  # 刷新全局 FUNCTION_MAP.md / API_CONTRACT.yaml`);
-    logger.info(`   → speccore refresh                    # 刷新检索索引`);
+    logger.info(`   → speccore reindex                   # 重建检索索引`);
   }
   logger.info('━'.repeat(40));
 }

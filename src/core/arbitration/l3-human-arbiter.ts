@@ -30,7 +30,7 @@ export async function initiateL3Arbitration(conflict: Conflict): Promise<L3Arbit
     conflictId: conflict.id,
     level: 'L3',
     outcome: 'defer',
-    reasoning: 'L3 架构契约冲突需人工最终裁决。AI 已生成影响分析，请执行 speccore verdict --conflict {id} --decide 进行裁决。',
+    reasoning: 'L3 架构契约冲突需人工最终裁决。AI 已生成影响分析，请查看任务目录 ARBITRATION_REPORT.md 人工填写裁决。',
     arbiter: 'L3-Human-Arbiter (pending)',
     timestamp: new Date().toISOString(),
   };

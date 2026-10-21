@@ -1014,18 +1014,13 @@ A project is a Speccore project if \`.speccore/\` exists in the project root. Ke
 - \`speccore sync --global [--iteration=<name>]\` — Sync back to global
 
 ### Analysis & Quality
-- \`speccore impact --req=<id>\` — Change impact analysis
-- \`speccore audit [--fix]\` — Quality audit (duplicates, conflicts)
 - \`speccore dashboard\` — HTML dashboard
-- \`speccore history [--req=<id>]\` — Change history
 
 ### Maintenance
 - \`speccore task new -t bugfix -n="<desc>"\` — Quick bug fix
 - \`speccore change --req=<id> --desc="<desc>"\` — Requirement change
-- \`speccore handover [--iteration=<name>]\` — Handover document
 - \`speccore retro [--iteration=<name>]\` — Retrospective
 - \`speccore rename --target=<old> --new-name=<new>\` — Rename
-- \`speccore baseline --name=<name>\` — Version snapshot
 
 ## Working with Speccore Projects
 
@@ -1100,14 +1095,12 @@ export const TOOL_COMMANDS: [string, string, string][] = [
   ['spec-change', '需求变更专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（当前迭代、已有 Task 列表、变更类型判断），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore change "${1:变更描述}" --task=${2:Task-001}'],
   ['spec-validate', '合规验证: 迭代=${1:Q1}', 'speccore validate --iteration=${1:Q1}'],
   ['spec-search', '全文搜索: ${1:关键词}', 'speccore search ${1:关键词}'],
-  ['spec-track', '全链路追踪: 需求=${1:REQ-001}', 'speccore track --req=${1:REQ-001}'],
   ['spec-sync', '双向同步全局', 'speccore sync --global'],
   ['spec-rename', '重命名: 旧名=${1:Q1} 新名=${2:Q2}', 'speccore rename --target ${1:Q1} --new-name ${2:Q2}'],
   ['spec-iteration-create', '创建迭代专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代名是否已存在、主题词有效性），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore iteration create -n ${1:Q2} --owner=${2|张三,李四,王五|}'],
   ['spec-task-create', '创建开发任务专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代存在性、主题词有效性、命名冲突检测），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。', 'speccore task new --name ${1:任务名称}'],
   ['spec-retro', '回顾报告: 任务=${1:Task-001} 可批量 --all', 'speccore retro --task ${1:Task-001}'],
   ['spec-context', '切换上下文: 迭代=${1:Q1}', 'speccore context --set --iteration ${1:Q1}'],
-  ['spec-history', '操作历史', 'speccore history'],
   ['spec-run', '端到端流水线专属 Skill。在调用 speccore run 之前，执行参数提取（需求描述、迭代、起止阶段、演示模式），参数缺失时输出交互式提示。不影响 speccore run 的意图识别能力。', '直接执行: execute_command("speccore run \'用户的一句话需求\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore run。\n\n流水线会自动从澄清一路跑到部署，中间三个 review 闸口（Spec 定稿 / 代码 review / 部署前确认）会停下来等你确认，看到 [SPECCORE_GATE_X] 标记时停下 review 并询问用户。'],
 
   ['spec-deploy', '部署专属 Skill。覆盖 build / deploy / pipeline 命令的意图识别与参数提取。支持自然语言（"部署到测试环境"）和显式参数（--env test --all）。参数缺失时交互式提示，前置校验环境配置与平台有效性。不影响 speccore ask 的意图识别能力。', 'speccore pipeline --env ${1|local,dev,test,staging,production|} --all'],

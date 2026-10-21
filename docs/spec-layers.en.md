@@ -265,8 +265,8 @@ speccore execute --task=Task-001 --force
 AI auto-creates `.bak` before modifying any Spec file:
 
 ```bash
-speccore rollback --task=Task-001 --list      # list backups
-speccore rollback --task=Task-001 --confirm   # confirm restore
+# Conversational rollback
+"The last change to Task-001 is wrong, roll it back"  → AI restores from .bak
 ```
 
 Backups live in the same dir (e.g. `REQ.md.bak`), cleaned after restore, expire in 24h.

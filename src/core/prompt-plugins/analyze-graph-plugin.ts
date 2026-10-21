@@ -34,7 +34,7 @@ export const analyzeGraphPlugin: PromptPlugin = {
         if (n) lines.push(`- ${n.name} (${n.type}, degree=${n.degree})`);
       }
       lines.push('');
-      lines.push('> 提示：如需深入查看完整图谱，运行 `speccore code-index --graph` 后打开 `.speccore/code-graph/graph.html`');
+      lines.push('> 提示：如需深入查看完整图谱，运行 `speccore reindex` 后打开 `.speccore/code-graph/graph.html`');
 
       return { codeGraphSummary: lines.join('\n') };
     } catch {

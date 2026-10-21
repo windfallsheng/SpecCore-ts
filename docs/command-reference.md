@@ -403,29 +403,6 @@ speccore clarify --promote <entryId> --to <iteration> # 提升到迭代层
 - 正常模式：`010-requirements/converted/clarified-{feature}.md`
 - `--local` 模式：`.speccore/local/workspace/clarify/{id}/PRD.md`
 
-### 🗃️ workspace — 临时工作区管理
-
-```bash
-speccore workspace [--list] [--show <entryId>] [--clean] [--days <n>] [--type <clarify|research>]
-```
-别名: `ws`
-
-**v8.3.0+ 新增命令。** 管理独立内容处理的临时产出（不绑定迭代/任务）。
-
-**使用场景：**
-- 查看已沉淀到临时工作区的澄清/调研产出
-- 清理过期的临时条目
-- 查看条目的原始输入摘要
-
-**子命令：**
-
-```bash
-speccore workspace list                    # 列出所有条目
-speccore workspace list --type clarify     # 按类型过滤
-speccore workspace show <entryId>          # 查看详情 + 原始输入摘要
-speccore workspace clean --days 30         # 清理 30 天前的未提升条目
-```
-
 ### 📦 taskify — 任务拆分 🔒 AI 命令（原 split，v8.3.231+ 只保留 taskify 一名）
 ```bash
 speccore iteration taskify [-i <iteration>] [-f <file>] [-g <level>] [--force] [--interactive]
@@ -538,25 +515,6 @@ speccore pr [--task <id>] [--auto]
 speccore done [--task <id>] [--all] [--interactive]
 ```
 别名: `dn`
-
-### ⚖️ verdict — 契约冲突裁决
-```bash
-speccore verdict --list [--task <id>]
-speccore verdict --conflict <id> --decide <pass|pass-with-conditions|reject|defer> [--reason <说明>]
-speccore verdict --report <Task-ID>
-```
-别名: `vd`
-
-**三级裁决机制**：
-- **L1 机器契约**：编译/测试失败 → 自动裁决驳回（无需人工）
-- **L2 规范契约**：Spec 不一致/Lint 警告 → AI 生成修复建议，开发者确认
-- **L3 架构契约**：安全漏洞/架构冲突 → 需人工最终裁决
-
-**配置控制**（`.speccore.yml`）：
-| 配置项 | 可选值 | 默认 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `arbitration.enabled` | `true`/`false` | `true` | 总开关 |
-| `arbitration.mode` | `full`/`l1-only`/`report-only` | `full` | 裁决深度 |
 
 ### 🔄 change — 需求变更 🔒 AI 命令
 ```bash
@@ -728,36 +686,6 @@ speccore verify --project-dir ~/projects/other-app --config ./tests/smoke.yaml
 | `style` | CSS 样式验证（v8.3.95+） | `type: style, selector: '.btn', style: background-color, contains: 'rgb(255,0,0)'` |
 | `visual` | 视觉对比（需配置视觉模型） | `type: visual, threshold: normal` |
 
-### 🧠 knowledge — 知识图谱可视化与代码图谱查询
-```bash
-speccore knowledge [-i <iteration>] [--export html] [--scope global|iteration|task]
-```
-别名: `kg`
-
-生成交互式 HTML 知识图谱，支持：
-- **vis-network 力导向图**：8 种形状区分实体类型（需求◆ 规格🛢 功能模块■ 任务▲ 全局★ 源码⬡）
-- **衰减检测**：自动发现内容变更、下游过期、文件丢失、代码超前等风险
-- **RAG 上下文预览**：查看 AI 检索时会注入的完整上下文
-- **9 套主题 / 3 种字体 / 4 档字号 / 全屏模式 / 实体搜索**
-
-**v6.90.0+ 代码知识图谱**（本地 AST 解析，零 LLM Token）：
-```bash
-speccore code-index --graph --scope src           # 构建代码知识图谱
-speccore knowledge-explain "buildCodeGraph"       # 解释节点及其连接
-speccore knowledge-path "AuthModule" "UserDB"     # 查找最短依赖路径
-speccore knowledge-query "how does payment work"  # 自然语言查询
-```
-
-![Knowledge Graph](screenshots/knowledge-graph-full.png)
-
-![Knowledge Graph Zoom](screenshots/knowledge-graph-zoom.png)
-
-### 🔗 track — 全链路追踪
-```bash
-speccore track [--req <id>] [--task <id>] [--full]
-```
-别名: `trk`
-
 ### 🔍 search — 全文搜索
 ```bash
 speccore search <query> [--task <id>] [--iteration <name>]
@@ -769,12 +697,6 @@ speccore search <query> [--task <id>] [--iteration <name>]
 speccore rename [--iteration <old> <new>] [--task <old> <new>]
 ```
 别名: `rn`
-
-### 📜 history — 操作历史
-```bash
-speccore history
-```
-别名: `hi`
 
 ---
 

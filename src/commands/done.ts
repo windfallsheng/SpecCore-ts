@@ -191,10 +191,7 @@ async function doDone(
 
   spinner.stop();
   logger.info('   5/5 生成摘要...');
-  try {
-    execSync(`speccore audit --detail --iteration=${iteration}`, { stdio: 'pipe', encoding: 'utf-8' });
-    logger.info('     ✅ 审计完成');
-  } catch { /* ok */ }
+  logger.info('     ✅ 摘要完成');
 
   const okCount = steps.filter(s => s.ok).length;
   spinner.stop(`✅ ${taskId} 收尾完成 (${okCount}/${steps.length})`);

@@ -275,13 +275,7 @@ const injected = await injectAll(basePrompt, {
 | `GRAPH_REPORT.md` | 自动报告：God nodes、社区分布、跨社区桥梁、建议问题 |
 | `graph.html` | vis-network 力导向图可视化（社区着色、EXTRACTED/INFERRED 线型区分） |
 
-**CLI 集成**：
-```bash
-speccore code-index --graph --scope src     # 构建图谱
-speccore knowledge-explain <node>            # 解释节点
-speccore knowledge-path <from> <to>          # 最短路径 BFS
-speccore knowledge-query <question>          # 关键词匹配查询
-```
+**CLI 集成**：`speccore reindex` 全量重建所有层级索引（含代码图谱），analyze 阶段自动增量维护。
 
 ### 1.5.9 图谱深度整合（v6.91.0+）
 
@@ -292,23 +286,6 @@ speccore knowledge-query <question>          # 关键词匹配查询
 **MODULE_MAP 自动生成**：社区检测结果自动写入 `MODULE_MAP.json`，包含每个社区的文件路径、God nodes、桥梁节点、跨社区边。
 
 **多模态图谱**：API Contract（OpenAPI/YAML）和 SQL Schema 纳入图谱，生成 `api_endpoint` / `db_table` 节点，自动关联代码中的 handler/controller/entity/repository。
-
-### 1.5.10 统一图谱查询（v7.0.0+）
-
-**融合知识图谱 + 代码图谱的统一查询入口**：
-
-```bash
-speccore graph query "订单相关代码"     # 自然语言查询两种图谱
-speccore graph entity SRC:auth-AuthCtrl  # 查询特定实体详情
-speccore graph related Task-001          # 查询一阶邻居
-speccore graph path Task-001 Task-002    # 查找最短路径
-speccore graph stats                     # 统计信息
-```
-
-**查询机制**：
-- 知识图谱匹配：语义标签 / 业务角色 / 描述 / 标题 / ID
-- 代码图谱匹配：节点名 / 代码片段 / JSDoc 注释
-- 结果融合展示，按综合得分排序
 
 ### 1.5.11 语义级节点标签（v7.0.0+）
 
@@ -359,22 +336,6 @@ retrieveWithGraphContext()：
 - LLM 对候选做语义相关性评分（0-100）
 - 综合得分 = 本地得分 × 0.4 + 语义得分 × 0.6
 - LLM 给出匹配理由（如"该文件处理订单状态流转，与查询高度相关"）
-
-### 1.5.14 Mermaid 图表渲染（v7.1.0+）
-
-**将分析产物中的 Mermaid 图表渲染为可视化 HTML**：
-
-```bash
-speccore graph render diagrams/arch.mmd      # 渲染单个 .mmd
-speccore graph render --all                   # 批量渲染 diagrams/ 目录
-speccore graph render --extract ARCHITECTURE.md  # 从 Markdown 提取
-```
-
-**技术实现**：
-- HTML 模板使用 CDN 加载 Mermaid.js（支持离线缓存）
-- 响应式布局 + 打印优化
-- 自动推断图表类型（时序图/流程图/状态图/类图/ER 图）
-- 元信息展示：来源文件、图表类型、生成时间
 
 ### 1.5.15 全局分析产物图表化（v7.1.0+）
 
@@ -618,11 +579,6 @@ Phase 2: 逐节填充（每节独立调用 LLM，携带前文上下文）
 | `report-only` | 仅报告 | 仅报告 | 仅报告 | 永不阻断 | CI 试点 |
 
 **裁决书**：每个任务执行后自动生成 `ARBITRATION_REPORT.md`，含三层契约的完整裁决记录、汇总统计、人工裁决入口。
-
-**`speccore verdict` 命令**：
-- `--list`：列出所有待裁决冲突（L2 pending-fix + L3 pending-review）
-- `--conflict <id> --decide <outcome> --reason <说明>`：进行人工裁决
-- `--report <Task-ID>`：查看指定任务的裁决书
 
 #### UI 质量门禁（v8.3.47+）
 
@@ -1058,83 +1014,6 @@ ask 意图识别同步强化：新增「按端反推/按端生成需求/生成�
 
 ---
 
-## 1.6 临时工作区架构（v8.3.0+）
-
-**解决场景**：用户需要澄清/调研与当前迭代无关的内容，或尚未创建迭代时就需要处理需求。
-
-**传统问题**：`clarify` 命令强制绑定迭代，独立内容没有存放位置。
-
-### 1.6.1 目录结构
-
-```
-.speccore/local/workspace/
-├── inbox/                    ← 原始输入暂存
-│   └── {YYYY-MM-DD-HHMMSS-xxxx}/
-│       ├── source.md         ← 用户原始输入
-│       └── meta.json         ← 条目元信息
-├── clarify/                  ← clarify 产出
-│   └── {id}/
-│       └── PRD.md
-├── research/                 ← research 产出
-│   └── {id}/
-│       └── REPORT.md
-└── index.json                ← 条目索引
-```
-
-### 1.6.2 核心流程
-
-```
-用户输入内容
-    │
-    ▼
-stageContent() ──→ inbox/{id}/source.md
-    │
-    ▼
-AI 处理（宿主 AI 直接处理，或 speccore clarify --apply）
-    │
-    ▼
-writeWorkspaceOutput() ──→ clarify/{id}/PRD.md
-    │
-    ▼
-确认无误后
-    │
-    ▼
-promoteToIteration() ──→ Iteration-xxx/020-specs/requirements/
-```
-
-### 1.6.3 CLI 命令
-
-```bash
-# 创建临时条目（clarify --local 自动调用）
-speccore clarify "需求描述" --local
-speccore clarify --from notes.md --local --prompt
-
-# 管理临时工作区
-speccore workspace list                    # 列出所有条目
-speccore workspace list --type clarify     # 按类型过滤
-speccore workspace show <entryId>          # 查看详情和原始输入
-speccore workspace clean --days 30         # 清理旧条目
-
-# 提升到迭代层
-speccore clarify --promote <entryId> --to <iteration>
-```
-
-### 1.6.4 与 Ask 引擎的集成
-
-当 Ask 引擎识别到 `clarify` / `research` 意图但缺少迭代上下文时：
-
-1. **确认提示**：展示两种处理方式（speccore 流程 vs 普通 AI 对话）
-2. **默认本地模式**：用户选择 speccore 流程但未指定迭代时，自动附加 `--local`
-3. **闭环提示**：`--prompt` 模式下输出 Prompt 的同时创建工作区条目，提示后续 `--apply --local` 命令
-
-### 1.6.5 设计原则
-
-- **不污染迭代目录**：临时内容完全隔离在 `.speccore/local/workspace/`
-- **可提升**：确认有价值的临时产出可以通过 `--promote` 提升到迭代层
-- **自清理**：`workspace clean` 自动清理过期条目，避免无限膨胀
-- **索引化**：`index.json` 跟踪所有条目状态（pending/done/promoted）
-
----
 
 ## 2. CONSTITUTION.md 设计
 
@@ -3688,7 +3567,7 @@ execute --prompt 执行前:
 - **检测**: 对比源文件 mtime 与索引缓存中记录的 mtime
 - **重建**: 只重建有变更的文件 chunk，未变更的保留
 - **新增文件**: `scanForNewFiles()` 递归扫描目录，检测索引中不存在的 .md 文件
-- **触发点**: analyze 阶段自动检测、手动 `speccore rag-index --refresh`、统一 `speccore refresh`
+- **触发点**: analyze 阶段自动检测；v8.3.341 起手动刷新统一走 `speccore reindex`
 
 #### 4. 代码切片（函数级索引）
 - **切分规则**: `export (async )?(function|class|interface|type|enum|const)` 正则匹配
@@ -3703,12 +3582,9 @@ execute --prompt 执行前:
 - **设计哲学**: 不追求完美文档，追求"能检索到"。支持手动编辑，下次 sync-global 覆盖更新
 - **SUMMARY.md 内容**: 功能清单 + 技术要点 + API 概览 + 已知问题
 
-#### 6. 新 CLI 命令
-- `speccore rag-index` — 显示所有索引文件状态（task/iteration/global）
-- `speccore rag-index --refresh --task Task-001` — 增量刷新
-- `speccore rag-index --full --task Task-001` — 全量重建
-- `speccore refresh` — 一键刷新所有检索层（代码索引 + 文档 RAG + 知识图谱）
-- `speccore refresh --code` / `--rag` / `--graph` — 分别刷新
+#### 6. CLI 命令（已废弃）
+
+> ⚠️ v8.3.341 起 `rag-index`/`refresh` 命令族已移除，统一由 `speccore reindex` 全量重建所有层级索引（analyze 阶段自动增量维护）。
 
 #### 7. Prompt 构建性能优化
 - **REQ.md 统一读取**: `loadReqContent()` 一次读取，三个函数共用缓存（减少 2 次 I/O）

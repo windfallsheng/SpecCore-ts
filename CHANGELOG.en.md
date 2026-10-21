@@ -4,6 +4,47 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.341 (2026-10-21) — engineering health + command inventory consolidation
+
+Two themes: ①four improvements from the full-project health review — deploy engine switched from execSync template concatenation to execFileSync argument arrays (the only security-bearing item — closes the "config-as-command" injection surface), branch-type extraction and env-dir resolution consolidated into shared exports, pure functions in three core engines exported and slice-tested, analyze.ts monolithic function progressively split (8 mode-early-exit blocks, 476 lines, extracted into module-level functions); ②command inventory consolidation — 20 edge commands removed (pipeline core commands, progress exports, and friendly commands like welcome/help/about retained), all mention points (help / ask dictionary / completion / README / docs / IDE slash commands / runtime hints / template presets) cleaned up, index maintenance unified into reindex. Zero behavior change; full suite 621/621 passing.
+
+### Deploy engine argument-array hardening (v8.3.341+)
+
+11 shell-less command executions in `src/core/deploy/engine.ts` moved from execSync string templates to execFileSync argument arrays (new `runFile` wrapper): aws s3 sync, rsync, vercel, kubectl, scp/ssh, helm, pm2, serverless (Alibaba FC / AWS Lambda / Tencent SCF), etc. Config values pass as separate arguments, never interpreted by the shell — previously target/host/namespace values could inject shell metacharacters. Three semantics preserved: `cd X && cmd` transformed equivalently to `cwd=X` array execution; the `scp ${outputDir}/*` glob (previously shell-expanded) now expanded explicitly via the glob package; sshpass password passed as a separate argument (no quote concatenation). User-written shell commands (build_cmd/script/pre_deploy), tool-availability probes (sshpass -V), and pipelines keep execSync.
+
+### Shared utils consolidation (v8.3.341+)
+
+- **extractBranchTypeFromBranchName**: promoted from pr.ts to git-integration as a shared export (pure, testable); pr.ts reuses it; non-task branches (no type segment) return undefined.
+- **envDirFor**: environment-config gains a parameterized export (explicit project root); update-env-configs' initEnvironmentConfigs reuses it — the path join segment now lives in one place.
+
+### Core-engine pure functions exported + slice tests (v8.3.341+)
+
+Three previously untested core engines gain slice tests (18 new cases):
+
+- **structured-extractor**: isTsOrJs / detectLanguage / inferPlatform exported; tests cover TS/JS-family extensions (incl. mts/cts), Java/Python/Go detection, path→platform attribution.
+- **prompt-builder**: extractInfoGaps (INFO_GAP extraction + dedup) and parseAiResponse (AI response JSON parsing) exported and tested — both are key parsers of the AI relay protocol.
+- **extractBranchTypeFromBranchName**: task-branch type extraction, non-task branches → undefined, blank-name tolerance.
+
+### analyze.ts monolithic split (v8.3.341+)
+
+analyzeCommand (previously 2570 lines) is built from "mode early-exit blocks"; 8 zero-data-flow blocks are now module-level functions: analyzeFromCode / analyzeAuditFix / analyzeContextGuard (returns whether handled) / analyzeModuleMode / analyzeFeatureMode / analyzeDocMode / analyzeOverviewMode / analyzeUnitModes — 476 lines total (function down to 2094 lines). Dependency rules: `_projectRoot` passed as a parameter; narrowing lost by extraction (options.module/feature/doc) restored with non-null assertions. The main apply block (~1150 lines) remains for the next round due to the cross-block needsClarify data flow.
+
+### Command inventory consolidation (v8.3.341+)
+
+After auditing 67 command files, pipeline core commands, internal calls, progress exports, and friendly commands (welcome/help/about/doctor/dashboard) are retained; 20 edge commands removed: `knowledge`, `graph`, `rag-index`, `code-index`, `refresh`, `notify`, `workspace`, `recommend`, `baseline`, `diff`, `rollback`, `merge-check`, `verdict`, `impact`, `audit`, `history`, `handover`, `track` (registered as trace), `tracker` (dead file), plus orphan engines `smart-recommend`/`mermaid-render`. All mention points cleaned in sync:
+
+- **Runtime hints relocated**: 25 hints across index-guard/doctor/analyze-engine/code-scanner/error-diagnosis pointing at `speccore refresh/code-index/verdict` now point at `speccore reindex` or the ARBITRATION_REPORT.md human-arbitration entry; the internal execSync call to the removed audit command in done.ts is dropped.
+- **Intent dictionary converged**: intent-recognition drops 6 IntentType entries and intent blocks; "update/refresh index" triggers map to reindex; ask-engine command table / mapping table / workflows cleaned.
+- **Display surface synced**: help category table, completion array, README command table, docs series (command-reference / commands.en / scenarios (both) / DESIGN / quick-reference and 15 files in total), 12 IDE slash commands, SKILL and slash templates generated by init, and the prompts governance presets all drop removed-command mentions (historical version-evolution rows retained; deprecated planning entries annotated "deprecated").
+
+### .speccore.yml config comment unification (v8.3.341+)
+
+Comments in .speccore.yml generated by init and config --upgrade are unified to the meeting-project baseline style (field-name: Chinese description + value → meaning) and stale comments that contradict real code are corrected:
+
+- **Enum values corrected**: arbitration.mode comment simple → l1-only/report-only; settings.patterns.auto_save comment always/false → aggressive/off; ask.routing.mode comment local/llm → cli-only/host-ai-only; assignee.mode gains off; the renamed split command in arbitration description and ai.defaults description becomes taskify.
+- **New sections annotated**: vision section gains comments for model/maxImagesPerPrompt/imageMaxSizeKb and a value → meaning enum for provider; agent_dispatch switches from a pre-section "=" list to a mode field comment with enums.
+- **Reference example synced**: templates/speccore-yml-example.yml and its landed copy (.speccore/examples/config/SPECCORE-YML-EXAMPLE.yml) wording aligned (block_level description / UI-verify section header / devices-browsers block style / smoke inline comments), machine-lock test guarantees same-source identity.
+
 ## v8.3.340 (2026-10-21) — three-tier task naming alignment + member model expansion + PR target env reference
 
 Major themes: ①taskify module/subtask/Git-branch three-tier naming aligned to feature unit names (no global counter, no platform-name redundancy), Git suffix defaults to owner pinyin initials; ②member model expansion (roles / on-project status / branch code). Also: iteration creation auto-initializes staffing & Git config snapshot, runtime dependency fix (MODULE_NOT_FOUND on global install), done/archival full-path unification, title normalization on-demand (off by default), config upgrade chain & static HTML page links fix, member wildcard semantics (* = full-stack / all directions), PR target decoupling (git.pr_target + branch_types[{type}].pr_target, independent of default_base), execute --module multi-value fuzzy matching, and PR target environment-name reference (pr_target: dev resolves to the environment's branch field in .speccore/environments/, unifying PR target with the pipeline/build/deploy environment model; literal branch names still work when no matching env file exists).

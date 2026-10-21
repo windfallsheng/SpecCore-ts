@@ -281,8 +281,6 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | 合规检查 | iter? | `speccore validate -I {iter}` |
 | 搜索 "{keyword}" | keyword | `speccore search "{keyword}"` |
 | 全局搜索 "{keyword}" | keyword | `speccore search "{keyword}" --global` |
-| 追溯 {req} | req | `speccore track --req {req}` |
-| 影响分析 {req} | req | `speccore impact --req {req}` |
 
 ### 知识库与索引
 | 用户说法 | 提取参数 | CLI 命令 |

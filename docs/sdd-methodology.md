@@ -95,7 +95,6 @@ speccore validate                      # 合规校验（自动检测 Spec 完整
 需求 → 迭代 → Task → 代码，完整关联链路。每一行代码都能追溯到具体的需求节点。
 
 ```bash
-speccore impact --req=REQ-001    # 查看需求影响范围
 speccore context -t Task-001 # 查看任务上下文和依赖
 ```
 

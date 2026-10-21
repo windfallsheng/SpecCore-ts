@@ -292,13 +292,6 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
     examples: ['speccore rename --task=Task-001 --name=用户模块重构'],
   },
-  history: {
-    desc: '查看操作历史（原 ops 命令已移除，v8.3.260+）',
-    params: [
-      { flag: '--req <reqId>', meaning: '查看指定需求的变更历史' },
-    ],
-    examples: ['speccore history', 'speccore history --req REQ-001'],
-  },
   ask: {
     desc: '自然语言智能入口：说人话，自动匹配命令',
     params: [
@@ -311,19 +304,6 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore ask "修复支付回调超时的问题"',
     ],
   },
-  'code-index': {
-    desc: '源码索引：扫描代码生成模块索引（多端识别 + git 联动），分析时自动使用',
-    params: [
-      { flag: '--full', meaning: '全量重新扫描（默认增量更新）' },
-      { flag: '--scope <dirs>', meaning: '指定扫描目录（逗号分隔）' },
-      { flag: '--show', meaning: '只显示当前索引摘要' },
-    ],
-    examples: [
-      'speccore code-index --full',
-      'speccore code-index --show',
-      'speccore code-index --scope src/commands,src/core',
-    ],
-  },
   prompts: {
     desc: '提示词库：预置模板 + 自定义提示词，搜索/分类/CRUD/复制',
     params: [
@@ -334,20 +314,6 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       'speccore prompts',
       'speccore pt',
       'speccore prompts --web',
-    ],
-  },
-  refresh: {
-    desc: '统一刷新所有检索层：代码索引 + 文档 RAG + 知识图谱',
-    params: [
-      { flag: '--code', meaning: '只刷新代码索引' },
-      { flag: '--rag', meaning: '只刷新文档 RAG 索引' },
-      { flag: '--graph', meaning: '只刷新知识图谱' },
-      { flag: '--task <id>', meaning: '指定任务范围刷新' },
-    ],
-    examples: [
-      'speccore refresh',
-      'speccore refresh --code',
-      'speccore refresh --rag --graph',
     ],
   },
   reindex: {
@@ -390,21 +356,6 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     ],
     examples: ['speccore retro -t Task-001'],
   },
-  impact: {
-    desc: 'AI 影响分析：变更的上下游影响（what-if）；冲突预测用 merge-check，版本对比用 diff',
-    params: [],
-    examples: ['speccore impact <变更描述>'],
-  },
-  'merge-check': {
-    desc: '合并冲突预测：预测任务分支的合并冲突；变更影响用 impact，版本对比用 diff',
-    params: [],
-    examples: ['speccore merge-check'],
-  },
-  diff: {
-    desc: '版本对比：两个迭代/基线的差异；变更影响用 impact，冲突预测用 merge-check',
-    params: [],
-    examples: ['speccore diff <迭代A> <迭代B>'],
-  },
 };
 
 // ============================================================
@@ -421,7 +372,7 @@ function showAllCommands(): void {
     '🔍 分析与计划': ['analyze', 'global', 'plan'],
     '⚡ 执行与审查': ['execute', 'pr', 'done'],
     '🐛 变更与修复': ['change', 'task new'],
-    ' 状态与查询': ['status', 'validate', 'code-index', 'refresh', 'reindex'],
+    ' 状态与查询': ['status', 'validate', 'reindex'],
     ' 智能入口': ['ask', 'run', 'prompts'],
   };
 
@@ -677,14 +628,14 @@ async function helpHtml(options: HelpOptions): Promise<void> {
         desc: '自动执行任务、代码审查、标记完成'
       },
       '🔄 同步与变更管理': { 
-        cmds: ['change', 'sync', 'retro', 'history'],
+        cmds: ['change', 'sync', 'retro'],
         icon: '🔄',
-        desc: '需求变更追踪、任务回顾、操作历史查询'
+        desc: '需求变更追踪、任务回顾'
       },
       '📊 查看与验证': { 
-        cmds: ['dashboard', 'validate', 'track', 'search', 'knowledge', 'code-index', 'refresh', 'reindex'],
+        cmds: ['dashboard', 'validate', 'search', 'reindex'],
         icon: '📈',
-        desc: '进度看板、知识图谱可视化、代码验证、源码索引'
+        desc: '进度看板、代码验证、索引重建'
       },
       '🛠️ 智能开发助手': { 
         cmds: ['run', 'next'],

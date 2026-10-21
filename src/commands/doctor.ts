@@ -221,7 +221,7 @@ async function checkCodeGraph(projectRoot: string): Promise<DiagnosisResult[]> {
       ok: true,
       category: '代码图谱',
       message: 'graph.json 未生成（可选）',
-      fix: 'speccore code-index --graph --scope src',
+      fix: 'speccore reindex',
     });
     return results;
   }
@@ -243,7 +243,7 @@ async function checkCodeGraph(projectRoot: string): Promise<DiagnosisResult[]> {
         message: isStale
           ? `graph.json 已过期（源码在 ${formatTime(srcStat.mtime)} 后有变更）`
           : 'graph.json 是最新的',
-        fix: isStale ? 'speccore code-index --graph --scope src' : undefined,
+        fix: isStale ? 'speccore reindex' : undefined,
       });
     }
   } catch {
@@ -391,7 +391,7 @@ async function checkNotificationBacklog(projectRoot: string): Promise<DiagnosisR
       ok: false,
       category: '通知',
       message: `未读通知积压: ${unread.length} 条`,
-      fix: '运行 speccore notify --all 标记已读，或逐条处理',
+      fix: '请逐条处理未读通知',
     });
   } else {
     results.push({

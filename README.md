@@ -159,16 +159,6 @@ speccore ask "分析本迭代需求，跳过澄清"     # → analyze --skip-cla
 
 一句「spec once」把需求到部署整条链装进一次会话：需求入口（功能单元 / 文档地址 / 一句话需求）→ 澄清 → 分析 → 拆分任务 → 开发 → 本地冒烟 → 部署验证。**双模式**：默认人机交互（每个节点停下确认），说「全自动/别停」切全自动（仅范围确认、质量门禁失败、冒烟失败三个安全点停下）。哪一步不满意可**回退重跑**：重分析（`analyze --unit` 覆盖+备份）、重拆（`taskify --modules`）、重执行（`execute` 单任务）、重切（`unitize --on-duplicate`）。适合少量功能单元（≤3）的快速闭环，大范围走 `speccore run` 流水线。
 
-### 🧠 知识图谱 & 代码图谱
-
-`speccore graph` 统一查询（知识 + 代码），`speccore knowledge` 可视化图谱：
-
-```bash
-speccore graph query "订单相关代码"        # 自然语言查询
-speccore graph path Task-001 Task-002      # 最短依赖路径
-speccore knowledge                          # 交互式 HTML 知识图谱
-```
-
 ### 📊 仪表盘
 
 `speccore dashboard` 生成 Jira 标准 7 维度看板（需求状态 / 项目健康度 / 进度条）。
@@ -220,9 +210,9 @@ speccore run --skip-smoke                  # 单次跳过冒烟
 | 收尾 | `pipeline` `pr` `done` `spec2doc` |
 | 状态 / 导航 | `status` `next` `dashboard` `progress` |
 | 初始化 / 配置 | `init` `config` `doctor` `update` |
-| 管理工具 | `units` `pattern` `rollback` `history` `baseline` `rename` `cleanup` |
-| 变更 / 专项 | `change` `retro` `verdict` `review` `sync` |
-| 知识检索 | `graph` `knowledge` `query` `entity` `related` `path` `search` `stats` |
+| 管理工具 | `units` `pattern` `rename` `cleanup` |
+| 变更 / 专项 | `change` `retro` `review` `sync` |
+| 知识检索 | `search` |
 
 > 💡 **全命令 Skill**：所有命令均支持 `/命令 + 自然语言` 快捷入口，如 `/deploy 部署到测试环境`、`/verify 跑冒烟测试`。
 

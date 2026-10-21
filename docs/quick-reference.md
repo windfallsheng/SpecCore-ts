@@ -18,8 +18,6 @@ speccore run "做用户积分功能"         # 一句话需求
 speccore validate                     # 合规检查
 speccore dashboard                    # 查看进度
 speccore sync                         # 反向同步 @spec → TASK.md
-speccore diff --source=A --target=B   # 对比迭代
-speccore track --req=REQ-001          # 全链路追溯
 speccore delete -t Task-005           # 安全删除（回收站 + 清理引用）
 speccore search "payment"             # 跨 Spec 搜索
 speccore unitize -f <md> -i <迭代名>   # 切分需求文档 → 功能单元（features/）

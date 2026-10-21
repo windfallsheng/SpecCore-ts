@@ -7,12 +7,22 @@
  * v8.3.60+ 新增
  */
 
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
+import { globSync } from 'glob';
 import { pathExists, copySync, emptyDirSync } from 'fs-extra';
 import { join, isAbsolute } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import type { DeployEnvConfig, PlatformConfig } from '../unified-config';
 import { findProjectRoot } from '../../utils/task-utils';
+
+/**
+ * 参数数组化执行（v8.3.341+）：不带 shell 解释的命令一律走 execFileSync，
+ * 配置值作为独立参数传递，杜绝「配置即命令」的注入面。
+ * 仅用户显式书写的 shell 命令（build_cmd / script / pre_deploy 等）保留 execSync。
+ */
+const runFile = (file: string, args: string[], cwd: string): void => {
+  execFileSync(file, args, { stdio: 'inherit', cwd });
+};
 
 export interface DeployOptions {
   platform: string;      // 端名，如 h5-mobile, api
@@ -235,15 +245,12 @@ async function deployDocker(
 
   // 2. Docker 构建
   logger.info(`  🐳 构建镜像: ${fullImage}`);
-  execSync(`docker build -f ${dockerfile} -t ${fullImage} .`, {
-    stdio: 'inherit',
-    cwd,
-  });
+  runFile('docker', ['build', '-f', dockerfile, '-t', fullImage, '.'], cwd);
 
   // 3. 推送到仓库
   if (config.registry) {
     logger.info(`  📤 推送到: ${config.registry}`);
-    execSync(`docker push ${fullImage}`, { stdio: 'inherit', cwd });
+    runFile('docker', ['push', fullImage], cwd);
   }
 
   // 4. 远程服务器部署
@@ -267,14 +274,14 @@ async function deployDockerRemote(
   }
 
   const host = config.host!;
-  const keyOpt = config.key ? `-i ${config.key}` : '';
+  const keyArgs = config.key ? ['-i', config.key] : [];
 
-  // 密码认证支持
-  let passOpt = '';
+  // 密码认证支持（v8.3.341+: sshpass 改参数数组，密码不经过 shell 引号拼接）
+  let sshpass = '';
   if (config.password) {
     try {
       execSync('sshpass -V', { stdio: 'pipe' });
-      passOpt = `sshpass -p '${config.password.replace(/'/g, "'\"'\"'")}' `;
+      sshpass = config.password;
     } catch {
       throw new Error(
         '密码认证需要安装 sshpass\n' +
@@ -295,10 +302,11 @@ async function deployDockerRemote(
   const remoteCmd = config.script || defaultRemoteCmd;
 
   logger.info(`  🔄 远程 Docker 部署: ${host}`);
-  execSync(`${passOpt}ssh ${keyOpt} ${host} "${remoteCmd}"`, {
-    stdio: 'inherit',
-    cwd,
-  });
+  if (sshpass) {
+    runFile('sshpass', ['-p', sshpass, 'ssh', ...keyArgs, host, remoteCmd], cwd);
+  } else {
+    runFile('ssh', [...keyArgs, host, remoteCmd], cwd);
+  }
 }
 
 /** 静态资源部署 */
@@ -328,11 +336,11 @@ async function deployStatic(
 
   // 支持多种 target 格式
   if (target.startsWith('s3://')) {
-    execSync(`aws s3 sync ${outputDir} ${target} --delete`, { stdio: 'inherit', cwd });
+    runFile('aws', ['s3', 'sync', outputDir, target, '--delete'], cwd);
   } else if (target.startsWith('rsync://') || target.includes(':')) {
     // rsync 远程部署
     const remote = target.replace(/^rsync:\/\//, '');
-    execSync(`rsync -avz --delete ${outputDir}/ ${remote}`, { stdio: 'inherit', cwd });
+    runFile('rsync', ['-avz', '--delete', `${outputDir}/`, remote], cwd);
   } else {
     // 本地路径复制（v8.3.105+: 跨平台，使用 fs-extra 替代 cp -r）
     const targetPath = isAbsolute(target) ? target : join(cwd, target);
@@ -373,7 +381,7 @@ async function deployVercel(
 ): Promise<void> {
   const envFlag = env === 'production' ? '--prod' : '';
   logger.info(`  🚀 Vercel 部署: ${envFlag || 'preview'}`);
-  execSync(`npx vercel ${envFlag} --yes`, { stdio: 'inherit', cwd });
+  runFile('npx', ['vercel', ...(envFlag ? [envFlag] : []), '--yes'], cwd);
 }
 
 /** K8s 部署 */
@@ -388,7 +396,7 @@ async function deployK8s(
   const manifest = await resolveConfigPath(config.script || 'k8s-deployment.yaml', cwd);
 
   logger.info(`  ☸️  K8s 部署: namespace=${namespace}`);
-  execSync(`kubectl apply -f ${manifest} -n ${namespace}`, { stdio: 'inherit', cwd });
+  runFile('kubectl', ['apply', '-f', manifest, '-n', namespace], cwd);
 }
 
 /** SSH 部署：SCP 上传 + SSH 执行命令 */
@@ -404,7 +412,7 @@ async function deploySsh(
   }
 
   const host = config.host;
-  const keyOpt = config.key ? `-i ${config.key}` : '';
+  const keyArgs = config.key ? ['-i', config.key] : [];
   const remoteDir = config.remote_dir || `/opt/services/${platform.name}`;
 
   // 解析 host 格式: user@host:port
@@ -413,14 +421,14 @@ async function deploySsh(
     throw new Error(`host 格式错误: ${host}，应为 user@host:port`);
   }
   const [, user, hostname, port] = hostMatch;
-  const portOpt = port ? `-P ${port}` : '';
+  const portArgs = port ? ['-P', port] : [];
 
-  // 密码认证支持：检测 sshpass 是否可用
-  let passOpt = '';
+  // 密码认证支持：检测 sshpass 是否可用（v8.3.341+: 参数数组，不经过 shell 拼接）
+  let sshpass = '';
   if (config.password) {
     try {
       execSync('sshpass -V', { stdio: 'pipe' });
-      passOpt = `sshpass -p '${config.password.replace(/'/g, "'\"'\"'")}' `;
+      sshpass = config.password;
     } catch {
       throw new Error(
         '密码认证需要安装 sshpass\n' +
@@ -437,21 +445,27 @@ async function deploySsh(
     execSync(config.build_cmd, { stdio: 'inherit', cwd });
   }
 
-  // 2. SCP 上传
+  // 2. SCP 上传（v8.3.341+: 通配符改用 glob 展开，不再依赖 shell）
   const outputDir = config.output_dir || 'dist';
   logger.info(`  📤 SCP 上传: ${outputDir} → ${host}:${remoteDir}`);
-  execSync(`${passOpt}scp -r ${portOpt} ${keyOpt} ${outputDir}/* ${user}@${hostname}:${remoteDir}/`, {
-    stdio: 'inherit',
-    cwd,
-  });
+  const srcFiles = globSync(`${outputDir}/*`);
+  if (srcFiles.length === 0) srcFiles.push(`${outputDir}/*`); // 空目录保留字面量，由 scp 报错提示
+  const sshBase = ['-r', ...portArgs, ...keyArgs, ...srcFiles, `${user}@${hostname}:${remoteDir}/`];
+  if (sshpass) {
+    runFile('sshpass', ['-p', sshpass, 'scp', ...sshBase], cwd);
+  } else {
+    runFile('scp', sshBase, cwd);
+  }
 
-  // 3. SSH 执行重启命令
+  // 3. SSH 执行重启命令（远端 shell 字符串作为单参数，语义不变）
   const restartCmd = config.script || `sudo systemctl restart ${platform.name}`;
   logger.info(`  🔄 SSH 执行: ${restartCmd}`);
-  execSync(`${passOpt}ssh ${keyOpt} ${portOpt} ${user}@${hostname} "cd ${remoteDir} && ${restartCmd}"`, {
-    stdio: 'inherit',
-    cwd,
-  });
+  const sshArgs = [...keyArgs, ...portArgs, `${user}@${hostname}`, `cd ${remoteDir} && ${restartCmd}`];
+  if (sshpass) {
+    runFile('sshpass', ['-p', sshpass, 'ssh', ...sshArgs], cwd);
+  } else {
+    runFile('ssh', sshArgs, cwd);
+  }
 }
 
 /** Helm 部署 */
@@ -470,11 +484,12 @@ async function deployHelm(
 
   // 检查是否有 values 文件（v8.3.296+: 双基准解析，避免端 code_path 下静默丢失 -f）
   const valuesPath = await resolveConfigPath(valuesFile, cwd);
-  const valuesOpt = (await pathExists(valuesPath)) ? `-f ${valuesPath}` : '';
+  const valuesOpt = (await pathExists(valuesPath)) ? ['-f', valuesPath] : [];
 
-  execSync(
-    `helm upgrade --install ${releaseName} ${chart} --namespace ${namespace} --create-namespace ${valuesOpt}`,
-    { stdio: 'inherit', cwd }
+  runFile(
+    'helm',
+    ['upgrade', '--install', releaseName, chart, '--namespace', namespace, '--create-namespace', ...valuesOpt],
+    cwd
   );
 }
 
@@ -497,21 +512,19 @@ async function deployPm2(
   // v8.3.296+: 双基准解析 pm2 配置路径（兼容 .speccore/environments/scripts/ 项目根写法）
   const pm2ConfigPath = await resolveConfigPath(pm2Config, cwd);
 
-  // 2. 本地 PM2 重启
+  // 2. 本地 PM2 重启（v8.3.341+: cd X && cmd 等价变换为 cwd=X 参数数组执行）
   logger.info(`  📦 PM2 重启: ${pm2Config}`);
-  execSync(`cd ${outputDir} && npx pm2 reload ${pm2ConfigPath} --env ${env}`, {
-    stdio: 'inherit',
-    cwd,
-  });
+  runFile('npx', ['pm2', 'reload', pm2ConfigPath, '--env', env], join(cwd, outputDir));
 
   // 3. 如果有远程服务器，SSH + PM2
   if (config.host) {
     const remoteDir = config.remote_dir || `/opt/services/${platform.name}`;
-    const keyOpt = config.key ? `-i ${config.key}` : '';
+    const keyArgs = config.key ? ['-i', config.key] : [];
     logger.info(`  🔄 远程 PM2 重启: ${config.host}`);
-    execSync(
-      `ssh ${keyOpt} ${config.host} "cd ${remoteDir} && npx pm2 reload ecosystem.config.js --env ${env}"`,
-      { stdio: 'inherit', cwd }
+    runFile(
+      'ssh',
+      [...keyArgs, config.host, `cd ${remoteDir} && npx pm2 reload ecosystem.config.js --env ${env}`],
+      cwd
     );
   }
 }
@@ -530,21 +543,21 @@ async function deployServerless(
       // 阿里云函数计算
       const funcName = config.target || platform.name;
       logger.info(`  ⚡ 阿里云 FC 部署: ${funcName}`);
-      execSync(`npx @alicloud/fun deploy --function ${funcName}`, { stdio: 'inherit', cwd });
+      runFile('npx', ['@alicloud/fun', 'deploy', '--function', funcName], cwd);
       break;
     }
     case 'aws-lambda': {
       // AWS Lambda
       const funcName = config.target || platform.name;
       logger.info(`  ⚡ AWS Lambda 部署: ${funcName}`);
-      execSync(`npx serverless deploy --stage ${env}`, { stdio: 'inherit', cwd });
+      runFile('npx', ['serverless', 'deploy', '--stage', env], cwd);
       break;
     }
     case 'tencent-scf': {
       // 腾讯云云函数
       const funcName = config.target || platform.name;
       logger.info(`  ⚡ 腾讯云 SCF 部署: ${funcName}`);
-      execSync(`npx serverless deploy --target ${funcName}`, { stdio: 'inherit', cwd });
+      runFile('npx', ['serverless', 'deploy', '--target', funcName], cwd);
       break;
     }
     default:

@@ -168,7 +168,7 @@ export async function linkRequirementsToCode(
   const graph = await loadCodeGraph(root);
 
   if (!graph) {
-    logger.warn('代码图谱不存在，请先运行 speccore code-index --graph');
+    logger.warn('代码图谱不存在，请先运行 speccore reindex');
     return {
       generatedAt: new Date().toISOString(),
       iteration,

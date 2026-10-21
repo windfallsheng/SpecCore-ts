@@ -74,6 +74,17 @@ export const STANDARD_BRANCH_TYPES = new Set([
   'feature', 'bugfix', 'hotfix', 'release', 'support', 'refactor', 'research',
 ]);
 
+/**
+ * 从分支名第一段提取分支类型（feature/xxx → feature），非任务分支（无类型段）返回 undefined。
+ * v8.3.339+: PR 目标分支按类型区分的前提——从哪类分支发起 PR，就查该类分支的 pr_target。
+ * v8.3.341+: 从 pr.ts 提升至此统一（纯函数，便于测试与多处复用）。
+ */
+export function extractBranchTypeFromBranchName(branch: string): string | undefined {
+  const name = branch.trim();
+  const seg = name.split('/')[0];
+  return seg && seg !== name ? seg : undefined;
+}
+
 const DEFAULT_GIT_CONFIG: GitConfig = {
   defaultBranch: 'main',
   branchType: 'feature',

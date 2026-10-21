@@ -27,7 +27,6 @@ export type IntentType =
   | 'reference'           // 参考查找
   | 'archive'             // 归档
   | 'query_progress'      // 查询进度
-  | 'handover'            // 交接
   | 'health'              // 健康度
   | 'config'              // 配置
   | 'help'                // 帮助
@@ -44,11 +43,7 @@ export type IntentType =
   | 'iteration_from_global' // 从全量生成迭代
   | 'sync_to_global'      // 同步到全量层
   | 'global_status'       // 全量层状态
-  | 'history'             // 历史查询
-  | 'impact'              // 影响分析
-  | 'baseline'            // 版本基线
   | 'dashboard'           // 仪表盘
-  | 'audit'               // 智能审计
   | 'rename'              // 重命名
   | 'new_task'            // 新建多平台Task
   | 'task_append'         // 往已有任务补端子任务
@@ -57,7 +52,6 @@ export type IntentType =
   | 'context'            // 查看上下文
   | 'doc2spec'           // Word 需求文档导入
   | 'synthesize'         // 需求文档智能合成
-  | 'verdict'            // v8.3.24+: 契约冲突裁决
   | 'global_analyze'     // v8.3.255+: 全局层分析（speccore global 独立命令）
   | 'next';              // v8.3.189+: 下一步指引（检测进度）
 
@@ -397,15 +391,6 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['状态(.+)', '情况(.+)', '(.+)怎么样了'],
     description: '状态看板 — 简洁版任务状态总览',
   },
-  // 交接
-  {
-    id: 'handover',
-    intent: 'handover',
-    priority: 65,
-    triggers: ['交接', '转交', '移交', '交接文档', '交接一下'],
-    patterns: ['交接(.+)', '转交(.+)', '生成交接文档'],
-    description: '生成交接文档 — 汇总迭代关键信息和待办事项',
-  },
   // 健康度（v8.3.257: 无独立 health 命令，路由到 doctor）
   {
     id: 'doctor',
@@ -484,36 +469,6 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     patterns: ['全量状态', '全局状态', '查看全量层', '全局看板'],
     description: '查看全量仪表盘 — 所有项目、需求、架构总览（dashboard --scope global）',
   },
-  // 历史
-  {
-    id: 'history',
-    intent: 'history',
-    priority: 55,
-    triggers: ['历史', '变更记录', '谁改的', '什么时候'],
-    patterns: ['查看(.*)历史', '(.*)变更记录', '谁改了(.*)', '(.*)的变更历史'],
-    description: '查看需求历史 — 变更历史和版本演进',
-  },
-  // ============================================================
-  // P0/P1/P2 新增命令
-  // ============================================================
-  // 影响分析 (P0)
-  {
-    id: 'impact',
-    intent: 'impact',
-    priority: 80,
-    triggers: ['影响', '依赖', '波及', '影响分析', '变更影响', '会影响谁'],
-    patterns: ['(.*)影响(.*)', '变更(.*)影响', '分析(.*)依赖', '(.*)会影响谁'],
-    description: '变更影响分析 — 分析需求变更对上下游的影响范围',
-  },
-  // 版本基线 (P1)
-  {
-    id: 'baseline',
-    intent: 'baseline',
-    priority: 60,
-    triggers: ['基线', '快照', '版本', '回滚'],
-    patterns: ['创建基线', '打快照', '回滚', '(.*)基线'],
-    description: '版本基线管理 — 创建需求快照、对比和回滚',
-  },
   // 仪表盘 (P1)
   {
     id: 'dashboard',
@@ -522,15 +477,6 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     triggers: ['仪表盘', '看板', '可视化', '总览图'],
     patterns: ['仪表盘', '看板', '可视化', '生成.*总览'],
     description: '可视化仪表盘 — 生成 Chart.js 图表看板',
-  },
-  // 智能审计 (P2)
-  {
-    id: 'audit',
-    intent: 'audit',
-    priority: 50,
-    triggers: ['审计', '扫描', '检查', '重复', '歧义'],
-    patterns: ['智能审计', '扫描全量层', '检查重复需求'],
-    description: 'AI 智能审计 — 发现重复需求、歧义描述、孤立需求',
   },
   // 重命名
   {
@@ -554,14 +500,14 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     description: '创建多平台任务 — 支持 --platforms 指定前端平台（task new）',
   },
   // 添加平台 (v4.0)（v8.3.257: platform-add 无对应 CLI 命令，已移除 mapping）
-  // 更新索引 (v4.0) → v8.3.138: 映射到 refresh 命令，覆盖四层架构全部目录
+  // 更新索引 (v4.0) → v8.3.341: refresh 命令已移除，映射到 reindex
   {
-    id: 'refresh',
+    id: 'reindex',
     intent: 'index_update',
     priority: 58,
-    triggers: ['更新索引', '重建索引', '刷新索引', '重新扫描', '刷新rag', '刷新知识图谱', '重建rag', 'refresh index', 'reindex'],
-    patterns: ['更新索引', '重建索引', '刷新索引', '重新扫描', '刷新.rag', '重建.rag', 'refresh.*index', 'reindex'],
-    description: '统一刷新所有检索层 — 代码索引 + 文档 RAG（GLOBAL/RULES/SKILLS/PATTERNS）+ 知识图谱',
+    triggers: ['更新索引', '重建索引', '刷新索引', '重新扫描', '重建rag', '刷新知识图谱', 'refresh index', 'reindex'],
+    patterns: ['更新索引', '重建索引', '刷新索引', '重新扫描', '重建.rag', 'refresh.*index', 'reindex'],
+    description: '全量重建所有层级索引 + 知识图谱 + 衰减检测（reindex）',
   },
   // 查看上下文 (v4.0)
   {
@@ -589,16 +535,6 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     triggers: ['合成需求', '合并需求', '需求合成', '智能合成', '需求合并'],
     patterns: ['合成.*需求', '合并.*需求', '需求.*合成', '多端.*合并', '.*综合需求', '.*功能单元.*合成'],
     description: '需求文档智能合成 — 已整合到 analyze --full（多端全量分析 → 跨端综合 → 功能单元合成）',
-  },
-  // v8.3.24+: 契约冲突裁决
-  {
-    id: 'verdict',
-    intent: 'verdict',
-    priority: 82,
-    triggers: ['裁决', '仲裁', '冲突裁决', '契约裁决', 'verdict', '查看冲突', '待裁决', '人工裁决', '裁决书', '解决冲突'],
-    patterns: ['裁决(.+)', '仲裁(.+)', '查看(.+)冲突', '解决(.+)冲突', '(.+)裁决'],
-    description: '契约冲突裁决 — 查看待裁决冲突、进行人工裁决、查看裁决书',
-    args: '--list | --conflict <id> --decide <outcome> | --report',
   },
 ];
 

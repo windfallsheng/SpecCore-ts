@@ -114,14 +114,6 @@ speccore execute --task=Task-002 --force
 
 # 4. Team progress
 speccore status-panel --detail
-speccore health
-
-# 5. Impact analysis
-speccore impact --req=REQ-001
-# → Affects: Task-001, Task-002
-
-# 6. Generate handover doc
-speccore handover --iteration=2026-07-Sprint
 ```
 
 ---
@@ -129,23 +121,13 @@ speccore handover --iteration=2026-07-Sprint
 ## Scenario 5: Requirement Change
 
 ```bash
-# 1. Analyze impact
-speccore impact --req=REQ-001
-# → Scope: Task-001(Login), Task-002(Register)
-
-# 2. Create baseline (pre-change snapshot)
-speccore baseline --name=before-change
-
-# 3. Describe change
+# 1. Describe change
 speccore change --req=REQ-001 --desc="Add SMS verification to login"
 
-# 4. Update affected tasks
+# 2. Update affected tasks
 speccore update --task=Task-001 --status=in_progress
 
-# 5. Compare before/after
-speccore diff --source=before-change --target=current
-
-# 6. Validate
+# 3. Validate
 speccore validate --iteration=2026-07-Sprint
 ```
 
@@ -186,7 +168,7 @@ jobs:
       - name: Validate Specs
         run: speccore validate --all
       - name: Check Health
-        run: speccore health
+        run: speccore dashboard --health
       - name: Progress Report
         run: speccore status-panel --format=json > progress.json
 ```
@@ -257,7 +239,7 @@ speccore done --task=Task-005
 
 ```bash
 # 1. Overall health
-speccore health
+speccore dashboard --health
 
 # 2. Platform-specific progress
 speccore status-panel --platform=web --detail
@@ -274,24 +256,6 @@ speccore done --task=Task-001 --output=dashboard.html
 
 ---
 
-## Scenario 12: Establish Baselines
-
-```bash
-# 1. Create baseline before release
-speccore baseline --name=v2.0-release
-
-# 2. Continue development for v2.1...
-
-# 3. Compare versions
-speccore diff --source=v2.0-release --target=2026-07-Sprint
-
-# 4. Restore requirement if needed
-speccore baseline --restore=v2.0-release --req=REQ-005
-
-# 5. List baselines
-speccore baseline --list
-```
-
 ---
 
 ## Quick Reference
@@ -301,8 +265,8 @@ speccore baseline --list
 | New Project | `speccore init` | `init → iteration create → task new` |
 | Daily Dev | `speccore execute -t Task-001` | `execute → verify → pr` |
 | Bug Fix | `speccore task new --name="xxx" --type=bugfix` | `bugfix → execute → sync → change` |
-| Change Mgmt | `speccore impact --req=REQ-001` | `impact → baseline → change → validate` |
-| Team Collab | `speccore execute --assignee 张三` | `execute → handover` |
+| Change Mgmt | `speccore change --req=REQ-001` | `change → update → validate` |
+| Team Collab | `speccore execute --assignee 张三` | `execute → sync` |
 | Long Chain | `speccore execute --all --batch-size=3` | `execute --resume` |
 | CI/CD | `speccore init` | hooks + GitHub Actions |
 | Global Layer | `speccore iteration-from-global` | `iteration-from-global → sync --global` |
@@ -385,47 +349,34 @@ speccore done --restore=Task-001 --iteration=2026-07-Sprint
 ## Scenario 16: Mid-development Requirement Changes
 
 ```bash
-# 1. Create pre-change baseline
-speccore baseline --name=before-login-change
-
-# 2. Analyze impact
-speccore impact --req=REQ-001
-# → Affects: Task-001(Login), Task-003(Permissions)
-
-# 3. Record the change
+# 1. Record the change
 speccore change --req=REQ-001 --desc="Add SMS verification to login" --task=Task-001
 
-# 4. Manually update affected Spec files
+# 2. Manually update affected Spec files
 #    Edit Task-001/backend/REQ.md
 #    Edit Task-001/_shared/API_CONTRACT.yaml
 
-# 5. Update task status
+# 3. Update task status
 speccore update --task=Task-001 --status=in_progress
 
-# 6. Re-sync to global layer
+# 4. Re-sync to global layer
 speccore sync --global --iteration=2026-07-Sprint
 
-# 7. Compare before/after
-speccore diff --source=before-login-change --target=2026-07-Sprint
-
-# 8. Validate
+# 5. Validate
 speccore validate
 ```
 
 ### Major Iteration Overhaul
 
 ```bash
-# 1. Snapshot first
-speccore baseline --name=before-refactor
+# 1. Process each task: change → edit Spec → validate
 
-# 2. Process each task with impact → change → edit Spec → validate
-
-# 3. If entire iteration needs a restart
+# 2. If entire iteration needs a restart
 speccore delete --iteration=2026-07-Sprint-old --force
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-Sprint-new
 ```
 
-**Mantra:** `baseline → impact → change → edit Spec → validate`
+**Mantra:** `change → edit Spec → validate`
 
 ---
 
@@ -540,11 +491,6 @@ speccore context --task=Task-001
 # 2. Overall progress
 speccore status-panel --iteration=2026-07-Sprint --detail
 
-# 3. Health check
-speccore health
-
-# 4. Generate handover report
-speccore handover --iteration=2026-07-Sprint
 speccore status-panel --export --format=html --output=status.html --team
 ```
 
@@ -717,7 +663,7 @@ speccore sync --task=Task-002 --detect
 **Verify**:
 ```bash
 speccore status-panel              # Overall progress
-speccore health --task=Task-001  # Health check
+speccore doctor --task=Task-001  # Health check
 ```
 
 ---
@@ -732,10 +678,7 @@ speccore health --task=Task-001  # Health check
 speccore sync --task=Task-001 --detect
 speccore validate
 
-# 2. Generate audit report
-speccore audit 2>&1 > iteration-Q3/review/Task-001-audit.md
-
-# 3. Archive (close task, clean hotfix flags)
+# 2. Archive (close task, clean hotfix flags)
 speccore done --task=Task-001
 
 # 4. Sync iteration requirements to global
@@ -765,15 +708,6 @@ speccore done --task=Task-001
 # Symptom: every command reports "cannot find current iteration"
 # Fix
 # 💬 "Relocate current iteration"
-```
-
-### Manually Deleted Task Directory
-
-```bash
-# Symptom: speccore execute --task=Task-003 reports "Task not found"
-# Fix: restore from .bak
-speccore rollback --task=Task-003 --list      # View recoverable backups
-speccore rollback --task=Task-003 --confirm   # Restore latest backup
 ```
 
 ### Corrupted .speccore/ Configuration

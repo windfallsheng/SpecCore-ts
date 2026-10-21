@@ -520,7 +520,7 @@ export async function updateCommand(options: { force?: boolean; tool?: string; y
   if (!isSameVersion) {
     logger.info('');
     logger.info('  💡 升级提示：建议运行以下命令刷新全局索引，以确保 RULES/SKILLS/PATTERNS 被纳入检索范围');
-    logger.info('     speccore refresh  或  speccore rag-index --scope global');
+    logger.info('     speccore reindex');
   }
 
   // v8.3.62+: 检查全局 CLI 是否需要更新（与 init 保持一致）
@@ -859,4 +859,47 @@ async function checkAllUpgradeIssues(projectRoot: string): Promise<UpgradeCheckR
   } catch { /* 静默失败 */ }
 
   return result;
+}
+
+/**
+ * 架构文档自动更新 — 分析新 API/表，追加到 ARCHITECTURE.md（v8.3.341+: 从已移除的 merge-check 命令迁入）
+ */
+export async function updateArchitecture(iteration: string, newApis: string[], newTables: string[]): Promise<void> {
+  const archPath = `.speccore/PROJECT/ARCHITECTURE.md`;
+  if (!(await pathExists(archPath))) return;
+
+  let arch = await readFile(archPath, 'utf-8');
+  const now = new Date().toISOString().split('T')[0];
+  let updated = false;
+
+  // Append new APIs
+  if (newApis.length > 0) {
+    if (!arch.includes('## API 层')) {
+      arch += '\n\n## API 层\n\n> 自动更新 | ' + now + '\n';
+    }
+    for (const api of newApis) {
+      if (!arch.includes(api)) {
+        arch += `- \`${api}\` ← Iteration-${iteration}\n`;
+        updated = true;
+      }
+    }
+  }
+
+  // Append new tables
+  if (newTables.length > 0) {
+    if (!arch.includes('## 数据层')) {
+      arch += '\n\n## 数据层\n\n> 自动更新 | ' + now + '\n';
+    }
+    for (const table of newTables) {
+      if (!arch.includes(table)) {
+        arch += `- \`${table}\` ← Iteration-${iteration}\n`;
+        updated = true;
+      }
+    }
+  }
+
+  if (updated) {
+    await writeFile(archPath, arch);
+    logger.info(`  📐 已更新架构文档: ${newApis.length} API + ${newTables.length} 表`);
+  }
 }

@@ -125,7 +125,6 @@ speccore ask "查看进度"
 speccore task new --name=用户登录               # 快捷创建 Task
 speccore validate --iteration=Q1               # 检查合规
 speccore rename --target=Task-001 --new-name=用户认证
-speccore history                                    # 操作历史
 speccore dashboard                              # 可视化看板
 speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive
 
@@ -155,7 +154,6 @@ speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive  # 批量Bu
 speccore dashboard                  # 终端状态面板
 speccore dashboard --export=html    # 导出HTML仪表盘
 speccore validate -i Q1                # Spec 合规检查
-speccore history                           # 操作历史
 
 # ── 其它 ──
 speccore rename --target=Task-001 --new-name=用户模块

@@ -23,36 +23,23 @@ import { executeCommand } from './commands/execute';
 import { askCommand } from './commands/ask';
 import { aboutCommand } from './commands/about';
 import { doctorCommand } from './commands/doctor';
-import { registerNotifyCommand } from './commands/notify';
-import { registerRecommendCommand } from './commands/recommend';
 import { changeCommand } from './commands/change';
 import { syncCommand } from './commands/sync';
-import { historyCommand } from './commands/history';
 import { patternCommand } from './commands/pattern';
 import { globalAnalyzeCommand, globalFromSourceCommand, globalRulesCommand, globalPatternsCommand } from './commands/global';
-import { rollbackCommand } from './commands/rollback';
-import { handoverCommand } from './commands/handover';
 import { helpCommand } from './commands/help';
 import { runCommand } from './commands/run';
 import { nextCommand } from './commands/next';
 import { welcomeCommand } from './commands/welcome';
 import { statusPanelCommand } from './commands/status-panel';
-import { knowledgeCommand } from './commands/knowledge';
-import { graphQueryCommand, graphEntityCommand, graphRelatedCommand, graphStatsCommand, graphPathCommand, graphRenderCommand } from './commands/graph';
 import { doc2specCommand } from './commands/doc2spec';
 import { unitizeCommand } from './commands/unitize';
 import { spec2docCommand } from './commands/spec2doc';
 import { unitsCommand } from './commands/units';
-import { registerCodeIndexCommand } from './commands/code-index';
-import { registerRagIndexCommand } from './commands/rag-index';
-import { registerRefreshCommand } from './commands/refresh';
 // 全量层命令
 import { iterationFromGlobalCommand } from './commands/iteration-from-global';
 import { syncGlobalCommand } from './commands/sync-global';
 // P0/P1/P2 新增命令
-import { impactCommand } from './commands/impact';
-import { baselineCommand } from './commands/baseline';
-import { auditCommand } from './commands/audit';
 import { analyzeCommand } from './commands/analyze';
 import { reqDocCommand } from './commands/req-doc';
 import { prCommand } from './commands/pr';
@@ -62,20 +49,13 @@ import { pipelineCommand } from './commands/pipeline';
 import { buildConstitution } from './core/constitution-builder';
 import { contextCommand } from './commands/context-output';
 import { doneCommand } from './commands/done';
-import { verdictCommand } from './commands/verdict';
-import { workspaceCommand } from './commands/workspace';
 // rename 命令
 import { renameCommand } from './commands/rename';
 import { retroCommand } from './commands/retro';
 import { reindexCommand } from './commands/reindex';
-import { updateCommand } from './commands/update';
+import { updateCommand, updateArchitecture } from './commands/update';
 import { migrateCommand } from './commands/migrate';
 import { completionCommand } from './commands/completion';
-
-import { diffCommand } from './commands/diff';
-import { traceCommand } from './commands/trace';
-import { mergeCheck, rollbackTask, updateArchitecture } from './commands/merge-check';
-import { trackerCommand } from './commands/tracker';
 import { deleteCommand } from './commands/delete';
 import { searchCommand } from './commands/search';
 import { promptsCommand } from './commands/prompts';
@@ -176,74 +156,6 @@ program
   .option('--scope <scope>', '视图: iteration(默认/当前迭代) | global(全量)', 'iteration')
   .option('--group-by <key>', '任务分组维度: feature（按功能模块分组列出清单）')
   .action(statusPanelCommand);
-
-program
-  .command('knowledge')
-  .alias('kg')
-  .description('知识图谱可视化：交互式图谱 + 衰减检测 + RAG 上下文预览')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--export <path>', 'Export HTML to custom path')
-  .action(knowledgeCommand);
-
-// v8.3.186+: knowledge-explain/path/query 已合并到 graph 子命令（graph 是超集，融合知识图谱+代码图谱）
-const graphCmd = program
-  .command('graph')
-  .alias('g')
-  .description('统一图谱查询：融合知识图谱 + 代码图谱');
-
-graphCmd
-  .command('query <question>')
-  .alias('q')
-  .description('自然语言查询两种图谱（默认启用 LLM 语义增强）')
-  .option('-t, --type <type>', '查询范围: all | knowledge | code', 'all')
-  .option('-l, --limit <n>', '最多返回结果数', '10')
-  .option('--smart', '启用 LLM 语义增强（默认开启）', true)
-  .option('--fast', '快速模式，跳过 LLM 语义增强')
-  .action((question: string, opts: any) => graphQueryCommand(question, {
-    type: opts.type,
-    limit: parseInt(opts.limit, 10),
-    smart: opts.fast ? false : opts.smart !== false,
-  }));
-
-graphCmd
-  .command('entity <id>')
-  .alias('e')
-  .description('查询特定实体详情')
-  .option('-t, --type <type>', '查询范围: all | knowledge | code', 'all')
-  .action((id: string, opts: any) => graphEntityCommand(id, { type: opts.type }));
-
-graphCmd
-  .command('related <id>')
-  .alias('r')
-  .description('查询实体的关联实体（一阶邻居）')
-  .action((id: string) => graphRelatedCommand(id, {}));
-
-graphCmd
-  .command('path <from> <to>')
-  .alias('p')
-  .description('查找两实体间的最短路径')
-  .option('-t, --type <type>', '查询范围: all | knowledge | code', 'all')
-  .action((from: string, to: string, opts: any) => graphPathCommand(from, to, { type: opts.type }));
-
-graphCmd
-  .command('stats')
-  .alias('s')
-  .description('输出两种图谱的统计信息')
-  .option('-t, --type <type>', '统计范围: all | knowledge | code', 'all')
-  .action((opts: any) => graphStatsCommand({ type: opts.type }));
-
-graphCmd
-  .command('render [file]')
-  .alias('r')
-  .description('渲染 Mermaid 图表为 HTML（支持 .mmd 文件或从 Markdown 提取）')
-  .option('--all', '批量渲染 diagrams/ 目录下所有 .mmd')
-  .option('--extract', '从 Markdown 文件提取 Mermaid 代码块')
-  .option('-o, --output <dir>', '输出目录')
-  .action((file: string | undefined, opts: any) => graphRenderCommand(file, {
-    all: opts.all,
-    extract: opts.extract,
-    output: opts.output,
-  }));
 
 program
   .command('next')
@@ -705,19 +617,6 @@ program
     return verifyCommand(options);
   });
 
-// 源码索引
-registerCodeIndexCommand(program);
-
-// RAG 索引管理
-registerRagIndexCommand(program);
-
-// 统一刷新所有检索层
-registerRefreshCommand(program);
-
-registerNotifyCommand(program);
-
-registerRecommendCommand(program);
-
 // 全量索引重建与一致性检查
 program
   .command('reindex')
@@ -771,16 +670,6 @@ program
 // ================================================================
 // 📦 归档与交接
 // ================================================================
-program
-
-program
-  .command('handover')
-  .alias('ho')
-  .description('Generate handover documentation for current iteration')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('-o, --output <path>', 'Output file path')
-  .option('--format <format>', 'Output format: md', 'md')
-  .action(handoverCommand);
 
 program
   .command('archive')
@@ -962,51 +851,8 @@ program
   .action(patternCommand);
 
 // ================================================================
-// 🔙 回滚
-// ================================================================
-program
-  .command('rollback')
-  .alias('rb')
-  .description('Restore Spec files from .bak backups')
-  .option('-t, --task <task>', 'Target task')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--list', 'List backups only, do not restore')
-  .option('--confirm', 'Confirm restore (required to execute)')
-  .action(rollbackCommand);
-
-program
-  .command('history')
-  .alias('hi')
-  .description('📜 历史记录：默认显示操作日志，--req 查看需求变更历史')
-  .option('--req <reqId>', '需求 ID，查看指定需求的变更历史')
-  .action(historyCommand);
-
-program
-
-// ================================================================
 // 🔗 P0/P1/P2 新增命令
 // ================================================================
-program
-  .command('impact')
-  .alias('if')
-  .description('Intelligent impact analysis: analyze upstream/downstream effects of changes')
-  .option('--req <id>', 'Requirement ID (e.g., REQ-001)')
-  .option('--task <id>', 'Task ID (e.g., Task-001)')
-  .option('--depth <n>', 'Trace depth (default: 3)', '3')
-  .option('--output <format>', 'Output format: report, graph', 'report')
-  .action(impactCommand);
-
-program
-  .command('baseline')
-  .alias('bl')
-  .description('Version baseline: create snapshots, compare, list, and rollback')
-  .option('--name <name>', 'Baseline name')
-  .option('--list', 'List all baselines')
-  .option('--compare <name>', 'Compare current state with baseline')
-  .option('--restore <name>', 'Restore to baseline')
-  .option('--req <id>', 'Requirement ID for rollback')
-  .action(baselineCommand);
-
 program
   .command('analyze')
   .alias('al')
@@ -1140,27 +986,6 @@ program
     reqDocCommand({ ...opts, input });
   });
 
-program
-  .command('workspace')
-  .alias('ws')
-  .description('管理临时工作区（list/show/clean）')
-  .option('--list', '列出所有条目（默认）')
-  .option('--show <entryId>', '查看条目详情')
-  .option('--clean', '清理旧条目')
-  .option('--days <n>', '清理天数阈值（默认 30）')
-  .option('--type <type>', '过滤类型: clarify | research')
-  .action(workspaceCommand);
-
-program
-  .command('audit')
-  .alias('ad')
-  .description('AI-powered audit: detect duplicates, ambiguity, and orphaned requirements')
-  .option('--fix', 'Auto-fix fixable issues')
-  .option('--detail', 'Show detailed analysis')
-  .option('--specs', 'Audit 020-specs/ quality: enum consistency, API path alignment, coverage gaps')
-  .option('-I, --iteration <name>', 'Target iteration for --specs audit')
-  .action(auditCommand);
-
 // 重命名
 program
   .command('rename')
@@ -1209,47 +1034,10 @@ program
   .action(doneCommand);
 
 program
-  .command('verdict')
-  .alias('vd')
-  .description('契约冲突裁决：查看冲突、人工裁决、查看裁决书')
-  .option('--list', '列出待裁决冲突')
-  .option('--conflict <id>', '指定冲突 ID 进行裁决')
-  .option('--decide <outcome>', '裁决结果: pass | pass-with-conditions | reject | defer')
-  .option('--reason <reason>', '裁决理由')
-  .option('--report <task>', '查看指定任务的裁决书')
-  .option('-t, --task <task>', '指定任务')
-  .option('-i, --iteration <iteration>', '指定迭代')
-  .action(verdictCommand);
-
-program
   .command('completion [shell]')
   .alias('cmp')
   .description('Generate shell completion script (bash/zsh)')
   .action(completionCommand);
-
-program
-  .command('diff')
-  .alias('df')
-  .description('Compare two iterations or baselines')
-  .requiredOption('--source <name>', 'Source iteration/baseline')
-  .requiredOption('--target <name>', 'Target iteration/baseline')
-  .action(diffCommand);
-
-program
-  .command('merge-check')
-  .alias('mc')
-  .description('Predict merge conflicts across task branches')
-  .option('-i, --iteration <iteration>', 'Target iteration')
-  .action(async (options: any) => { const { getDefaultIteration } = await import('./core/context'); const it = await getDefaultIteration(options.iteration); if (it) await mergeCheck(it); });
-
-program
-  .command('track')
-  .alias('trk')
-  .description('REQ→Task→Code 全链路追踪')
-  .option('--req <id>', 'Trace from requirement ID')
-  .option('--task <id>', 'Trace from task ID')
-  .option('--full', 'Full project trace')
-  .action(traceCommand);
 
 program
   .command('delete')

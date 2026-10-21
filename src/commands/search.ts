@@ -102,7 +102,7 @@ async function searchGlobalKnowledgeCmd(query: string): Promise<void> {
     logger.info('');
 
     if (result.totalFound === 0) {
-      logger.info('  暂无全局知识匹配。可先运行 `speccore refresh --rag` 建立全局索引。');
+      logger.info('  暂无全局知识匹配。可先运行 `speccore reindex` 建立全局索引。');
       return;
     }
 

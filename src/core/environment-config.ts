@@ -72,7 +72,11 @@ export interface EnvironmentConfig {
   };
 }
 
-const envDir = () => join(getProjectRoot(), '.speccore', 'environments');
+/** 指定项目根下的环境配置目录（v8.3.341+: 带参导出，供 update-env-configs 等外部项目场景复用） */
+export const envDirFor = (projectRoot: string) => join(projectRoot, '.speccore', 'environments');
+
+/** 当前项目根下的环境配置目录 */
+const envDir = () => envDirFor(getProjectRoot());
 
 /** 解析 YAML（复用统一配置中的解析逻辑） */
 function parseEnvYaml(content: string): Record<string, unknown> {

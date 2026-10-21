@@ -155,7 +155,7 @@ export async function writeArbitrationReport(
       lines.push(`- **状态**: ${c.status}`);
       lines.push(`- **说明**: ${c.message}`);
       if (c.status === 'pending-review') {
-        lines.push(`- **⚠️ 此冲突需人工裁决，请执行: \`speccore verdict --conflict ${c.id} --decide\`**`);
+        lines.push(`- **⚠️ 此冲突需人工裁决，请执行: \`在任务目录 ARBITRATION_REPORT.md 中人工填写裁决\`**`);
       }
       if (c.verdict) {
         lines.push(`- **裁决**: ${c.verdict.outcome}`);

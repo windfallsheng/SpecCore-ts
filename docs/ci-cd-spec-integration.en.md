@@ -59,7 +59,7 @@ jobs:
 | :--- | :--- | :--- |
 | Pre-commit | `speccore validate` | REQ.md format errors, missing API tables |
 | Pre-push | `speccore sync --all --detect` | Spec/code mismatch |
-| PR check | `speccore audit` | Global compliance |
+| PR check | `speccore validate --all` | Global compliance |
 | Post-merge | `speccore sync --global` | Update global index |
 | Pre-release | `speccore dashboard` | Progress & health overview |
 

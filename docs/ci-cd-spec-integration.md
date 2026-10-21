@@ -59,7 +59,7 @@ jobs:
 | :--- | :--- | :--- |
 | Pre-commit | `speccore validate` | REQ.md 格式错误、接口表缺失 |
 | Pre-push | `speccore sync --all --detect` | Spec 与代码不一致 |
-| PR 检查 | `speccore audit` | 全局合规性 |
+| PR 检查 | `speccore validate --all` | 全局合规性 |
 | 合并后 | `speccore sync --global` | 更新视角索引 |
 | 发版前 | `speccore dashboard` | 整体进度、健康度一张图 |
 

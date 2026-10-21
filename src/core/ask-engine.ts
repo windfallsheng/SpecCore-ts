@@ -81,11 +81,9 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'dashboard', aliases: ['db'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态'] },
   { name: 'analyze', aliases: ['al'], description: '迭代层分析：需求文档+源码→分析报告（产物 020-specs/）。支持 --full 三阶段合成，--deep 单文档深度分析，--iterative 迭代式生成，--filter 按需分析指定模块，--with-code 注入代码结构化数据，--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--no-source 跳过源码，--supplement 追加源码；全局层（源码→技术文档/反推需求）用 speccore global',
-    usage: 'speccore analyze [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore global analyze --layer 1', 'speccore global from-source --src src/core'], related: ['dashboard', 'validate', 'code-index', 'refresh', 'synthesize'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
+    usage: 'speccore analyze [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore global analyze --layer 1', 'speccore global from-source --src src/core'], related: ['dashboard', 'validate'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
   { name: 'global', aliases: [], description: '全局层分析：源码→技术文档（global analyze，Layer 1→4 推进）/ 源码→需求文档（global from-source，反推）。产物 .speccore/GLOBAL/，独立于迭代层 analyze',
-    usage: 'speccore global analyze [--layer 1-4] [--with-code] [--auto] | speccore global from-source --src <dirs> [--depth <depth>]', examples: ['speccore global analyze --layer 1', 'speccore global analyze --with-code', 'speccore global from-source --src backend/src,admin-web/src'], related: ['analyze', 'code-index'], triggers: ['全局分析', '全局层分析', '分析全局', '全局架构', '全局代码分析', '全局技术分析', '分析所有端', '分析所有源码', '分析所有工程', '分析整体架构', '项目架构分析', '全量分析', '跨端综合', '全量合成', '多端合成', '源码反推', '从源码反推', '源码生成需求', '反推需求', '从代码生成', '倒推需求', '反推', '逆向工程', '按端反推', '按端生成需求', '根据端生成需求', '端生成需求', '生成需求文档', '需求文档反推', '代码生成需求', '从代码生成需求', '根据代码生成需求', '按模块反推', '反推文档', '从工程生成需求'] },
-  { name: 'code-index', aliases: ['ci', 'idx'], description: '源码索引：扫描项目代码，自动识别多端/模块/依赖，生成 Markdown 索引',
-    usage: 'speccore code-index [--full] [--scope <dirs>] [--show]', examples: ['speccore code-index', 'speccore code-index --full', 'speccore code-index --scope src/commands,src/core', 'speccore code-index --show'], related: ['analyze', 'run'], triggers: ['代码索引', '源码索引', 'code-index', '索引', '建索引', '更新索引', '扫描代码', '代码结构', '模块索引', '项目结构'] },
+    usage: 'speccore global analyze [--layer 1-4] [--with-code] [--auto] | speccore global from-source --src <dirs> [--depth <depth>]', examples: ['speccore global analyze --layer 1', 'speccore global analyze --with-code', 'speccore global from-source --src backend/src,admin-web/src'], related: ['analyze'], triggers: ['全局分析', '全局层分析', '分析全局', '全局架构', '全局代码分析', '全局技术分析', '分析所有端', '分析所有源码', '分析所有工程', '分析整体架构', '项目架构分析', '全量分析', '跨端综合', '全量合成', '多端合成', '源码反推', '从源码反推', '源码生成需求', '反推需求', '从代码生成', '倒推需求', '反推', '逆向工程', '按端反推', '按端生成需求', '根据端生成需求', '端生成需求', '生成需求文档', '需求文档反推', '代码生成需求', '从代码生成需求', '根据代码生成需求', '按模块反推', '反推文档', '从工程生成需求'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
     usage: 'speccore execute [--task <id>] [--batch-size <n>] [--auto]', examples: ['speccore execute', 'speccore execute --batch-size 3'], related: ['plan', 'done'], triggers: ['执行', 'execute', '开发', '开始做', '干活'] },
   { name: 'plan', aliases: ['pl'], description: '生成执行计划+管理历史：创建/交互/列表/详情/取消',
@@ -100,7 +98,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'verify', aliases: ['vf'], description: '测试验证：冒烟测试 + 视觉检查 + API 契约 + 性能基线。支持 --headed 有头模式、--browser 多浏览器、--device 多设备',
     usage: 'speccore verify [--ui] [--smoke-only] [--visual-only] [--headed] [--browser <b>] [--device <d>] [--config <file>]', examples: ['speccore verify --ui', 'speccore verify --ui --headed', 'speccore verify --config ./tests/smoke.yaml'], related: ['deploy', 'execute', 'dashboard'], triggers: ['verify', '测试', '冒烟', 'smoke', '视觉检查', 'ui验证', '验证', '跑测试', '测一下', '检查页面'] },
   { name: 'validate', aliases: ['vl'], description: '合规验证：检查 Spec 完整性与一致性',
-    usage: 'speccore validate [--iteration <name>]', examples: ['speccore validate', 'speccore validate --iteration Q2'], related: ['analyze', 'audit'], triggers: ['验证', 'validate', '检查', '合规', '校验'] },
+    usage: 'speccore validate [--iteration <name>]', examples: ['speccore validate', 'speccore validate --iteration Q2'], related: ['analyze'], triggers: ['验证', 'validate', '检查', '合规', '校验'] },
   { name: 'sync', aliases: ['sy'], description: '双向同步：代码↔Spec，--global 同步到全局层（原 sync-global）',
     usage: 'speccore sync [--task <id>] [--iteration <name>] [--global] [--direction to_global|from_global]', examples: ['speccore sync --task Task-001', 'speccore sync --global', 'speccore sync --global --direction from_global'], related: ['run'], triggers: ['同步', 'sync', '对齐', '更新', '同步全量', '同步全局', '更新全量层', '同步到全量'] },
   { name: 'change', aliases: ['ch'], description: '需求变更：联动更新所有关联 Spec，支持口语化输入',
@@ -118,9 +116,7 @@ const COMMAND_KB: CommandKnowledge[] = [
   { name: 'context', aliases: ['ctx'], description: '查看/设置当前上下文：迭代、任务、阶段',
     usage: 'speccore context [--set --iteration <name>] [--list]', examples: ['speccore context --list', 'speccore context --set --iteration Q1'], related: ['dashboard', 'run'], triggers: ['切换', '上下文', 'context', '当前.*迭代', '设置.*迭代', '换到', '切换到'] },
   { name: 'search', aliases: ['sh'], description: '全文搜索：跨所有 Spec 文件关键词检索',
-    usage: 'speccore search <query> [--task <id>] [--iteration <name>]', examples: ['speccore search "登录"', 'speccore search "支付" --iteration Q2'], related: ['track'], triggers: ['搜索', 'search', '查找', '检索', 'grep'] },
-  { name: 'track', aliases: ['trk', 'tr'], description: 'REQ→Task→Code 全链路追踪（合并原 trace + tracker）',
-    usage: 'speccore track [--req <id>] [--task <id>] [--full]', examples: ['speccore track --req REQ-001', 'speccore track --full'], related: ['search', 'analyze'], triggers: ['追踪', 'track', 'trace', '链路', '追溯', 'tracker'] },
+    usage: 'speccore search <query> [--task <id>] [--iteration <name>]', examples: ['speccore search "登录"', 'speccore search "支付" --iteration Q2'], related: ['analyze'], triggers: ['搜索', 'search', '查找', '检索', 'grep'] },
   { name: 'rename', aliases: ['rn'], description: '重命名迭代/任务，自动更新所有关联引用',
     usage: 'speccore rename [--iteration <old> <new>] [--task <old> <new>]', examples: ['speccore rename --iteration Q2 Q3', 'speccore rename --task T-01 T-10'], related: ['sync'], triggers: ['重命名', 'rename', '改名', '更名'] },
   { name: 'task-create', aliases: ['tc'], description: '创建任务：交互式需求澄清 → 生成 REQUIREMENT.md',
@@ -133,22 +129,12 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore help', examples: ['speccore help'], related: ['welcome', 'about', 'dashboard'], triggers: ['帮助', 'help', '怎么用', '命令列表', '所有命令', '功能介绍'] },
   { name: 'about', aliases: ['ab'], description: '关于页：SpecCore 理念 + 方法论 + 版本信息（HTML 页面）',
     usage: 'speccore about', examples: ['speccore about'], related: ['welcome', 'help'], triggers: ['关于', 'about', '版本', '理念', '方法论', 'SDD', '是什么'] },
-  { name: 'refresh', aliases: ['rf'], description: '统一刷新所有检索层：代码索引 + 文档RAG + 知识图谱。支持 --code/--rag/--graph 单独刷新',
-    usage: 'speccore refresh [--code] [--rag] [--graph] [--task <id>]', examples: ['speccore refresh', 'speccore refresh --code', 'speccore refresh --rag --graph'], related: ['reindex', 'analyze', 'code-index'], triggers: ['刷新', 'refresh', '更新索引', '刷新索引', '索引过期', '索引过时', '重建索引'] },
-  { name: 'reindex', aliases: ['ri'], description: '全量重建所有层级索引 + 知识图谱 + 衰减检测。--check 只检查不修复',
-    usage: 'speccore reindex [--check]', examples: ['speccore reindex', 'speccore reindex --check'], related: ['refresh', 'validate'], triggers: ['重建', 'reindex', '全量重建', '重建图谱', '重建索引', '索引不一致', '死链'] },
-  // v7.0.0+: 统一图谱查询
-  { name: 'graph', aliases: ['g'], description: '统一图谱查询：融合知识图谱 + 代码图谱。支持 query/entity/related/path/stats 子命令',
-    usage: 'speccore graph query <question> | speccore graph entity <id> | speccore graph related <id> | speccore graph path <from> <to> | speccore graph stats',
-    examples: ['speccore graph query "订单相关代码"', 'speccore graph entity SRC:auth-AuthController', 'speccore graph related Task-001', 'speccore graph path Task-001 Task-002', 'speccore graph stats'], related: ['knowledge', 'code-index', 'search', 'track'], triggers: ['图谱', 'graph', '知识图谱', '代码图谱', '查询图谱', '图谱查询', '查图谱', '找关联', '找路径', '实体查询', '图谱统计'] },
+  { name: 'reindex', aliases: ['ri'], description: '全量重建所有层级索引 + 知识 图谱 + 衰减检测。--check 只检查不修复',
+    usage: 'speccore reindex [--check]', examples: ['speccore reindex', 'speccore reindex --check'], related: ['validate', 'analyze'], triggers: ['重建', 'reindex', '全量重建', '重建图谱', '重建索引', '索引不一致', '死链', '更新索引', '刷新索引', '索引过期', '索引过时'] },
   // v8.3.0+: 需求澄清
   { name: 'req-doc', aliases: ['rd'], description: '需求文档化：将口语化/非专业需求整理为 PRD 级文档。支持 --local 临时工作区模式',
     usage: 'speccore req-doc "<描述>" | req-doc --from <file> [--to <iteration> | --local]',
     examples: ['speccore req-doc "我要加个购物车"', 'speccore req-doc --from notes.md --local', 'speccore req-doc --promote <entryId> --to <iteration>'], related: ['analyze', 'doc2spec'], triggers: ['整理需求', '专业化', '规范化', '整理一下', '写成PRD', '润色需求', '需求整理', '整理成文档', '需求文档化', '需求专业化'] },
-  // v8.3.24+: 契约冲突裁决
-  { name: 'verdict', aliases: ['vd'], description: '契约冲突裁决：查看待裁决冲突、进行人工裁决、查看裁决书',
-    usage: 'speccore verdict [--list] [--conflict <id> --decide <pass|reject|defer> --reason <reason>] [--report] [--task <id>]',
-    examples: ['speccore verdict --list', 'speccore verdict --conflict C-001 --decide pass --reason "风险可控"', 'speccore verdict --report --task Task-001'], related: ['execute', 'done'], triggers: ['裁决', '仲裁', '冲突裁决', '契约裁决', 'verdict', '查看冲突', '待裁决', '人工裁决', '裁决书', '解决冲突'] },
 ];
 
 // ============================================================
@@ -190,8 +176,6 @@ const SYNONYM_MAP: Record<string, string> = {
   'classify': 'doc2spec', '导入文档': 'doc2spec',
   // ── search ──
   '找': 'search', '查找': 'search', '全文搜索': 'search',
-  // ── track ──
-  '追踪': 'track', '追溯': 'track', '全链路': 'track',
   // ── sync ──
   '对齐': 'sync', '双向同步': 'sync',
   '同步全量': 'sync', '同步全局': 'sync', '更新全量层': 'sync', '同步到全量': 'sync',
@@ -203,24 +187,15 @@ const SYNONYM_MAP: Record<string, string> = {
   '新手': 'welcome', '入门': 'welcome', '开始使用': 'welcome',
   '怎么用': 'help', '命令列表': 'help', '所有命令': 'help',
   '版本': 'about', '理念': 'about', '方法论': 'about', '是什么': 'about',
-  // ── code-index ──
-  '建索引': 'code-index', '扫描代码': 'code-index', '代码结构': 'code-index',
   // ── iteration ──
   'sprint': 'iteration',
   // ── run（原 dev，v8.3.189 合并）──
   '流水线': 'run', '全自动': 'run',
   // ── verify ──
   '冒烟': 'verify', 'smoke': 'verify', '视觉检查': 'verify', 'ui验证': 'verify', '跑测试': 'verify', '测一下': 'verify', '检查页面': 'verify',
-  // ── refresh ──
-  '刷新': 'refresh', '更新索引': 'refresh', '刷新索引': 'refresh', '索引过期': 'refresh',
-  // ── reindex ──
+  // ── reindex（含原 refresh 的索引词，refresh 命令已移除）──
+  '更新索引': 'reindex', '刷新索引': 'reindex', '索引过期': 'reindex',
   '重建': 'reindex', '全量重建': 'reindex', '重建图谱': 'reindex', '死链': 'reindex',
-  // ── graph ──
-  '知识图谱': 'graph', '代码图谱': 'graph', '查询图谱': 'graph', '图谱查询': 'graph',
-  '查图谱': 'graph', '找关联': 'graph', '找路径': 'graph', '实体查询': 'graph', '图谱统计': 'graph',
-  // ── verdict ──
-  '裁决': 'verdict', '仲裁': 'verdict', '冲突裁决': 'verdict', '契约裁决': 'verdict',
-  '查看冲突': 'verdict', '待裁决': 'verdict', '人工裁决': 'verdict', '裁决书': 'verdict', '解决冲突': 'verdict',
 };
 
 // ============================================================
@@ -237,14 +212,13 @@ const STEP_SUBAGENT_MAP: Record<string, string | undefined> = {
   validate: 'code-reviewer',
   change: 'impact-analyst',
   verify: 'test-engineer',
-  'code-index': 'global-analyzer',
 };
 
 const WORKFLOWS: Record<string, PipelineStep[]> = {
   'new feature': [
     { order: 1, command: 'init', args: '', explanation: '初始化项目（如果还没有）', dependsOn: undefined },
     { order: 2, command: 'doc2spec', args: '-f PRD.docx --iter {iteration}', explanation: '导入 PRD 文档，AI 分析生成需求规格', dependsOn: 1 },
-    { order: 3, command: 'analyze', args: '--iteration {iteration} --audit', explanation: 'AI 分析需求，生成审计报告', dependsOn: 2, subagent: 'requirement-analyzer' },
+    { order: 3, command: 'analyze', args: '--iteration {iteration}', explanation: 'AI 分析需求，生成审计报告', dependsOn: 2, subagent: 'requirement-analyzer' },
     { order: 4, command: 'iteration taskify', args: '-f REQUIREMENT.md', explanation: '将需求拆分为独立开发任务', dependsOn: 3, subagent: 'task-decomposer' },
     { order: 5, command: 'plan', args: '--all', explanation: '生成任务执行计划，确定优先级和依赖', dependsOn: 4, subagent: 'schedule-planner' },
     { order: 6, command: 'execute', args: '--auto', explanation: '按计划依次执行开发任务', dependsOn: 5, subagent: 'code-generator' },
@@ -265,7 +239,7 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
   ],
   'code review': [
     { order: 1, command: 'validate', args: '', explanation: '合规检查 Spec 完整性', dependsOn: undefined, subagent: 'code-reviewer' },
-    { order: 2, command: 'analyze', args: '--audit', explanation: '深度审计分析', dependsOn: 1, subagent: 'requirement-analyzer' },
+    { order: 2, command: 'analyze', args: '--iteration {iteration}', explanation: '深度审计分析', dependsOn: 1, subagent: 'requirement-analyzer' },
     { order: 3, command: 'pr', args: '--auto', explanation: '生成 PR 审查', dependsOn: 2, subagent: 'code-reviewer' },
   ],
   // v8.3.160+: 常见复合意图工作流
@@ -300,11 +274,11 @@ export function classifyMode(input: string): AskMode {
 
   // 模式1: 命令解释 — 询问特定命令用法
   const explainPatterns = [
-    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|track|rename|doc2spec|spec2doc|ask|code-index|graph)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
-    /怎么用\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|track|code-index|graph)/,
-    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|track|code-index|graph)\s*有哪些/,
-    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|track|code-index|graph)/,
-    /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|verify|sync|code-index|graph)/i,
+    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|rename|doc2spec|spec2doc|ask)\s*(命令|用法|怎么用|是什么|功能|参数|选项)/,
+    /怎么用\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|rename|doc2spec|spec2doc|ask)/,
+    /(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|rename|doc2spec|spec2doc|ask)\s*有哪些/,
+    /解释[一下]?\s*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|rename|doc2spec|spec2doc|ask)/,
+    /(what|how).*use.*(dashboard|dev|init|execute|plan|pr|verify|sync|validate|analyze|taskify|unitize|search|rename|doc2spec|spec2doc|ask)/i,
   ];
   if (explainPatterns.some(p => p.test(lower))) return 'explain';
 
@@ -1533,7 +1507,7 @@ async function tryMatchEntityFromKG(
 
 /** 判断命令是否需要 task 参数 */
 function commandNeedsTask(command: string): boolean {
-  return ['execute', 'analyze', 'plan', 'track', 'pr', 'done', 'change', 'task-create'].includes(command);
+  return ['execute', 'analyze', 'plan', 'pr', 'done', 'change', 'task-create'].includes(command);
 }
 
 /** 将知识图谱匹配结果注入到 AskResult 中 */

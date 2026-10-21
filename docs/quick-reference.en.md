@@ -18,8 +18,6 @@ speccore run "build a points feature" # one-liner requirement
 speccore validate                     # Compliance check
 speccore dashboard                    # View progress
 speccore sync                         # Reverse sync @spec → TASK.md
-speccore diff --source=A --target=B   # Compare iterations
-speccore track --req=REQ-001          # Trace chain
 speccore delete -t Task-005           # Safe delete (trash + clean refs)
 speccore search "payment"             # Cross-spec search
 ```

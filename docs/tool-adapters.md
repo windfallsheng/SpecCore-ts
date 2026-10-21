@@ -95,8 +95,6 @@ my-project/
 | `speccore execute` | `speccore execute` | 执行开发 |
 | `speccore dashboard` | `speccore progress` | 查看进度 |
 | `speccore validate` | `speccore validate` | 合规检查 |
-| `speccore impact` | `speccore impact` | 影响分析 |
-| `speccore audit` | `speccore ai-audit` | AI 审计 |
 
 ---
 

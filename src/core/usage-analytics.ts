@@ -129,7 +129,7 @@ export async function generateUsageReport(cwd: string, periodDays = 14): Promise
   }
 
   if (!commandFrequency['code-index'] && !commandFrequency['ci']) {
-    recommendations.push('建议运行 speccore code-index --graph 构建代码知识图谱');
+    recommendations.push('建议运行 speccore reindex 构建代码知识图谱');
   }
 
   if ((commandFrequency['execute'] || 0) > 10 && (commandFrequency['doctor'] || 0) === 0) {

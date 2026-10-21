@@ -158,11 +158,7 @@ AI 框架指令示例：
 
 ### 1. 人工初始化
 
-```bash
-speccore knowledge init
-  → 问: "这个项目有哪些应用？各自负责什么？"
-  → 生成 applications/xxx/INDEX.md 骨架
-```
+> 原计划 `speccore knowledge init` 交互式初始化（v8.3.341 起不再规划独立命令，骨架由 `speccore init` 生成）。
 
 ### 2. AI 回补（自动）
 
@@ -174,11 +170,7 @@ AI 写入 `candidate/`，人工 review 确认后合并。
 
 ### 3. 代码扫描（辅助）
 
-```bash
-speccore knowledge scan --from-code
-  → 提取 API 路由、数据模型、消息队列 topic
-  → 写入 apps/xxx/base/ 作为接口索引
-```
+> 原计划 `speccore knowledge scan --from-code` 提取接口索引（v8.3.341 起不再规划独立命令，源码结构化信息由 `analyze --with-code` 注入）。
 
 ---
 
@@ -187,10 +179,10 @@ speccore knowledge scan --from-code
 | 阶段 | 内容 | 优先级 | 状态 |
 |------|------|:--:|:--:|
 | P0 | 创建 `.speccore/knowledge/` 骨架目录 + ROUTING.md | 🔴 | 待实现 |
-| P0 | `speccore knowledge init` 交互式初始化 | 🔴 | 待实现 |
+| P0 | `speccore knowledge init` 交互式初始化 | 🔴 | 已废弃（v8.3.341 移除 knowledge 命令族，骨架由 init 生成） |
 | P1 | ask 引擎接入 ROUTING，动态注入知识到 prompt | 🔴 | **已完成**（v6.7.0 改为接入知识图谱） |
 | P1 | retro 自动回补到 candidate/ | 🟡 | 待实现 |
-| P2 | `speccore knowledge scan --from-code` | 🟡 | 部分完成（code-index 已存在） |
+| P2 | `speccore knowledge scan --from-code` | 🟡 | 已废弃（v8.3.341，能力由 analyze --with-code 覆盖） |
 | P2 | candidate → official review 流程 | 🟡 | 待实现 |
 
 ## 十、知识图谱实现（v6.5.0 ~ v6.7.0）

@@ -1640,11 +1640,12 @@ export function toYaml(config: SpecConfig): string {
   yaml += '# ─────────────────────────────────────────────────────────────────────────────\n';
   yaml += 'arbitration:\n';
   yaml += '  # enabled: 是否启用三级冲突裁决机制\n';
-  yaml += '  #   true  → analyze/split/execute 各阶段自动检测并裁决契约冲突\n';
+  yaml += '  #   true  → analyze/taskify/execute 各阶段自动检测并裁决契约冲突\n';
   yaml += `  enabled: ${config.arbitration.enabled}\n`;
   yaml += '  # mode: 裁决模式\n';
-  yaml += '  #   full    → 完整三级裁决（Spec 层 → 代码层 → 运行时层）\n';
-  yaml += '  #   simple  → 仅 Spec 层冲突检测\n';
+  yaml += '  #   full        → 完整三级裁决（Spec 层 → 代码层 → 运行时层）\n';
+  yaml += '  #   l1-only     → 仅 Spec 层冲突检测\n';
+  yaml += '  #   report-only → 只报告冲突不裁决\n';
   yaml += `  mode: ${config.arbitration.mode}\n`;
 
   yaml += '\n# ─────────────────────────────────────────────────────────────────────────────\n';
@@ -1656,8 +1657,9 @@ export function toYaml(config: SpecConfig): string {
   yaml += '    # enabled: 是否启用自动指派\n';
   yaml += `    enabled: ${config.settings.assignee.enabled}\n`;
   yaml += '    # mode: 指派严格度\n';
-  yaml += '    #   strict → 每个子任务必须指定 owner\n';
-  yaml += '    #   loose  → 仅任务级指定 owner，子任务可共享\n';
+  yaml += '    #   strict → 每个子任务必须指定 owner，缺失则阻断\n';
+  yaml += '    #   loose  → 仅任务级指定 owner，子任务可共享（默认）\n';
+  yaml += '    #   off    → 关闭指派\n';
   yaml += `    mode: ${config.settings.assignee.mode}\n`;
   yaml += '  # ── 追踪（Trace）──\n';
   yaml += '  trace:\n';
@@ -1686,9 +1688,9 @@ export function toYaml(config: SpecConfig): string {
   yaml += '  # ── 模式沉淀（Patterns）──\n';
   yaml += '  patterns:\n';
   yaml += '    # auto_save: 是否自动将分析过程中发现的模式保存到 .speccore/PATTERNS/\n';
-  yaml += '    #   smart  → 仅在置信度高时自动保存\n';
-  yaml += '    #   always → 全部自动保存\n';
-  yaml += '    #   false  → 不自动保存，仅手动\n';
+  yaml += '    #   smart      → 仅在置信度高时自动保存（默认）\n';
+  yaml += '    #   aggressive → 全部自动保存\n';
+  yaml += '    #   off        → 不自动保存，仅手动\n';
   yaml += `    auto_save: ${config.settings.patterns.auto_save}\n`;
   yaml += '  # ── 审查（Review）──\n';
   yaml += '  review:\n';
@@ -1701,17 +1703,27 @@ export function toYaml(config: SpecConfig): string {
   yaml += '  vision:\n';
   yaml += '    # enabled: 是否启用视觉模型\n';
   yaml += `    enabled: ${vis?.enabled ?? false}\n`;
-  yaml += '    # provider: qwen-vl | openai | anthropic | local\n';
+  yaml += '    # provider: 视觉模型提供方\n';
+  yaml += '    #   qwen-vl(默认) | openai | anthropic | local\n';
   yaml += `    provider: ${vis?.provider ?? 'qwen-vl'}\n`;
-  if (vis?.model) yaml += `    model: ${vis.model}\n`;
+  if (vis?.model) {
+    yaml += '    # model: 模型名称（可选，留空用 provider 默认模型）\n';
+    yaml += `    model: ${vis.model}\n`;
+  }
   if (vis?.apiKey) {
     yaml += '    # apiKey: 支持 ${ENV_VAR} 环境变量引用\n';
     yaml += `    apiKey: ${vis.apiKey}\n`;
   }
   if (vis?.endpoint) yaml += `    endpoint: ${vis.endpoint}\n`;
   if (vis?.timeout) yaml += `    timeout: ${vis.timeout}\n`;
-  if (vis?.maxImagesPerPrompt) yaml += `    maxImagesPerPrompt: ${vis.maxImagesPerPrompt}\n`;
-  if (vis?.imageMaxSizeKb) yaml += `    imageMaxSizeKb: ${vis.imageMaxSizeKb}\n`;
+  if (vis?.maxImagesPerPrompt) {
+    yaml += '    # maxImagesPerPrompt: 单次 prompt 最多注入图片数\n';
+    yaml += `    maxImagesPerPrompt: ${vis.maxImagesPerPrompt}\n`;
+  }
+  if (vis?.imageMaxSizeKb) {
+    yaml += '    # imageMaxSizeKb: 单张图片大小上限（KB）\n';
+    yaml += `    imageMaxSizeKb: ${vis.imageMaxSizeKb}\n`;
+  }
   yaml += '  # ── 流水线（Pipeline）──\n';
   yaml += '  # pipeline: 是否默认启用 Pipeline 模式\n';
   yaml += `  pipeline: ${config.settings.pipeline}\n`;
@@ -1808,7 +1820,7 @@ export function toYaml(config: SpecConfig): string {
   const aiDefaults = config.settings.ai?.defaults || {};
   const aiDefaultKeys = Object.keys(aiDefaults);
   if (aiDefaultKeys.length > 0) {
-    yaml += '    # defaults: 各功能的默认 provider name（analyze/taskify/execute/split/ask）\n';
+    yaml += '    # defaults: 各功能的默认 provider name（analyze/taskify/execute/ask）\n';
     yaml += '    defaults:\n';
     for (const k of aiDefaultKeys) {
       yaml += `      ${k}: ${aiDefaults[k]}\n`;
@@ -1826,10 +1838,11 @@ export function toYaml(config: SpecConfig): string {
     yaml += "    fallback: ''\n";
   }
   yaml += '  # ── 子 Agent SDK 派单（v8.3.301+，第七层「窗口物理隔离」增强通道）──\n';
-  yaml += '  #   auto = Qoder 宿主 + token 可用（PAT 环境变量或 CLI 登录态）时启用（默认）\n';
-  yaml += '  #   on   = 强制尝试 SDK 派单（token 不可用也尝试，失败回退标记模式）\n';
-  yaml += '  #   off  = 禁用 SDK 派单，永远走标记模式（代码内容经主会话窗口）\n';
   yaml += '  agent_dispatch:\n';
+  yaml += '    # mode: 子 Agent SDK 派单开关\n';
+  yaml += '    #   auto → Qoder 宿主 + token 可用（PAT 环境变量或 CLI 登录态）时启用（默认）\n';
+  yaml += '    #   on   → 强制尝试 SDK 派单（token 不可用也尝试，失败回退标记模式）\n';
+  yaml += '    #   off  → 禁用 SDK 派单，永远走标记模式（代码内容经主会话窗口）\n';
   yaml += `    mode: ${config.settings.agent_dispatch?.mode ?? 'auto'}\n`;
 
 
@@ -1840,9 +1853,9 @@ export function toYaml(config: SpecConfig): string {
   yaml += '  # ── 路由策略 ──\n';
   yaml += '  routing:\n';
   yaml += '    # mode: 意图识别路由模式\n';
-  yaml += '    #   hybrid → 混合路由（本地规则 + LLM 兜底）\n';
-  yaml += '    #   local  → 仅本地规则匹配\n';
-  yaml += '    #   llm    → 仅 LLM 识别\n';
+  yaml += '    #   hybrid       → 混合路由（本地规则 + LLM 兜底，默认）\n';
+  yaml += '    #   cli-only     → 仅本地规则匹配\n';
+  yaml += '    #   host-ai-only → 仅宿主 AI 识别\n';
   yaml += `    mode: ${config.ask.routing.mode}\n`;
   yaml += '    # high_threshold: 高置信度阈值（≥此值直接执行，不询问确认）\n';
   yaml += `    high_threshold: ${config.ask.routing.high_threshold}\n`;

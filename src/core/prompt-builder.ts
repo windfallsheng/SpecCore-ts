@@ -2293,7 +2293,7 @@ export async function buildPrompt(
           listLines.push(`| ${priority} | \`${match.file}\` | ${reasons.join(' / ')} (score:${match.score}) | ${clues.join('；') || '—'} |`);
         }
         if (sortedMatches.length > 15) {
-          listLines.push(`| … | 其余 ${sortedMatches.length - 15} 个关联文件 | 运行 \`speccore code-index --show\` 查看全量索引 | — |`);
+          listLines.push(`| … | 其余 ${sortedMatches.length - 15} 个关联文件 | 运行 \`speccore reindex\` 查看全量索引 | — |`);
         }
         listLines.push('');
         listLines.push('### 🔍 深读协议（宿主 AI 执行）');

@@ -1385,8 +1385,8 @@ async function buildAIEnhancedReport(
       r += `| 指定目录追加 | \`speccore analyze --supplement --source-scope src/core\` |\n`;
       r += `| 扩大读取量（重新分析） | \`speccore analyze --auto --depth deep\` |\n`;
       r += `| 指定目录重新分析 | \`speccore analyze --auto --source-scope src/core,src/commands\` |\n`;
-      r += `| 查看完整代码索引 | \`speccore code-index --show\` |\n`;
-      r += `| 重建索引（代码有变动） | \`speccore code-index --full\` |\n\n`;
+      r += `| 查看完整代码索引 | \`speccore reindex\` |\n`;
+      r += `| 重建索引（代码有变动） | \`speccore reindex\` |\n\n`;
     }
   }
 
@@ -1908,7 +1908,7 @@ export async function supplementAnalysis(input: {
   // 3. 从索引获取所有文件，找出未覆盖的
   const fullIndex = await loadFullIndex();
   if (!fullIndex) {
-    logger.error('代码索引不存在，请先运行: speccore code-index --full');
+    logger.error('代码索引不存在，请先运行: speccore reindex');
     return null;
   }
 

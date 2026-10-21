@@ -42,16 +42,16 @@ quality_gates:
   #   false → 审查可选
   enforce_review: true
   # require_pr: 是否强制通过 PR 合并代码
-  #   true  → 禁止直接 push 保护分支，必须走 speccore pr
+  #   true  → 禁止直接 push 到保护分支，必须通过 speccore pr 提交
   #   false → 允许直接 push（本地单人开发常用）
   require_pr: true
-  # block_level: 阻断级别（质量门禁失败时阻断什么）
-  #   standard → 编译 + 单测 + 契约任一失败都阻断（默认，最严格）
-  #   compile  → 仅编译失败才阻断
+  # block_level: 质量门禁阻塞级别（v8.3.197+）
+  #   standard → 编译+单测+契约阻塞（默认）
+  #   compile  → 仅编译阻塞
   block_level: standard
-  # verify_ui: UI 验证默认行为（speccore verify --ui 时的缺省参数，v8.3.95+）
+  # ── UI 验证（v8.3.47+）──
   verify_ui:
-    # enabled: 是否默认执行 UI 验证
+    # enabled: 是否启用 UI 验证（冒烟测试 + 视觉检查）
     enabled: false
     # smoke_test: 是否执行冒烟测试
     smoke_test: true
@@ -64,10 +64,12 @@ quality_gates:
     #   normal → 明显差异视为问题（默认）
     #   loose  → 仅严重问题
     threshold: normal
-    # devices: 测试设备列表（viewport 预设：desktop / mobile / iPhone13 / Pixel5 等）
-    devices: [desktop]
-    # browsers: 测试浏览器列表（chromium / firefox / webkit）
-    browsers: [chromium]
+    # devices: 测试设备列表
+    devices:
+      - desktop
+    # browsers: 测试浏览器列表
+    browsers:
+      - chromium
     # timeout: 单场景超时（毫秒）
     timeout: 30000
     # visual_model: 视觉模型配置（v8.3.50+，看图判断走外部模型）
@@ -146,9 +148,10 @@ settings:
   vision:
     # enabled: 是否启用视觉模型
     enabled: false
-    # provider: qwen-vl / openai / anthropic / local
+    # provider: 视觉模型提供方
+    #   qwen-vl(默认) | openai | anthropic | local
     provider: qwen-vl
-    # model: 模型名称
+    # model: 模型名称（可选，留空用 provider 默认模型）
     model: qwen-vl-plus
     # maxImagesPerPrompt: 单次 prompt 最多注入图片数
     maxImagesPerPrompt: 10
@@ -212,23 +215,20 @@ settings:
     # fallback: 兜底 provider name（可选，主 provider 失败时启用）
     fallback: local
   # ── 子 Agent SDK 派单（v8.3.301+，第七层「窗口物理隔离」增强通道）──
-  #   auto = Qoder 宿主 + token 可用（PAT 或 CLI 登录态）时启用（默认）
-  #   on   = 强制尝试 SDK 派单（失败回退标记模式）
-  #   off  = 禁用 SDK 派单，永远走标记模式
   agent_dispatch:
+    # mode: 子 Agent SDK 派单开关
+    #   auto → Qoder 宿主 + token 可用（PAT 或 CLI 登录态）时启用（默认）
+    #   on   → 强制尝试 SDK 派单（失败回退标记模式）
+    #   off  → 禁用 SDK 派单，永远走标记模式
     mode: auto
   # ── 冒烟测试统一配置（三时机开关 + 范围 + 按环境差异化，v8.3.217+）──
   smoke:
     points:
-      # local: ①本地冒烟（开发完成后、提交前）
-      local: auto
-      # pre-deploy: ②部署前冒烟（critical 阻断）
-      pre-deploy: auto
-      # post-deploy: ③环境冒烟（只报告）
-      post-deploy: auto
-    # scope: 冒烟范围 full=全量 / module=当前功能模块（默认）
-    scope: module
-    # scope_by_env: 按环境覆盖范围（示例: { production: full }）
+      local: auto        # ①本地冒烟（开发完成后、提交前）
+      pre-deploy: auto  # ②部署前冒烟（critical 阻断）
+      post-deploy: auto # ③环境冒烟（只报告）
+    scope: module    # full=全量 / module=当前功能模块（默认）
+    # scope_by_env 示例: dev: module / production: full
     scope_by_env: {}
 
 # ─────────────────────────────────────────────────────────────

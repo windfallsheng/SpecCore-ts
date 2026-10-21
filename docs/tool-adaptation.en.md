@@ -95,8 +95,6 @@ Teaches WorkBuddy Speccore commands and best practices:
 | `speccore execute` | `/spec-execute` | Execute development |
 | `speccore status-panel` | `/spec-progress` | View progress |
 | `speccore validate` | `/spec-validate` | Compliance check |
-| `speccore impact` | `/spec-impact` | Impact analysis |
-| `speccore audit` | `/spec-ai-audit` | AI audit |
 
 ---
 

@@ -172,7 +172,8 @@ const structuredCachePath = () => join(getProjectRoot(), '.speccore', 'cache', '
 
 // ── TypeScript AST 辅助 ──
 
-function isTsOrJs(filePath: string): boolean {
+/** TS/JS 文件判定（v8.3.341+: 导出供单测） */
+export function isTsOrJs(filePath: string): boolean {
   return /\.(ts|tsx|js|jsx|mts|cts)$/i.test(filePath);
 }
 
@@ -181,7 +182,8 @@ function isSupportedSource(filePath: string): boolean {
   return /\.(ts|tsx|js|jsx|mts|cts|java|py|go)$/i.test(filePath);
 }
 
-function detectLanguage(filePath: string): 'typescript' | 'java' | 'python' | 'go' | 'unknown' {
+/** 按扩展名判定源码语言（v8.3.341+: 导出供单测） */
+export function detectLanguage(filePath: string): 'typescript' | 'java' | 'python' | 'go' | 'unknown' {
   if (/\.(ts|tsx|js|jsx|mts|cts)$/i.test(filePath)) return 'typescript';
   if (/\.java$/i.test(filePath)) return 'java';
   if (/\.py$/i.test(filePath)) return 'python';
@@ -896,7 +898,8 @@ async function collectSourceFiles(dir: string): Promise<string[]> {
   return results;
 }
 
-function inferPlatform(path: string): string {
+/** 从路径推断平台归属（v8.3.341+: 导出供单测） */
+export function inferPlatform(path: string): string {
   const lower = path.toLowerCase();
   if (/admin|web|frontend|client|h5/.test(lower)) return 'frontend';
   if (/api|server|backend|service/.test(lower)) return 'backend';

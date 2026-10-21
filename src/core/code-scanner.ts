@@ -988,7 +988,7 @@ export async function checkCodeIndexFreshness(
       indexAge,
       sourceAge,
       staleFiles: staleFiles.slice(0, 10),
-      message: `代码索引已过期（索引: ${new Date(indexAge).toLocaleString()}, 源码最新: ${new Date(sourceAge).toLocaleString()}），建议先运行: speccore code-index`,
+      message: `代码索引已过期（索引: ${new Date(indexAge).toLocaleString()}, 源码最新: ${new Date(sourceAge).toLocaleString()}），建议先运行: speccore reindex`,
     };
   }
 

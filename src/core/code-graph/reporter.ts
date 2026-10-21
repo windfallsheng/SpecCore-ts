@@ -78,19 +78,10 @@ export function generateGraphReport(graph: CodeGraph): string {
   lines.push(`- "Find the shortest path from entry point to database layer"`);
   lines.push('');
 
-  // 5. Query Examples
-  lines.push('## 🛠️ Query Examples');
+  // 5. 索引维护（v8.3.341: knowledge 命令族已移除，统一 reindex）
+  lines.push('## 索引维护');
   lines.push('');
-  lines.push('```bash');
-  lines.push('# Explain a concept');
-  lines.push(`speccore knowledge explain "${godNodeDetails[0]?.name || 'main'}"`);
-  lines.push('');
-  lines.push('# Trace path between two concepts');
-  lines.push(`speccore knowledge path "${godNodeDetails[0]?.name || 'A'}" "${godNodeDetails[1]?.name || 'B'}"`);
-  lines.push('');
-  lines.push('# Natural language query');
-  lines.push('speccore knowledge query "How is authentication handled?"');
-  lines.push('```');
+  lines.push('图谱索引由 `speccore reindex` 全量重建（analyze 阶段自动增量维护）。');
   lines.push('');
 
   return lines.join('\n');

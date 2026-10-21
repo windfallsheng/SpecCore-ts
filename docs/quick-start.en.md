@@ -172,13 +172,10 @@ speccore dashboard --platform=h5                     # ✅ CLI
 speccore sync --task=Task-001                        # ✅ CLI
 ```
 
-### Analysis & Audit
+### Dashboard
 
 ```bash
-speccore impact --req=REQ-001
-speccore baseline create --name=2026-Q3-Release
 speccore dashboard
-speccore audit --strict
 ```
 
 ### Validate & Report
@@ -193,7 +190,6 @@ speccore dashboard
 ```bash
 speccore rename --target=old-name --new-name=new-name
 speccore rename --batch --pattern="Task-" --replacement="Feature-"
-speccore handover --iteration=2026-07-UserSystem      # ✅ CLI
 
 # 🔒 AI: @spec-ask "archive all completed tasks"
 ```

@@ -158,14 +158,6 @@ speccore ask "from analyze to develop"          # → run --from analyze --to ex
 
 One "spec once" phrase packs the whole requirement-to-deploy chain into a single session: entry (feature units / doc path / one-liner) → clarify → analyze → taskify → execute → local smoke → deploy verification. **Dual mode**: interactive by default (pauses at every node); say "full-auto / don't stop" to switch to auto mode (pauses only at three safety points: scope confirmation, quality-gate failure, smoke failure). Unsatisfied with a step? **Roll back and rerun**: re-analyze (`analyze --unit` overwrite + backup), re-taskify (`taskify --modules`), re-execute (`execute` single task), re-unitize (`unitize --on-duplicate`). Best for a few feature units (≤3); larger scope goes through `speccore run`.
 
-### 🧠 Knowledge graph & code graph
-
-```bash
-speccore graph query "order-related code"       # natural-language query
-speccore graph path Task-001 Task-002           # shortest dependency path
-speccore knowledge                               # interactive HTML graph
-```
-
 ### 📊 Dashboard
 
 `speccore dashboard` generates a Jira-standard 7-dimension board.
@@ -198,9 +190,9 @@ speccore verify -t Task-001 --ui
 | Finishing | `pipeline` `pr` `done` `spec2doc` |
 | Status / nav | `status` `next` `dashboard` `progress` |
 | Init / config | `init` `config` `doctor` `update` |
-| Management | `units` `pattern` `rollback` `history` `baseline` `rename` `cleanup` |
-| Change / special | `change` `retro` `verdict` `review` `sync` |
-| Knowledge | `graph` `knowledge` `query` `entity` `related` `path` `search` `stats` |
+| Management | `units` `pattern` `rename` `cleanup` |
+| Change / special | `change` `retro` `review` `sync` |
+| Knowledge | `search` |
 
 ---
 

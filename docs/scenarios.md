@@ -170,9 +170,6 @@ speccore task new --batch-file=bugs.xlsx --type=bugfix --interactive
 # 检查合规
 speccore validate -i Q1
 
-# 操作历史
-speccore history
-
 # 可视化看板
 speccore dashboard
 ```
@@ -297,8 +294,6 @@ speccore dashboard --lifecycle
 # 推进状态（状态随 execute/pr/done 流水线自动流转）
 speccore execute -t Task-001
 
-# 检查 TEST.md/REVIEW.md 进度
-speccore track --task Task-001
 ```
 
 ## 场景四：日常开发执行
@@ -353,23 +348,12 @@ speccore execute -t Task-001 --hotfix --force
 ## 场景七：需求变更处理
 
 ```bash
-# 1. 分析变更影响
-speccore impact --req=REQ-001
-# → 影响范围: Task-001(用户登录), Task-002(用户注册)
-
-# 2. 创建基线（变更前快照）
-speccore baseline --name=before-change
-
-# 3. 描述变更
+# 1. 描述变更
 speccore change --req=REQ-001 --desc="登录增加短信验证码"
 
-# 4. 更新受影响的 Task
+# 2. 更新受影响的 Task
 speccore update -t Task-001 --status=in_progress
-
-# 5. 对比变更前后
-speccore diff --source=before-change --target=current
-
-# 6. 验证
+# 3. 验证
 speccore validate -i 迭代-2026-07
 ```
 
@@ -488,13 +472,6 @@ speccore doctor -t Task-001
 
 ---
 
-## 场景十二：建立项目基线
-
-```bash
-speccore baseline --name=v1.0-release
-speccore baseline --restore=v1.0-release --req=REQ-005
-```
-
 ---
 
 ## 场景十三：需求拆分全流程（全量层 → 迭代 → 任务）
@@ -574,18 +551,6 @@ mv .speccore/trash/迭代-2026-07-test-TIMESTAMP 迭代-2026-07-test
 
 ---
 
-## 场景十五：恢复误归档任务
-
-```bash
-# 查看已归档任务
-speccore rollback -t Task-001 --list
-
-# 恢复误删文件
-speccore rollback -t Task-001 --confirm
-```
-
-> 完整归档流程见 [场景二十三：收尾归档](#场景二十三收尾归档)。
-
 ---
 
 ## 场景十六：开发中途需求变更
@@ -624,12 +589,6 @@ speccore validate -i
 | `platforms.yaml` | ❌ 系统自动管理 |
 
 ---
-
-## 场景十九：项目状态恢复
-
-```bash
-speccore rollback -t Task-001 --confirm
-```
 
 ---
 
@@ -724,15 +683,6 @@ speccore done --all -I Q1 --interactive                 # 预览列表 → 确�
 # 💬 "重新定位当前迭代"
 ```
 
-### Task 目录被手动删除
-
-```bash
-# 症状: speccore execute -t Task-003 报 "找不到 Task"
-# 修复: 从 .bak 恢复
-speccore rollback -t Task-003 --list      # 查看可恢复的备份
-speccore rollback -t Task-003 --confirm   # 恢复最新备份
-```
-
 ### .speccore/ 配置损坏
 
 ```bash
@@ -785,16 +735,6 @@ git:
   default_base: develop   # 默认从 develop 分叉（省略则从当前分支）
 ```
 
-## 场景二十六：合并冲突预测 + 安全回滚
-
-```bash
-speccore merge-check -I Q3
-# → ⚠️ UserEntity.java 被 Task-001, Task-002 同时修改
-
-speccore rollback -t Task-002 --reason="合并冲突需重新规划"
-# → ⏪ 回退 → 🗑️ 删分支 → 📦 归档
-```
-
 ## 场景二十七：注释标记精准定位
 
 ```java
@@ -830,7 +770,6 @@ SpecCore 是 SDD 工具（Spec-Driven Development）工具，但定位不同：
 | 中文意图识别 | ✅ 38 种意图 | ❌ 只英文 |
 | Git 分支 + 依赖检测 | ✅ 自动 | ❌ 无 |
 | 质量关卡 | ✅ lifecycle 内置 | ❌ 手动 |
-| 回滚 | ✅ `rollback` | ❌ 无 |
 | 外部 AI 代码生成 | ❌ 模板生成 | ✅ Copilot/Claude |
 
 **选型建议：**

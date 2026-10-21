@@ -6,6 +6,7 @@
 import { join } from 'path';
 import { pathExists, ensureDir, writeFile, readdir } from 'fs-extra';
 import { logger } from '../utils/logger';
+import { envDirFor } from '../core/environment-config';
 
 interface EnvTemplate {
   name: string;
@@ -551,7 +552,7 @@ affinity: {}
 
 /** update 时初始化环境配置目录 */
 export async function initEnvironmentConfigs(projectRoot: string): Promise<string[]> {
-  const envDir = join(projectRoot, '.speccore', 'environments');
+  const envDir = envDirFor(projectRoot);
   await ensureDir(envDir);
 
   const files = await readdir(envDir);

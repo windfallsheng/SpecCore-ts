@@ -26,58 +26,6 @@
     ]
   },
   {
-    "id": "track-req",
-    "name": "全链路追踪",
-    "category": "governance",
-    "icon": "🔗",
-    "description": "REQ→Task→Code 全链路追踪",
-    "prompt": "追踪 {需求ID} 的全链路",
-    "command": "speccore track --req {需求ID}",
-    "env": "cli",
-    "params": [
-      {
-        "key": "需求ID",
-        "placeholder": "REQ-001",
-        "required": true
-      }
-    ],
-    "tags": [
-      "治理"
-    ],
-    "builtin": true,
-    "sort": 2,
-    "examples": [
-      "追溯需求对应哪些任务和代码",
-      "检查需求是否完整落地"
-    ]
-  },
-  {
-    "id": "impact-analysis",
-    "name": "影响分析",
-    "category": "governance",
-    "icon": "💥",
-    "description": "分析变更的上下游影响",
-    "prompt": "分析 {需求ID} 的影响范围",
-    "command": "speccore impact --req {需求ID}",
-    "env": "cli",
-    "params": [
-      {
-        "key": "需求ID",
-        "placeholder": "REQ-001",
-        "required": true
-      }
-    ],
-    "tags": [
-      "治理"
-    ],
-    "builtin": true,
-    "sort": 3,
-    "examples": [
-      "改动前评估影响范围",
-      "分析需求变更的波及面"
-    ]
-  },
-  {
     "id": "reindex",
     "name": "重建索引",
     "category": "governance",

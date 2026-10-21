@@ -1,5 +1,46 @@
 # Changelog
 
+## v8.3.341 (2026-10-21) — 工程健康度优化 + 命令盘点精简
+
+两大主题：①全项目体检后按性价比落地的四项改进——deploy 引擎 execSync 模板拼接改为 execFileSync 参数数组（带安全属性的唯一项，杜绝「配置即命令」注入面）、分支类型提取与环境目录定位收敛为共享导出、三个核心引擎纯函数导出并补切片测试、analyze.ts 巨函数渐进拆分（8 个模式早退块 476 行抽出为模块级函数）；②命令盘点精简——移除 20 个边缘命令（流水线核心命令、进度导出与 welcome/help/about 等友好命令保留），全部提及点（help/ask 词典/补全/README/docs/IDE slash/运行时提示/模板预设）同步清理，索引维护统一入口收敛为 reindex。行为零变化，全量 621/621 通过。
+
+### deploy 引擎参数数组化（v8.3.341+）
+
+`src/core/deploy/engine.ts` 中 11 处不带 shell 语义的命令执行从 execSync 模板拼接改为 execFileSync 参数数组（新增 runFile 包装）：aws s3 sync、rsync、vercel、kubectl、scp/ssh、helm、pm2、serverless（阿里云 FC / AWS Lambda / 腾讯云 SCF）等。配置值作为独立参数传递，不经过 shell 解释——此前 target/host/namespace 等配置项理论上可注入 shell 元字符。三处语义保留：`cd X && cmd` 等价变换为 `cwd=X` 参数数组；`scp ${outputDir}/*` 的通配符依赖本地 shell 展开，改用 glob 包显式展开；sshpass 密码改独立参数传递（不再经过引号拼接）。用户显式书写的 shell 命令（build_cmd/script/pre_deploy）、命令存在性探测（sshpass -V）与管道语义保留 execSync。
+
+### 公共工具层收敛（v8.3.341+）
+
+- **extractBranchTypeFromBranchName**：从 pr.ts 提升至 git-integration 统一导出（纯函数、可测试），pr.ts 复用；非任务分支（无类型段）返回 undefined。
+- **envDirFor**：environment-config 新增带参导出（指定项目根），update-env-configs 的 initEnvironmentConfigs 改用，路径拼接段只写一处。
+
+### 核心引擎纯函数导出 + 切片测试（v8.3.341+）
+
+此前零直接测试的三个核心引擎补上切片测试（18 个新用例）：
+
+- **structured-extractor**：isTsOrJs / detectLanguage / inferPlatform 导出，测试 TS/JS 系扩展名（含 mts/cts）、Java/Python/Go 语言判定、路径→平台归属。
+- **prompt-builder**：extractInfoGaps（INFO_GAP 提取与去重）与 parseAiResponse（AI 响应 JSON 解析）导出并测试——二者是 AI 接力协议的关键解析器。
+- **extractBranchTypeFromBranchName**：任务分支提取类型段、非任务分支返回 undefined、空白分支名容错。
+
+### analyze.ts 巨函数渐进拆分（v8.3.341+）
+
+analyzeCommand（原 2570 行）由「模式早退分支」构成，本次将 8 个零数据流依赖的块整抽为模块级函数：analyzeFromCode / analyzeAuditFix / analyzeContextGuard（返回是否已处理）/ analyzeModuleMode / analyzeFeatureMode / analyzeDocMode / analyzeOverviewMode / analyzeUnitModes，共 476 行（函数降至 2094 行）。依赖规则：`_projectRoot` 作参数传入；if 收窄丢失的字段（options.module/feature/doc）以非空断言恢复。apply 主块（约 1150 行）因跨块 needsClarify 数据流留待下轮抽取。
+
+### 命令盘点精简（v8.3.341+）
+
+67 个命令盘点后保留流水线核心、内部调用、进度导出与 welcome/help/about/doctor/dashboard 等友好命令，移除 20 个边缘命令：`knowledge`、`graph`、`rag-index`、`code-index`、`refresh`、`notify`、`workspace`、`recommend`、`baseline`、`diff`、`rollback`、`merge-check`、`verdict`、`impact`、`audit`、`history`、`handover`、`track`（注册名 trace）、`tracker`（死文件）、孤儿引擎 `smart-recommend`/`mermaid-render`。同步清理全部提及点：
+
+- **运行时提示归位**：index-guard/doctor/analyze-engine/code-scanner/error-diagnosis 等 25 处「speccore refresh/code-index/verdict」提示统一改为 `speccore reindex` 或指向 ARBITRATION_REPORT.md 人工裁决入口；done 收尾中已删 audit 的内部 execSync 调用移除。
+- **意图词典收敛**：intent-recognition 删除 6 个 IntentType 词条与 intent 块，「更新/刷新索引」类触发词统一映射 reindex；ask-engine 命令表/映射表/工作流同步清理。
+- **展示面同步**：help 分类表、completion 补全数组、README 命令表、docs 系列（command-reference/commands.en/scenarios 双语/DESIGN/quick-reference 等 15 文件）、12 个 IDE slash 命令、init 生成的 SKILL 模板与 slash 模板、prompts 治理预设全部移除已删命令提及（历史版本演进表保留，废弃规划条目标注「已废弃」）。
+
+### .speccore.yml 配置注释统一（v8.3.341+）
+
+init 与 config --upgrade 生成的 .speccore.yml 注释统一为会议项目基准风格（字段名: 中文说明 + 取值 → 含义），并修正与真实代码不符的过时注释：
+
+- **枚举值校正**：arbitration.mode 注释 simple → l1-only/report-only；settings.patterns.auto_save 注释 always/false → aggressive/off；ask.routing.mode 注释 local/llm → cli-only/host-ai-only；assignee.mode 补 off；arbitration 说明与 ai.defaults 说明中已更名命令 split → taskify。
+- **新段注释补全**：vision 段 model/maxImagesPerPrompt/imageMaxSizeKb 补注释、provider 改「取值 → 含义」枚举式；agent_dispatch 段从段前「=」式改为 mode 字段注释 + 枚举式。
+- **参考示例同步**：templates/speccore-yml-example.yml 与落地副本（.speccore/examples/config/SPECCORE-YML-EXAMPLE.yml）措辞对齐（block_level 说明/UI 验证段标题/devices-browsers 块写法/smoke 行内注释），机器锁测试保障同源。
+
 ## v8.3.340 (2026-10-21) — 三层命名一致 + 成员模型扩展 + PR 目标分支环境名引用
 
 本版两大主题：①taskify 模块/子任务/Git 分支三层命名对齐功能单元名（去计数器、去端名冗余），Git 后缀默认 owner 拼音首字母；②成员模型扩展岗位/在项目口径/分支代号。另有迭代创建自动初始化成员与 Git 配置快照、运行时依赖声明修复（全局安装 MODULE_NOT_FOUND）、完成收尾全路径统一（execute 骨架填充兜底）、标题规范化改按需触发（默认关闭，ask 识别「按标准文档转换」）、config 升级链修复与静态 HTML 页面链路修复（引导页四模式页/提示词库链接 404 根治 + Qoder 宿主弹页展示指引）、成员通配语义（岗位/方向通配归一 + 匹配恒命中 + 候选推导防唯一误判）、PR 目标分支解耦（pr_target 独立配置 + 按分支类型区分）、execute --module 多值模糊匹配、PR 目标分支环境名引用（pr_target 与 environments/ 环境口径统一，v8.3.337~339 改动未单独发版，本版一并发布）。

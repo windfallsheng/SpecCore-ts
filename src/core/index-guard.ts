@@ -196,7 +196,7 @@ async function checkGraphLayer(cwd: string, iteration?: string): Promise<LayerSt
  * │   └── src/core/prompt-builder.ts
  * └── ⚠️  知识图谱：已过期（12 个实体待更新）
  *
- * 💡 建议执行 `speccore refresh` 更新索引
+ * 💡 建议执行 `speccore reindex` 更新索引
  * ```
  */
 function formatChangeSummary(
@@ -248,15 +248,7 @@ function buildSuggestedCommand(
   code: LayerStatus,
   graph: LayerStatus,
 ): string {
-  const flags: string[] = [];
-  if (!code.fresh) flags.push('--code');
-  if (!rag.fresh) flags.push('--rag');
-  if (!graph.fresh) flags.push('--graph');
-
-  if (flags.length === 3 || flags.length === 0) {
-    return 'speccore refresh';
-  }
-  return `speccore refresh ${flags.join(' ')}`;
+  return 'speccore reindex';
 }
 
 /**
@@ -267,21 +259,12 @@ function formatSuggestion(
   code: LayerStatus,
   graph: LayerStatus,
 ): string {
-  const flags: string[] = [];
-  if (!code.fresh) flags.push('--code');
-  if (!rag.fresh) flags.push('--rag');
-  if (!graph.fresh) flags.push('--graph');
-
   const lines: string[] = [];
   lines.push('💡 索引已过期，建议刷新后再执行：');
   lines.push('');
 
-  // 方式 1: 直接命令
-  if (flags.length === 3 || flags.length === 0) {
-    lines.push('   方式 1 — 直接命令：speccore refresh');
-  } else {
-    lines.push(`   方式 1 — 直接命令：speccore refresh ${flags.join(' ')}`);
-  }
+  // 方式 1: 直接命令（v8.3.341: refresh 已合并为 reindex 全量重建）
+  lines.push('   方式 1 — 直接命令：speccore reindex');
 
   // 方式 2: ask 自然语言
   const askPhrases: string[] = [];
