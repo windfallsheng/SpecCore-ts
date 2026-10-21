@@ -207,6 +207,11 @@ export async function askCommand(input: string, _options: any): Promise<void> {
       const src = join(tplDir, f);
       if (await pathExists(src)) await copy(src, join(process.cwd(), 'outputs', f));
     }
+    // v8.3.338+: 联动生成提示词库页，保证 setup-guide/项目名片内「查看提示词库」链接可达（老项目无需重新 init）
+    try {
+      const { generatePromptsPage } = await import('./prompts');
+      await generatePromptsPage(join(process.cwd(), 'outputs', 'speccore-prompts.html'));
+    } catch { /* 联动生成失败不阻断 ask */ }
     await writeFile(markerFile, ver);
     // 输出 SPECCORE_ONBOARD 标记让 AI 展示引导页
     process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);

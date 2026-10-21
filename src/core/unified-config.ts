@@ -87,7 +87,7 @@ export interface PlatformConfig {
   /** v8.3.104+: 端级受保护分支（覆盖全局 git.protected_branches） */
   protected_branches?: string[];
   /** v8.3.113+: 端级分支类型定义（覆盖全局 git.branch_types）。prefix=任务前前缀, suffix=任务后后缀, 均可选 */
-  branch_types?: Record<string, { prefix?: string; suffix?: string; source: string }>;
+  branch_types?: Record<string, { prefix?: string; suffix?: string; source: string; pr_target?: string }>;
   /** v8.3.60+: 按环境部署配置 */
   deploy?: {
     /** 测试环境 */
@@ -266,10 +266,12 @@ export interface ProjectConfig {
     default_base: string;
     branch_prefix: string;
     protected_branches: string[];
-    /** v8.3.113+: 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选。如 hotfix: { source: 'main', prefix: 'api-', suffix: '-urgent' } */
-    branch_types?: Record<string, { prefix?: string; suffix?: string; source: string }>;
+    /** v8.3.113+: 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选。 如 hotfix: { source: 'main', prefix: 'api-', suffix: '-urgent' } */
+    branch_types?: Record<string, { prefix?: string; suffix?: string; source: string; pr_target?: string }>;
     /** v8.3.336+: 分支名格式模板（全局兜底），支持变量 {type} {prefix} {taskId} {name} {date} {hash4}。迭代/子任务未配置时从这里取 */
     branch_format?: string;
+    /** v8.3.339+: PR 默认目标分支（与 default_base 解耦，按部署环境区分时可配；pr 命令回退链：--base > branch_types[{type}].pr_target > 本值 > default_base > main） */
+    pr_target?: string;
   };
   code_scope: string[];
   /** v8.3.58+: 验证相关配置 */
@@ -358,7 +360,13 @@ export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   platforms: [],
   git: {
     default_base: 'main',
+    // v8.3.339+: PR 默认目标分支独立配置（与 default_base 解耦）。
+    // 收录进 DEFAULT_PROJECT_CONFIG 后，老项目 config --upgrade 会自动补全该字段并序列化带出。
+    pr_target: 'main',
     branch_prefix: 'feature/',
+    // v8.3.337+: 分支名格式模板默认值（与 GitConfig 硬编码默认一致，零行为变化）。
+    // 收录进 DEFAULT_PROJECT_CONFIG 后，老项目 config --upgrade 会自动补全该字段并序列化带出。
+    branch_format: '{type}/{prefix}{taskId}',
     protected_branches: ['main', 'master'],
     branch_types: {
       feature: { source: 'develop' },
@@ -806,6 +814,19 @@ export interface ConfigDiff {
 const OPEN_DICT_PATHS = new Set<string>(['git.branch_types']);
 
 /**
+ * 路径是否处于开放式字典子树内（前缀匹配）。
+ * v8.3.337：原实现 OPEN_DICT_PATHS.has(path) 是全等匹配，递归进
+ * git.branch_types.feature 子层后豁免失效，用户自定义的 prefix/suffix
+ * 被误判为 removed → config --upgrade 截停死循环。改为子树前缀豁免。
+ */
+function isOpenDictPath(path: string): boolean {
+  for (const p of OPEN_DICT_PATHS) {
+    if (path === p || path.startsWith(p + '.')) return true;
+  }
+  return false;
+}
+
+/**
  * 递归比较当前配置与目标配置（DEFAULT_CONFIG），检测所有差异
  */
 export function detectConfigDiff(current: unknown, target: unknown, path = ''): ConfigDiff {
@@ -828,7 +849,7 @@ export function detectConfigDiff(current: unknown, target: unknown, path = ''): 
     for (const key of currentKeys) {
       if (!targetKeys.includes(key)) {
         // 开放式字典字段：用户自定义键是合法的（如自定义分支类型），不判为 removed
-        if (OPEN_DICT_PATHS.has(path)) continue;
+        if (isOpenDictPath(path)) continue;
         diff.removed.push(path ? `${path}.${key}` : key);
       }
     }
@@ -1408,6 +1429,7 @@ function validateProjectConfig(obj: Record<string, unknown>): ValidationResult {
   // git
   if (isObject(obj.git)) {
     if (typeof obj.git.default_base !== 'string') issues.push('git.default_base 必须是字符串');
+    if (obj.git.pr_target !== undefined && typeof obj.git.pr_target !== 'string') issues.push('git.pr_target 必须是字符串');
     if (typeof obj.git.branch_prefix !== 'string') issues.push('git.branch_prefix 必须是字符串');
     if (obj.git.branch_format !== undefined && typeof obj.git.branch_format !== 'string') issues.push('git.branch_format 必须是字符串');
     if (!Array.isArray(obj.git.protected_branches)) issues.push('git.protected_branches 必须是数组');
@@ -1426,6 +1448,9 @@ function validateProjectConfig(obj: Record<string, unknown>): ValidationResult {
           }
           if (typeDef.suffix !== undefined && typeof typeDef.suffix !== 'string') {
             issues.push(`git.branch_types.${typeName}.suffix 必须是字符串`);
+          }
+          if (typeDef.pr_target !== undefined && typeof typeDef.pr_target !== 'string') {
+            issues.push(`git.branch_types.${typeName}.pr_target 必须是字符串`);
           }
           if (typeof typeDef.source !== 'string') issues.push(`git.branch_types.${typeName}.source 必须是字符串`);
         }
@@ -2117,15 +2142,22 @@ export function toProjectYaml(config: ProjectConfig): string {
   yaml += '#   - 端级可覆盖：在 platforms[].default_branch / branch_prefix / protected_branches / branch_types\n';
   yaml += '#   - 子任务可覆盖：在 Task-*/{端}/{子任务}/.meta/git-config 中配置\n';
   yaml += 'git:\n';
-  yaml += '  # 默认基础分支（PR 合并目标、创建分支的默认源分支）\n';
+  yaml += '  # 默认基础分支（创建任务分支的源分支兜底，branch_types[{type}].source 未配置时生效）\n';
   yaml += `  default_base: ${config.git.default_base}\n`;
+  // v8.3.339+: PR 目标分支独立配置（与 default_base 解耦，按部署环境/分支类型区分）
+  if (config.git.pr_target) {
+    yaml += '  # PR 默认目标分支（回退链：--base > branch_types[{type}].pr_target > 本值 > default_base > main）\n';
+    yaml += `  pr_target: ${config.git.pr_target}\n`;
+  }
   yaml += '  # 功能分支前缀（旧语义，兼容保留）\n';
   yaml += `  branch_prefix: ${config.git.branch_prefix}\n`;
   // v8.3.336+: 分支名格式模板（全局兜底，迭代/子任务未配置时从这里取）
   if (config.git.branch_format) {
     yaml += '  # 分支名格式模板（全局兜底）：迭代 PROJECT_GRAPH / 子任务 git-config 未配置时生效\n';
     yaml += '  # 支持变量: {type} 分支类型, {prefix} 前缀, {taskId} 任务 ID, {name} 任务名, {date} 日期, {hash4} 随机 4 位\n';
-    yaml += `  branch_format: ${config.git.branch_format}\n`;
+    // JSON.stringify 加引号：模板含 {} 无引号会被 YAML 解析为流式映射语法，
+    // 非法 YAML → parseYaml 静默失败 → 升级写盘后整个文件解析为空（v8.3.337 修复）
+    yaml += `  branch_format: ${JSON.stringify(config.git.branch_format)}\n`;
   }
   yaml += '  # 受保护分支（禁止直接 push，只能通过 PR 合并）\n';
   yaml += '  # 支持通配符：如 release/* 匹配 release/1.0.0\n';

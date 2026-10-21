@@ -5,6 +5,8 @@ import { updateContext } from '../../core/context';
 import { nextIterationId } from '../../core/global-counters';
 import { showNextSteps } from '../../core/next-steps';
 import { GLOBAL_SPECS_DIR } from '../../core/spec-paths';
+import { parseStaffingTable } from '../../core/unit-staffing';
+import { loadRawProjectConfig } from '../../core/unified-config';
 export interface IterationCreateOptions {
   name?: string;
   topic?: string;
@@ -72,6 +74,58 @@ export async function iterationCreateCommand(options: IterationCreateOptions): P
   } catch (error) {
     spinner.fail(`Failed to create iteration: ${error}`);
     throw error;
+  }
+}
+
+/**
+ * v8.3.337+: 从全局 PROJECT.yaml git 段带出当前值快照
+ *
+ * 创建迭代时自动初始化迭代级 Git 配置（默认分支/分支格式照抄全局当前值），
+ * 全自动执行等无人值守场景读迭代 PROJECT_GRAPH.md 即有具体值；
+ * 全局未显式声明或值含表格破坏字符（|/换行）时退回「继承全局配置」占位符。
+ */
+async function loadIterationGitSnapshot(): Promise<{ defaultBase: string; branchFormat: string }> {
+  const INHERIT = '继承全局配置';
+  try {
+    const raw = await loadRawProjectConfig() as {
+      git?: { default_base?: unknown; branch_format?: unknown };
+    } | null;
+    const g = raw?.git;
+    const defaultBase = typeof g?.default_base === 'string' && g.default_base.trim() && !/[|\r\n]/.test(g.default_base)
+      ? g.default_base.trim()
+      : INHERIT;
+    const branchFormat = typeof g?.branch_format === 'string' && g.branch_format.trim() && !/[|\r\n]/.test(g.branch_format)
+      ? g.branch_format.trim()
+      : INHERIT;
+    return { defaultBase, branchFormat };
+  } catch {
+    return { defaultBase: INHERIT, branchFormat: INHERIT };
+  }
+}
+
+/**
+ * v8.3.337+: 从全局 TEAM.md 全员基座带出成员快照行
+ *
+ * 创建迭代时自动预填成员信息（岗位/方向/比例/在项目照抄基座当前值），
+ * 自动化场景直接读迭代 STAFFING.md 即有完整名单；基座后续变更不影响
+ * 本迭代（快照语义），差异化调整直接编辑本文件。基座缺失/空表/读取失败
+ * 均静默降级为空表，不阻塞迭代创建。
+ */
+async function buildStaffingRows(): Promise<string> {
+  try {
+    const teamPath = join('.speccore', 'PROJECT', 'TEAM.md');
+    if (!(await pathExists(teamPath))) return '';
+    const members = parseStaffingTable(await readFile(teamPath, 'utf-8'));
+    if (members.length === 0) return '';
+    return members.map((m) => {
+      const roles = (m.roles ?? []).join(',');
+      const dirs = (m.directions ?? []).join(',');
+      const cap = m.capacity ?? 100;
+      const status = m.status === 'inactive' ? '否' : '是';
+      return `| ${m.name} | ${roles} | ${dirs} | ${cap}% | ${status} |`;
+    }).join('\n');
+  } catch {
+    return '';
   }
 }
 
@@ -261,6 +315,8 @@ research/
   );
 
   // PROJECT_GRAPH.md
+  // v8.3.337+: Git 配置表格创建时从全局 PROJECT.yaml 带出快照（自动化可直接读迭代级配置）
+  const gitSnapshot = await loadIterationGitSnapshot();
   await writeFile(
     join(iterationDir, '000-overview', 'PROJECT_GRAPH.md'),
     `# 本期任务总览
@@ -272,14 +328,14 @@ research/
 
 ## Git 配置
 
-> 以下配置覆盖全局 CONSTITUTION.md，任务级 .meta/git-config 又覆盖本处。
-> 留空或填"继承全局配置"则使用上一级配置。
+> 创建时从全局 PROJECT.yaml 带出当前值快照；任务级 .meta/git-config 又覆盖本处。
+> 填「继承全局配置」或留空则使用上一级配置；编辑本表可覆盖全局值。
 
 | 配置项 | 值 | 说明 |
 | :--- | :--- | :--- |
-| 默认分支 | 继承全局配置 | 主分支名（main/master） |
+| 默认分支 | ${gitSnapshot.defaultBase} | 主分支名（main/master） |
 | 分支前缀 | | 如 2060708，追加到分支名中 |
-| 分支格式 | 继承全局配置 | 模板：{type}/{prefix}{name}-{hash4} |
+| 分支格式 | ${gitSnapshot.branchFormat} | 模板：{type}/{prefix}{name}-{hash4} |
 | 自动拉取 | 继承全局配置 | 创建分支前是否 git pull |
 | 远程名称 | 继承全局配置 | 远程仓库名（origin） |
 
@@ -305,24 +361,30 @@ graph TD
   );
 
   // STAFFING.md — 人员排期配置（差异覆盖层，全员基座在 .speccore/PROJECT/TEAM.md）
+  // v8.3.337+: 创建时自动从基座带出成员快照行（岗位/方向/比例/在项目照抄），
+  // 自动化场景直接读本文件即有完整名单；基座缺失/空表则生成空表。
+  const staffingRows = await buildStaffingRows();
   await writeFile(
     join(iterationDir, 'STAFFING.md'),
     `# ${options.name} 人员排期配置
 
 > 迭代: ${options.name}${options.owner ? ` | 负责人: ${options.owner}` : ''}
-> 全员基座: .speccore/PROJECT/TEAM.md（全局名册，自动继承）
+> 全员基座: .speccore/PROJECT/TEAM.md（全局名册，创建时自动带出成员快照）
 
 ## 人员列表
 
-| 成员 | 平台方向 | 投入比例 | 状态 |
-| :--- | :--- | :--- | :--- |
-| | | | |
+| 成员 | 岗位 | 平台方向 | 投入比例 | 在项目 |
+| :--- | :--- | :--- | :--- | :--- |
+${staffingRows || '| | | | | |'}
 
 > 说明:
-> - **本文件只写差异**: 与基座同名的成员整体覆盖其方向/比例；基座成员未列出的默认参与本迭代
+> - **创建时自动带出基座快照**（v8.3.337+）: 岗位/方向/比例/在项目照抄全局 TEAM.md 当前值；此后基座变更不影响本迭代
+> - **本文件只写差异**: 与基座同名的成员整体覆盖其岗位/方向/比例；基座成员未列出的默认参与本迭代
+> - **岗位**（v8.3.337+）: web / 后端 / 移动端 / 测试 / 产品，多个用逗号分隔（留空则继承基座）
 > - **平台方向**: 后台 / 小程序 / Web / APP，多个用逗号分隔（也可直接写标准端名）
 > - **投入比例**: 0-100%，用于 taskify 时自动分配和负荷均衡；写 0% 表示本迭代不参与
-> - **状态**: 在职（缺省）/ 出项目——出项目成员不参与自动填充；留空则继承基座状态
+> - **在项目**（v8.3.337+ 口径）: 是（缺省）/ 否——只看是否在项目，不看在职与否；留空则继承基座
+> - **通配**（v8.3.339+）: 岗位/平台方向可写星号 *（或 all / 全部 / 所有 / 全栈），表示全栈/所有方向；通配与具体值并列时以通配为准
 > - 编辑此文件后重新运行 taskify 即可更新默认分配
 `
   );

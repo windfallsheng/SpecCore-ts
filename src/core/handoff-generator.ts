@@ -7,6 +7,7 @@
 import { pathExists, readFile, readdir, writeFile, ensureDir } from 'fs-extra';
 import { join } from 'path';
 import { resolveUnitSourcePath } from './feature-source';
+import { isTaskModuleDirName } from './task-paths';
 import { getProjectRoot, getIterationDir } from '../utils/task-utils';
 
 export type HandoffStage = 'analyze' | 'taskify' | 'plan' | 'execute' | 'review' | 'done';
@@ -170,8 +171,9 @@ async function appendTaskifyToPlan(lines: string[], iterDir: string): Promise<vo
   lines.push('| :--- | :--- | :--- | :--- | :--- |');
 
   if (await pathExists(tasksDir)) {
+    // v8.3.337+: 兼容旧布局与新布局（030-tasks/{type}/{模块目录}）
     const entries = await readdir(tasksDir, { withFileTypes: true });
-    const tasks = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-'));
+    const tasks = entries.filter((e) => e.isDirectory() && (e.name.startsWith('Task-') || isTaskModuleDirName(e.name)));
     for (const task of tasks.slice(0, 30)) {
       lines.push(`| ${task.name} | 待填写 | 无 | 待评估 | 待分析 |`);
     }

@@ -542,7 +542,7 @@ program
   .option('--backend', '仅后端任务（自动识别项目中的后端端名）')
   .option('--frontend', '仅前端任务（自动识别项目中的前端端名）')
   .option('--platform <platform>', '按端过滤（工程标识，如 CONSTITUTION.md 端列表中的端名）')
-  .option('--module <module>', '按所属功能模块筛选（如 支付，匹配 .meta/feature）')
+  .option('--module <modules>', '按所属功能模块/模块目录名筛选（逗号分隔多值，模糊匹配，如 "支付,订单"）')
   .option('--plan <id>', 'Execute a saved plan (from speccore plan --list)')
   .option('--interactive', 'Interactive selection')
   .option('--dry-run', 'Preview execution plan')
@@ -891,7 +891,7 @@ program
   .option('--task <task>', '导入到指定 Task 目录')
   .option('--files <files>', '批量: "a.docx=平台1,b.pdf=平台2"')
   .option('--no-ai', '纯 pandoc 机械转换（终端快速模式）')
-  .option("--no-normalize", "跳过 AI 标题规范化（默认转换后按标准标题体系重写标题）")
+  .option("--normalize", "按 SpecCore 标准标题体系重写标题（AI 语义调整，默认关闭；调整前版本快照 backup/）")
     .option("--prompt", "输出验证 Prompt 到 stdout（Skill 协作模式）")
   .option("--response <response>", "接收 AI 修正内容写入文件")
   .option("--classify", "AI 智能分类 sources/ 文档 → staging/（按类型提取）")
@@ -1321,35 +1321,56 @@ if (process.argv.length <= 2) {
         } else if (!existsSync(ana)) {
           phase = 'analyze'; nextCmd = 'speccore analyze --iteration=' + iteration; nextDesc = '需求分析';
         } else {
-          const tds = readdirSync(base).filter((d: string) => d.startsWith('Task-'));
+          // v8.3.337+: 任务模块收集兼容新旧布局
+          // （旧: 030-tasks/Task-* 或 Iteration 直接层；新: 030-tasks/{type}/{功能单元名}）
+          const { isTaskModuleDirName } = require('./core/task-paths');
+          const { statSync } = require('fs');
+          const collectModules = (dir: string, depth: number): string[] => {
+            const out: string[] = [];
+            try {
+              for (const d of readdirSync(dir)) {
+                if (d.startsWith('.') || d.startsWith('_')) continue;
+                const p = join(dir, d);
+                let st; try { st = statSync(p); } catch { continue; }
+                if (!st.isDirectory()) continue;
+                if (d.startsWith('Task-') || (depth <= 1 && isTaskModuleDirName(d))) out.push(p);
+                else if (depth < 2) out.push(...collectModules(p, depth + 1));
+              }
+            } catch {}
+            return out;
+          };
+          const tasksRoot = join(base, '030-tasks');
+          let tds = existsSync(tasksRoot) ? collectModules(tasksRoot, 0) : [];
+          if (tds.length === 0) {
+            tds = readdirSync(base).filter((d: string) => d.startsWith('Task-')).map((d: string) => join(base, d));
+          }
           if (tds.length === 0) {
             phase = 'taskify'; nextCmd = 'speccore iteration taskify --iteration=' + iteration; nextDesc = '拆分任务';
           } else {
             total = tds.length;
-            for (const td of tds) {
-              // 扫描子目录中的 TASK.md 判断任务状态
-              const taskDirPath = join(base, td);
-              let found = false;
-              // 新结构: 扫描子目录中的 TASK.md
+            // 递归探测 TASK.md（新旧子任务结构兼容，最多 4 层）
+            const findDone = (dir: string, depth: number): boolean => {
               try {
-                const subdirs = readdirSync(taskDirPath).filter((d: string) =>
-                  !d.startsWith('.') && !d.startsWith('_') && !d.startsWith('9') &&
-                  existsSync(join(taskDirPath, d)) && 
-                  require('fs').statSync(join(taskDirPath, d)).isDirectory()
-                );
-                for (const sd of subdirs) {
-                  const subTask = join(taskDirPath, sd, 'TASK.md');
-                  if (existsSync(subTask) && readFileSync(subTask, 'utf-8').includes('已完成')) {
-                    found = true; break;
+                for (const d of readdirSync(dir)) {
+                  if (d.startsWith('.') || d.startsWith('_')) continue;
+                  const p = join(dir, d);
+                  let st; try { st = statSync(p); } catch { continue; }
+                  if (st.isDirectory()) {
+                    if (depth < 4 && findDone(p, depth + 1)) return true;
+                  } else if (d === 'TASK.md' && readFileSync(p, 'utf-8').includes('已完成')) {
+                    return true;
                   }
                 }
               } catch {}
-              if (found) done2++;
+              return false;
+            };
+            for (const td of tds) {
+              if (findDone(td, 0)) done2++;
             }
             if (done2 < total) {
-              phase = 'dev'; nextCmd = 'speccore execute --task=' + tds[done2] + ' --force'; nextDesc = '执行开发 (' + (done2 + 1) + '/' + total + ')';
+              phase = 'dev'; nextCmd = 'speccore execute --task=' + tds[done2].split('/').pop() + ' --force'; nextDesc = '执行开发 (' + (done2 + 1) + '/' + total + ')';
             } else {
-              phase = 'done'; nextCmd = 'speccore pr'; nextDesc = '创建 PR 提交代码';
+              phase = 'done'; nextCmd = 'speccore pr'; nextDesc = '创建 PR 提交 代码';
             }
           }
         }

@@ -39,19 +39,28 @@ export interface PromptParam {
   flag?: string;
 }
 
+/**
+ * 生成提示词库 HTML 页面并落盘（供 prompts 命令与 init/welcome 联动调用）。
+ * v8.3.338+: init/welcome 生成静态页面时联动产出，保证 setup-guide/项目名片页内
+ * 「查看提示词库」链接指向的 speccore-prompts.html 真实存在，杜绝 404。
+ */
+export async function generatePromptsPage(outputPath?: string): Promise<string> {
+  const presets = await loadPresets();
+  const userPrompts = await loadUserPrompts();
+  const allPrompts = [...presets, ...userPrompts];
+
+  const ctx = await readCurrentContext();
+  const html = generatePromptsHtml(attachParamFlags(applyDynamicDefaults(allPrompts, ctx)));
+  const target = outputPath || join(process.cwd(), 'outputs', 'speccore-prompts.html');
+  await ensureDir(join(process.cwd(), 'outputs'));
+  await writeFile(target, html);
+  return target;
+}
+
 export async function promptsCommand(options: PromptsOptions): Promise<void> {
   try {
-    // 收集所有提示词数据
-    const presets = await loadPresets();
-    const userPrompts = await loadUserPrompts();
-    const allPrompts = [...presets, ...userPrompts];
-
-    // 生成 HTML 页面
-    const ctx = await readCurrentContext();
-    const html = generatePromptsHtml(attachParamFlags(applyDynamicDefaults(allPrompts, ctx)));
-    const outputPath = options.output || join(process.cwd(), 'outputs', 'speccore-prompts.html');
-    await ensureDir(join(process.cwd(), 'outputs'));
-    await writeFile(outputPath, html);
+    // 生成 HTML 页面（v8.3.338+: 复用 generatePromptsPage）
+    const outputPath = await generatePromptsPage(options.output);
 
     logger.info('');
     logger.success('✅ 提示词库页面已生成！');

@@ -26,9 +26,9 @@ const CONSTITUTION_ANCHORS = [
   '回退', // 收敛模式：CONSTITUTION 为 AI 契约/兼容回退
 ];
 // TEAM.md 主模板 ↔ TEAM-EXAMPLE 必须共享：
-const TEAM_ANCHORS = ['状态', '在职', '出项目', '全员名册'];
+const TEAM_ANCHORS = ['在项目', '岗位', '全员名册', '分支代号'];
 // 迭代 STAFFING.md 主模板 ↔ STAFFING-EXAMPLE 必须共享：
-const STAFFING_ANCHORS = ['状态', '在职', '出项目', '只写差异'];
+const STAFFING_ANCHORS = ['在项目', '岗位', '只写差异'];
 
 beforeAll(async () => {
   const origCwd = process.cwd();
@@ -69,7 +69,7 @@ describe('模板族一致性机器锁（v8.3.324）', () => {
     }
   });
 
-  it('TEAM.md 主模板与 TEAM-EXAMPLE 共享「状态」列语义', () => {
+  it('TEAM.md 主模板与 TEAM-EXAMPLE 共享「在项目」列语义（v8.3.337+ 口径）', () => {
     const main = readOrFail(join(TEST_ROOT, '.speccore', 'PROJECT', 'TEAM.md'));
     const example = readOrFail(
       join(TEST_ROOT, '.speccore', 'examples', 'config', 'TEAM-EXAMPLE.md'),
@@ -78,12 +78,12 @@ describe('模板族一致性机器锁（v8.3.324）', () => {
       expect(main, `TEAM.md 主模板缺锚点「${anchor}」`).toContain(anchor);
       expect(example, `TEAM-EXAMPLE 缺锚点「${anchor}」`).toContain(anchor);
     }
-    // 列头必须一致（7 列含状态），保证用户可照抄
-    expect(main).toContain('| 状态 |');
-    expect(example).toContain('| 状态 |');
+    // 列头必须一致（9 列含在项目/分支代号），保证用户可照抄
+    expect(main).toContain('| 在项目 |');
+    expect(example).toContain('| 在项目 |');
   });
 
-  it('迭代 STAFFING.md 主模板与 STAFFING-EXAMPLE 共享「状态」列语义', () => {
+  it('迭代 STAFFING.md 主模板与 STAFFING-EXAMPLE 共享「在项目」列语义（v8.3.337+ 口径）', () => {
     const iterDir = findIterationDir(TEST_ROOT);
     const main = readOrFail(join(iterDir, 'STAFFING.md'));
     const example = readOrFail(
@@ -93,8 +93,8 @@ describe('模板族一致性机器锁（v8.3.324）', () => {
       expect(main, `STAFFING.md 主模板缺锚点「${anchor}」`).toContain(anchor);
       expect(example, `STAFFING-EXAMPLE 缺锚点「${anchor}」`).toContain(anchor);
     }
-    expect(main).toContain('| 状态 |');
-    expect(example).toContain('| 状态 |');
+    expect(main).toContain('| 在项目 |');
+    expect(example).toContain('| 在项目 |');
   });
 
   it('examples README 目录清单包含全部新增示例', () => {

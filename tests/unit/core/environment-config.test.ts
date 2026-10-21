@@ -10,6 +10,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import {
   loadEnvironmentConfig,
   loadEnvironmentByNameOrPath,
+  resolveEnvBranchRef,
 } from '../../../src/core/environment-config';
 
 const TEST_DIR = join(process.cwd(), 'tests', '.tmp', 'env-config');
@@ -135,6 +136,29 @@ branch: feature/custom`);
     it('should return null for empty input', async () => {
       const config = await loadEnvironmentByNameOrPath('');
       expect(config).toBeNull();
+    });
+  });
+
+  describe('resolveEnvBranchRef（v8.3.340+: pr_target 环境名引用）', () => {
+    // 依赖仓库真实 .speccore/environments/：dev → develop、production → main、local 无 branch
+    it('环境名命中 → 返回环境 branch 字段', async () => {
+      expect(await resolveEnvBranchRef('dev')).toBe('develop');
+      expect(await resolveEnvBranchRef('production')).toBe('main');
+    });
+
+    it('环境存在但未声明 branch → 按字面量返回', async () => {
+      expect(await resolveEnvBranchRef('local')).toBe('local');
+    });
+
+    it('无同名环境文件 → 按纯分支名字面量返回', async () => {
+      expect(await resolveEnvBranchRef('ghost-env-xyz-abc')).toBe('ghost-env-xyz-abc');
+      expect(await resolveEnvBranchRef('main')).toBe('main');
+    });
+
+    it('含路径分隔符 / .yaml 后缀的值 → 不做环境解析', async () => {
+      expect(await resolveEnvBranchRef('feature/login')).toBe('feature/login');
+      expect(await resolveEnvBranchRef('release/test')).toBe('release/test');
+      expect(await resolveEnvBranchRef('dev.yaml')).toBe('dev.yaml');
     });
   });
 });

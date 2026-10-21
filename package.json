@@ -1,6 +1,6 @@
 {
   "name": "speccore",
-  "version": "8.3.336",
+  "version": "8.3.340",
   "description": "SpecCore - Code by Spec, Not by Vibe.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -46,14 +46,15 @@
     "jszip": "^3.10.1",
     "pinyin-pro": "^3.29.4",
     "playwright": "^1.62.1",
-    "web-tree-sitter": "0.20.8"
+    "typescript": "^5.3.3",
+    "web-tree-sitter": "0.20.8",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.5",
     "@vitest/coverage-v8": "^1.6.1",
-    "typescript": "^5.3.3",
     "vitest": "^1.6.0"
   },
   "engines": {

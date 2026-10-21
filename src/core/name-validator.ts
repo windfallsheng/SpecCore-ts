@@ -4,6 +4,35 @@
  */
 import { readdir, pathExists, readFile } from 'fs-extra';
 import { join } from 'path';
+import { isTaskModuleDirName } from './task-paths';
+
+/**
+ * 收集迭代下的任务模块目录（v8.3.337+：兼容 030-tasks 新旧布局）
+ * - 030-tasks/Task-*（旧布局直接层）
+ * - 030-tasks/{type}/{模块}（新布局：模块名=功能单元名）
+ * - Iteration-NNN/Task-* 直接层（历史布局兜底）
+ * depth ≤ 1 按功能单元名识别模块后停止深入，避免误收端目录/子任务目录。
+ */
+async function collectTaskDirs(iterPath: string): Promise<string[]> {
+  const dirs: string[] = [];
+  const collect = async (dir: string, depth: number) => {
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith('Task-') || (depth <= 1 && isTaskModuleDirName(entry.name))) {
+          dirs.push(join(dir, entry.name));
+        } else if (!entry.name.startsWith('.')) {
+          await collect(join(dir, entry.name), depth + 1);
+        }
+      }
+    } catch { /* 跳过 */ }
+  };
+  const tasksDir = join(iterPath, '030-tasks');
+  if (await pathExists(tasksDir)) await collect(tasksDir, 0);
+  else await collect(iterPath, 0);
+  return dirs;
+}
 
 /**
  * 扫描所有迭代名称（去Iteration-NNN-前缀，返回原始 name 部分）
@@ -33,14 +62,10 @@ export async function getAllTaskNames(): Promise<string[]> {
   for (const iter of iterations) {
     if (!iter.isDirectory() || !iter.name.startsWith('Iteration-')) continue;
     const iterPath = join(cwd, iter.name);
-    try {
-      const entries = await readdir(iterPath, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory() || !entry.name.startsWith('Task-')) continue;
-        const name = await readTaskName(join(iterPath, entry.name));
-        if (name.length > 0) allTasks.push(name);
-      }
-    } catch { /* 跳过 */ }
+    for (const taskDir of await collectTaskDirs(iterPath)) {
+      const name = await readTaskName(taskDir);
+      if (name.length > 0) allTasks.push(name);
+    }
   }
   return allTasks;
 }
@@ -86,16 +111,12 @@ export async function checkTaskNameConflict(name: string, excludeName?: string):
   for (const iter of iterations) {
     if (!iter.isDirectory() || !iter.name.startsWith('Iteration-')) continue;
     const iterPath = join(cwd, iter.name);
-    try {
-      const entries = await readdir(iterPath, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory() || !entry.name.startsWith('Task-')) continue;
-        const taskName = await readTaskName(join(iterPath, entry.name));
-        if (taskName === name && taskName !== excludeName) {
-          conflicts.push({ name: taskName, iteration: iter.name });
-        }
+    for (const taskDir of await collectTaskDirs(iterPath)) {
+      const taskName = await readTaskName(taskDir);
+      if (taskName === name && taskName !== excludeName) {
+        conflicts.push({ name: taskName, iteration: iter.name });
       }
-    } catch { /* skip */ }
+    }
   }
   return conflicts;
 }

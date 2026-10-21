@@ -26,6 +26,10 @@ disable-model-invocation: false
 不要输出命令文本，不要分析意图，一切交给 speccore ask。
 
 ## 输出标记处理
+- `[SPECCORE_ONBOARD: <path>]` / `[SPECCORE_WELCOME: <path>]` / `[SPECCORE_SETUP_GUIDE: <path>]` 等 HTML 展示标记 → **必须最先处理，立即把 HTML 页面展示给用户**：
+  - 有 present_files 工具的宿主：直接 `present_files(<path>)`
+  - Qoder（无 present_files）：后台起静态服务器 `python3 -m http.server 8899 -d <页面所在目录>`，再用 RunPreview 打开 `http://localhost:8899/<页面文件名>`；同时附上可点击链接 `[打开页面](file://<path>)` 作为回退
+  - 禁止只说“检测到引导页”而不展示 — 说了不等于做了
 - `[SPECCORE_EXEC: <cmd>]` → 立即执行该命令，不要向用户复述命令文本
 - `[SPECCORE_PROMPT]` → 将后续 Prompt 内容作为你的工作指令执行
 - `[SPECCORE_NEEDS_INFO]` → 用交互式提问向用户收集缺失参数，收齐后重新执行

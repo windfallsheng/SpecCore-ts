@@ -23,18 +23,21 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 
 执行任何 `speccore` 命令后，检查 stdout 中的标记：
 - `[SPECCORE_ONBOARD: <path>]` → **🚨 必须最先处理，不可跳过，不可只口头提及**：
-  1. **立即执行** `present_files(<path>)` 展示 HTML 引导页（Qoder/Trae/Cursor 均支持）
+  1. **立即展示 HTML 引导页给用户**，按宿主环境选择方式：
+     - **有 present_files 工具的宿主**（Trae/Cursor 等）：直接 `present_files(<path>)`
+     - **Qoder（无 present_files）**：后台起静态服务器 `python3 -m http.server 8899 -d <页面所在目录>`，再用 RunPreview 打开 `http://localhost:8899/<页面文件名>`；同时附上可点击链接 `[打开页面](file://<path>)` 作为回退
   2. ❌ 禁止只说“检测到引导页”而不执行展示动作 — 说了不等于做了
   3. ❌ 禁止用文字描述引导页内容代替实际展示 — 必须让用户看到 HTML 页面
   4. **展示完成后**，再继续处理其他输出
-- `[SPECCORE_SETUP_GUIDE: <path>]` → **立即执行** `present_files(<path>)` 展示配置引导页
-- `[SPECCORE_ABOUT: <path>]` → **立即执行** `present_files(<path>)` 展示版本信息页
-- `[SPECCORE_HELP: <path>]` → **立即执行** `present_files(<path>)` 展示帮助中心页
-- `[SPECCORE_WELCOME: <path>]` → **立即执行** `present_files(<path>)` 展示项目名片页
-- `[SPECCORE_KNOWLEDGE: <path>]` → **立即执行** `present_files(<path>)` 展示知识图谱页
-- `[SPECCORE_PLAN: <path>]` → **立即执行** `present_files(<path>)` 展示执行计划页
-- `[SPECCORE_RETRO: <path>]` → **立即执行** `present_files(<path>)` 展示回顾报告页
-- `[SPECCORE_DASHBOARD: <path>]` → **立即执行** `present_files(<path>)` 展示仪表盘页
+- `[SPECCORE_SETUP_GUIDE: <path>]` → **立即展示配置引导页**（方式同上，Qoder 用静态服务器 + RunPreview）
+- `[SPECCORE_ABOUT: <path>]` → **立即展示版本信息页**（方式同上）
+- `[SPECCORE_HELP: <path>]` → **立即展示帮助中心页**（方式同上）
+- `[SPECCORE_WELCOME: <path>]` → **立即展示项目名片页**（方式同上）
+- `[SPECCORE_KNOWLEDGE: <path>]` → **立即展示知识图谱页**（方式同上）
+- `[SPECCORE_PLAN: <path>]` → **立即展示执行计划页**（方式同上）
+- `[SPECCORE_RETRO: <path>]` → **立即展示回顾报告页**（方式同上）
+- `[SPECCORE_DASHBOARD: <path>]` → **立即展示仪表盘页**（方式同上）
+- `[SPECCORE_PROMPTS: <path>]` → **立即展示提示词库页**（方式同上）
 - `[SPECCORE_EXEC: <cmd>]` → 直接 `execute_command` 执行
 - `[SPECCORE_PROMPT]` → 将后续 Prompt 内容作为你的工作指令执行（不要改写、不要略过）
 - `[SPECCORE_NEEDS_INFO]` → 用交互式提问向用户收集缺失参数，收齐后重新执行

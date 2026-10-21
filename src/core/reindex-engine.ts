@@ -8,7 +8,7 @@ import { readFile, writeFile, pathExists, readdir, ensureDir, stat } from 'fs-ex
 import { join, relative, extname } from 'path';
 import { createHash } from 'crypto';
 import { getDefaultIteration, getIterationDir } from './context';
-import { findTaskDir, TASK_TYPES } from './task-paths';
+import { findTaskDir, TASK_TYPES, isTaskModuleDirName } from './task-paths';
 import { buildKnowledgeGraph, saveKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { detectDecay, formatDecayReport, DecayReport } from './decay-detector';
 import { buildContextMarkdown, saveContextMarkdown } from './context-builder';
@@ -220,13 +220,13 @@ async function scanIterationLayer(cwd: string, iteration: string): Promise<Layer
   // 3. 扫描 030-tasks/ — 检查任务有效性
   const tasksDir = join(iterDir, '030-tasks');
   if (await pathExists(tasksDir)) {
-    // 扫描类型子目录
+    // 扫描类型子目录（v8.3.337+: 模块目录名可为功能单元名）
     for (const type of TASK_TYPES) {
       const typeDir = join(tasksDir, type);
       if (!(await pathExists(typeDir))) continue;
       const entries = await readdir(typeDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (!entry.isDirectory() || !entry.name.startsWith('Task-')) continue;
+        if (!entry.isDirectory() || !isTaskModuleDirName(entry.name)) continue;
         const taskPath = join(typeDir, entry.name);
         result.files.push({
           path: `030-tasks/${type}/${entry.name}`,
@@ -240,10 +240,10 @@ async function scanIterationLayer(cwd: string, iteration: string): Promise<Layer
         await checkPlatformsConsistency(taskPath, entry.name, result);
       }
     }
-    // 扫描布局
+    // 扫描布局（旧布局直接层，v8.3.337+: 兼容功能单元名目录）
     const rootEntries = await readdir(tasksDir, { withFileTypes: true });
     for (const entry of rootEntries) {
-      if (!entry.isDirectory() || !entry.name.startsWith('Task-')) continue;
+      if (!entry.isDirectory() || !isTaskModuleDirName(entry.name)) continue;
       result.files.push({
         path: `030-tasks/${entry.name}`,
         hash: '',

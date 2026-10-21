@@ -14,6 +14,7 @@ import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
 import { join, basename } from 'path';
 import { logger } from '../utils/logger';
 import { resolveUnitSourcePath, UNIT_SOURCE_FILE } from './feature-source';
+import { isTaskModuleDirName } from './task-paths';
 
 // ═══════════════════════════════════════════════
 // 类型定义
@@ -719,14 +720,14 @@ async function scanTaskDirs(tasksDir: string): Promise<{ taskId: string; taskDir
 
     const fullPath = join(tasksDir, entry.name);
 
-    if (entry.name.startsWith('Task-')) {
+    if (entry.name.startsWith('Task-') || isTaskModuleDirName(entry.name)) {
       results.push({ taskId: entry.name, taskDir: fullPath });
     } else {
       // 类型子目录（feature/bugfix/refactor/...）→ 递归扫描
       try {
         const subEntries = await readdir(fullPath, { withFileTypes: true });
         for (const sub of subEntries) {
-          if (sub.isDirectory() && sub.name.startsWith('Task-')) {
+          if (sub.isDirectory() && (sub.name.startsWith('Task-') || isTaskModuleDirName(sub.name))) {
             results.push({ taskId: sub.name, taskDir: join(fullPath, sub.name) });
           }
         }

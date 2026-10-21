@@ -23,10 +23,17 @@ export interface StaffingMember {
   /** 投入比例（%） */
   capacity: number;
   /**
-   * 成员状态（v8.3.321+）：active 在职 / inactive 出项目。
-   * undefined = 未声明（基座缺省视为在职；迭代覆盖层缺省不覆盖，继承基座状态）
+   * 成员状态（v8.3.337+ 口径升级）：「是否在项目」——
+   * active 在项目 / inactive 不在项目（不看在职与否，只看是否在项目）。
+   * undefined = 未声明（基座缺省视为在项目；迭代覆盖层缺省继承基座）
    */
   status?: 'active' | 'inactive';
+  /** 岗位（v8.3.337+，可多个：web / 后端 / 移动端 / 测试 / 产品 等） */
+  roles: string[];
+  /** Git 用户名（TEAM.md 列，v8.3.337+ 消费） */
+  gitUser?: string;
+  /** 分支代号（v8.3.337+，可选声明；未声明自动拼音首字母，重名场景用它区分） */
+  initials?: string;
 }
 
 /** _matrix.md owners 段单条声明 */
@@ -69,6 +76,7 @@ export function findSpeccoreRoot(startDir: string): string | null {
  */
 export function parseStaffingTable(content: string): StaffingMember[] {
   let nameIdx = -1, dirIdx = -1, capIdx = -1, statusIdx = -1;
+  let roleIdx = -1, gitUserIdx = -1, initialsIdx = -1;
   const members: StaffingMember[] = [];
   for (const line of content.split(/\r?\n/)) {
     if (!line.startsWith('|') || line.includes(':---')) continue;
@@ -77,13 +85,16 @@ export function parseStaffingTable(content: string): StaffingMember[] {
     if (cols[0] === '') cols.shift();
     if (cols.length > 0 && cols[cols.length - 1] === '') cols.pop();
     if (cols.length < 3) continue;
-    // 表头行：定位「成员/平台方向/投入比例/状态」列索引
+    // 表头行：定位「成员/岗位/平台方向/投入比例/状态/Git 用户名/分支代号」列索引
     if (nameIdx < 0 && (cols[0] === '成员' || cols[0] === '人员')) {
       cols.forEach((c, i) => {
         if (c === '成员' || c === '人员') nameIdx = i;
         else if (c === '平台方向' || c === '方向') dirIdx = i;
         else if (c === '投入比例' || c === '比例') capIdx = i;
-        else if (c === '状态') statusIdx = i;
+        else if (c === '状态' || c === '在项目') statusIdx = i;
+        else if (c === '岗位' || c === '角色') roleIdx = i;
+        else if (c === 'Git 用户名' || c === 'git 用户名') gitUserIdx = i;
+        else if (c === '分支代号') initialsIdx = i;
       });
       continue;
     }
@@ -93,18 +104,25 @@ export function parseStaffingTable(content: string): StaffingMember[] {
     // 投入比例解析：0% 是合法值（本迭代不参与），不能用 || 兜底成 100
     const rawCap = capIdx >= 0 ? (cols[capIdx] || '100') : '100';
     const cap = parseInt(rawCap);
-    // 状态归一化：留空/无列 = undefined（不声明）
+    // 状态归一化（v8.3.337+ 口径：「是否在项目」）：
+    // 不在项目/出项目/离场/停/否 → inactive；在项目/在职/参与/是 → active；留空/无列 = undefined（不声明）
     const rawStatus = statusIdx >= 0 ? (cols[statusIdx] || '') : '';
     const status: 'active' | 'inactive' | undefined = rawStatus
-      ? (/出|离|停|inactive|off|exit/i.test(rawStatus) ? 'inactive' : 'active')
+      ? (/不|出|离|停|否|inactive|off|exit/i.test(rawStatus) ? 'inactive' : 'active')
       : undefined;
+    const rawInitials = initialsIdx >= 0 ? (cols[initialsIdx] || '').trim() : '';
     members.push({
       name,
       directions: dirIdx >= 0
-        ? (cols[dirIdx] || '').split(/[,，、]/).map((d: string) => d.trim()).filter(Boolean)
+        ? normalizeWildcard((cols[dirIdx] || '').split(/[,，、]/).map((d: string) => d.trim()).filter(Boolean))
         : [],
       capacity: Number.isNaN(cap) ? 100 : cap,
       status,
+      roles: roleIdx >= 0
+        ? normalizeWildcard((cols[roleIdx] || '').split(/[,，、]/).map((r: string) => r.trim()).filter(Boolean))
+        : [],
+      gitUser: gitUserIdx >= 0 ? (cols[gitUserIdx] || '').trim() || undefined : undefined,
+      initials: rawInitials || undefined,
     });
   }
   return dirIdx < 0 ? [] : members;
@@ -125,7 +143,17 @@ export function mergeStaffing(
   const merged = [...globalMembers];
   for (const m of iterationMembers) {
     const idx = merged.findIndex((g) => g.name === m.name);
-    if (idx >= 0) merged[idx] = { ...m, status: m.status ?? merged[idx].status };
+    if (idx >= 0) {
+      // 状态/岗位/代号/Git 用户名「空不覆盖」：旧迭代 STAFFING.md 无新列时
+      // 不破坏基座已声明的值（roles 空数组表示未声明，继承基座）
+      merged[idx] = {
+        ...m,
+        status: m.status ?? merged[idx].status,
+        roles: (m.roles?.length ?? 0) > 0 ? m.roles : merged[idx].roles,
+        gitUser: m.gitUser ?? merged[idx].gitUser,
+        initials: m.initials ?? merged[idx].initials,
+      };
+    }
     else merged.push({ ...m });
   }
   return merged;
@@ -134,8 +162,8 @@ export function mergeStaffing(
 /**
  * 读取人员排期（两级合并）：全局 .speccore/PROJECT/TEAM.md 全员基座
  * + 迭代 STAFFING.md 差异覆盖（v8.3.319+）。任一文件缺失均不阻塞。
- * v8.3.321+：出项目（inactive）成员统一剔除——analyze 候选推导、
- * taskify 负荷均衡自动跳过，只选在职成员；已拍板/已固化的 .meta/owner 不受影响。
+ * v8.3.337+ 口径升级：「不在项目」成员统一剔除（不看在职与否，只看是否在项目）——
+ * analyze 候选推导、taskify 负荷均衡自动跳过；已拍板/已固化的 .meta/owner 不受影响。
  */
 export function loadStaffing(iterationDir: string): StaffingMember[] {
   const iterationMembers = parseStaffingTable(
@@ -145,7 +173,7 @@ export function loadStaffing(iterationDir: string): StaffingMember[] {
   const globalMembers = root
     ? parseStaffingTable(readOrEmpty(join(root, '.speccore', 'PROJECT', 'TEAM.md')))
     : [];
-  // 基座未声明状态 = 在职
+  // 基座未声明状态 = 在项目
   const base = globalMembers.map((m) => ({ ...m, status: m.status ?? 'active' as const }));
   return mergeStaffing(base, iterationMembers).filter((m) => m.status !== 'inactive');
 }
@@ -158,7 +186,27 @@ const DIRECTION_ALIASES: Record<string, string[]> = {
   '小程序': ['miniapp', 'mini'],
 };
 
+/**
+ * 通配语义（v8.3.339+）：成员「岗位/平台方向」写 `*` / all / 全部 / 所有 / 全栈
+ * 表示「全部」（全栈开发、所有端方向）。解析时归一为 WILDCARD 单元素数组，
+ * 匹配时恒命中；候选推导时不参与「唯一」判定（防全栈成员被误推为各端唯一负责人）。
+ */
+export const WILDCARD = '*';
+
+/** 通配词归一：列表含通配词时整体归一为 [WILDCARD]（通配与具体值并列时以通配为准） */
+export function normalizeWildcard(list: string[]): string[] {
+  return list.some((s) => /^(\*|all|全部|所有|不限|全栈|全端)$/i.test(s.trim()))
+    ? [WILDCARD]
+    : list;
+}
+
+/** 是否通配声明（归一后恰为 [WILDCARD]） */
+export function isWildcard(list: string[]): boolean {
+  return list.length === 1 && list[0] === WILDCARD;
+}
+
 export function matchDirection(platform: string, direction: string): boolean {
+  if (direction === WILDCARD) return true; // v8.3.339+: 通配恒命中
   const p = platform.toLowerCase();
   const d = direction.toLowerCase();
   // 全词边界匹配（app 不误匹配 miniapp；h5 词边界命中 h5-mobile）
@@ -229,8 +277,11 @@ export function deriveOwnerCandidates(
   const decls: UnitOwnerDecl[] = [];
   for (const platform of platforms) {
     const matched = staffing.filter((m) => m.directions.some((d) => matchDirection(platform, d)));
-    if (matched.length === 1) {
-      decls.push({ platform, name: matched[0].name, status: 'pending' });
+    // v8.3.339+: 通配成员对每个端都恒命中，不参与「唯一」判定——
+    // 只有专向唯一命中才写候选，防全栈成员被误推为各端唯一负责人
+    const explicit = matched.filter((m) => !isWildcard(m.directions));
+    if (explicit.length === 1) {
+      decls.push({ platform, name: explicit[0].name, status: 'pending' });
     }
   }
   return decls;

@@ -10,8 +10,8 @@ examples/
 ├── README.md                    ← 本文件
 ├── config/                      ← 配置文件示例
 │   ├── CONSTITUTION-EXAMPLE.md  ← CONSTITUTION.md 完整示例（多工程）
-│   ├── TEAM-EXAMPLE.md          ← TEAM.md 全员名册示例（7 列，含状态）
-│   ├── STAFFING-EXAMPLE.md      ← STAFFING.md 迭代排期示例（差异覆盖，含状态）
+│   ├── TEAM-EXAMPLE.md          ← TEAM.md 全员名册示例（9 列，含在项目/分支代号）
+│   ├── STAFFING-EXAMPLE.md      ← STAFFING.md 迭代排期示例（差异覆盖，含岗位/在项目）
 │   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
 │   ├── SPECCORE-YML-EXAMPLE.yml ← .speccore.yml 主配置完整示例（v8.3.296+）
 │   ├── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
@@ -38,7 +38,7 @@ examples/
 8. 查看 `config/DEPLOY-EXAMPLE.yaml`，了解部署配置格式（用于 `speccore deploy`）
 9. 查看 `config/VERIFY-EXAMPLE.yaml`，了解测试验证配置格式（用于 `speccore verify --config`）
 10. 查看 `config/SPECCORE-YML-EXAMPLE.yml`，了解主配置 .speccore.yml 全部字段（质量门禁/冒烟三时机/流水线/AI provider）
-11. 查看 `config/TEAM-EXAMPLE.md` 与 `config/STAFFING-EXAMPLE.md`，了解人员配置两级继承（TEAM 全员基座 + STAFFING 迭代差异），「状态」列支持出项目成员免分配
+11. 查看 `config/TEAM-EXAMPLE.md` 与 `config/STAFFING-EXAMPLE.md`，了解人员配置两级继承（TEAM 全员基座 + STAFFING 迭代差异），「在项目」列支持出项目成员免分配
 12. 查看 `ci/github-actions.yml`，复制到 `.github/workflows/` 启用 CI 校验
 13. 修改后运行 `speccore update` 更新配置结构（Git 策略以 `.speccore/PROJECT.yaml` 的 `git` 段为机器事实源）
 

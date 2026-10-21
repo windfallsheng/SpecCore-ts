@@ -9,7 +9,7 @@ import { readFile, writeFile, pathExists, readdir, ensureDir, stat } from 'fs-ex
 import { join, relative, isAbsolute, basename } from 'path';
 import { createHash } from 'crypto';
 import { getIterationDir, getDefaultIteration } from './context';
-import { findTaskDir, TASK_TYPES } from './task-paths';
+import { findTaskDir, TASK_TYPES, isTaskModuleDirName } from './task-paths';
 import { isTimestampBackup } from '../utils/task-utils';
 import { logger } from '../utils/logger';
 
@@ -505,7 +505,7 @@ async function scanTasks(iterDir: string): Promise<{
 
   if (!(await pathExists(tasksDir))) return { entities, relations };
 
-  // 扫描类型子目录
+  // 扫描类型子目录（v8.3.337+: 模块目录名可为功能单元名，isTaskModuleDirName 统一识别）
   const taskDirs: { taskId: string; taskPath: string; type: string }[] = [];
 
   for (const type of TASK_TYPES) {
@@ -513,7 +513,7 @@ async function scanTasks(iterDir: string): Promise<{
     if (!(await pathExists(typeDir))) continue;
     const entries = await readdir(typeDir, { withFileTypes: true });
     for (const e of entries) {
-      if (e.isDirectory() && e.name.startsWith('Task-')) {
+      if (e.isDirectory() && isTaskModuleDirName(e.name)) {
         taskDirs.push({ taskId: e.name, taskPath: join(typeDir, e.name), type });
       }
     }
@@ -1159,7 +1159,7 @@ async function scanTaskSpecs(iterDir: string): Promise<{ entities: GraphEntity[]
       for (const e of entries) {
         const p = join(dir, e.name);
         if (e.isDirectory()) {
-          if (e.name.startsWith('Task-')) results.push(p);
+          if (e.name.startsWith('Task-') || isTaskModuleDirName(e.name)) results.push(p);
           else if (!e.name.startsWith('.') && e.name !== 'node_modules') {
             results.push(...await findTaskDirs(p));
           }
@@ -1372,7 +1372,9 @@ async function inferRelations(entities: GraphEntity[], iterDir: string): Promise
         if (cells.length >= 3) {
           const consumer = cells[0].split(':')[0].trim();
           const producer = cells[2].split(':')[0].trim();
-          if (consumer.startsWith('Task-') && producer.startsWith('Task-')) {
+          // v8.3.337+: 依赖表实体可为 Task- 前缀（存量）或功能单元名（新命名）
+          const isTaskEntity = (s: string) => s.startsWith('Task-') || isTaskModuleDirName(s);
+          if (isTaskEntity(consumer) && isTaskEntity(producer)) {
             if (entityMap.has(consumer) && entityMap.has(producer) &&
                 !relations.some(r => r.from === consumer && r.to === producer && r.type === 'depends_on')) {
               relations.push({

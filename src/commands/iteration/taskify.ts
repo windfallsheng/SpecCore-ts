@@ -13,6 +13,8 @@ import { buildPrompt, formatPrompt } from '../../core/prompt-builder';
 import { generatePlatformsRegistry } from '../../core/platform-registry';
 import { warnIfIndexStale } from '../../core/index-guard';
 import { GLOBAL_SPECS_DIR, parsePlatformList, parseFeatureList } from '../../core/spec-paths';
+import { isTaskModuleDirName } from '../../core/task-paths';
+import { WILDCARD } from '../../core/unit-staffing';
 import { SKELETON_MARKER, buildQualityRubRIC } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
@@ -217,14 +219,27 @@ function buildTaskTopic(sec: any, taskType: string): string {
 }
 
 /**
- * 生成子任务全局唯一 ID
- * 格式: Task-{父任务尾段}-{端名}
- * 例: Task-033-login-flow-booking-service（父任务 ID Task-033-login-flow 去 Task- 前缀后接端名）
+ * v8.3.337+: 解析模块目录名——功能单元目录名直接对齐（与 features/、020-specs/ 一致），
+ * 去掉 Task-NNN 计数器序号。非目录名格式（自创英文名/中文名）返回空，回退原 topic 链。
+ * 目录名格式校验：小写字母/数字/连字符组成（功能单元命名 v8.3.271+ 契约）。
  */
-function generateSubtaskId(parentTaskId: string, platform: string): string {
-  // v6.49.5+ / v8.3.10+：确定性格式 {taskId}-{platform}，保证全项目唯一
-  // 因为每个任务每个端只有一个子任务，所以 {taskId}-{platform} 已经唯一
-  return `Task-${parentTaskId}-${platform}`;
+function resolveModuleDirName(sec: any): string {
+  const functionalUnit = sec?.functionalUnit || '';
+  if (functionalUnit && /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(functionalUnit)) {
+    return functionalUnit;
+  }
+  return '';
+}
+
+/**
+ * 生成子任务目录名（v8.3.337+ 改造）
+ * 格式: Task-{模块名}——与模块目录名（功能单元名）一致，不再拼端名。
+ * 端名已由目录层级承载（{模块}/{端}/{子任务}），拼入子任务 ID 是冗余；
+ * 多端同名子任务分处不同端目录无目录冲突，Git 分支重名由 createTaskBranch hash 兜底。
+ * 例: 模块 admin-web-01-yudingguanli → 子任务 Task-admin-web-01-yudingguanli
+ */
+function generateSubtaskId(moduleDirName: string): string {
+  return `Task-${moduleDirName}`;
 }
 
 /** 拆分约束常量（简化版：每个功能单元按涉及的端拆分，每端1个子任务） */
@@ -1129,9 +1144,13 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
         const aiIdToTaskId = new Map<string, string>();
         for (const sec of sections) {
           // v8.3.294+: bugfix 任务目录名拼「模块英文-内容英文」，其余类型保持原链
+          // v8.3.337+: 模块目录名优先对齐功能单元目录名（无计数器），非目录名回退原链
           const taskType = (sec as any)._taskType || 'feature';
           const taskTopic = buildTaskTopic(sec, taskType);
-          const { id: taskId } = await nextTaskId(sec.name, taskTopic);
+          const moduleName = resolveModuleDirName(sec);
+          let taskId: string;
+          if (moduleName) taskId = moduleName;
+          else taskId = (await nextTaskId(sec.name, taskTopic)).id;
           (sec as any)._taskId = taskId;
           const aiId = (sec as any)._aiId as string | undefined;
           if (aiId) aiIdToTaskId.set(aiId, taskId);
@@ -1600,12 +1619,15 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
     logger.info(`Found ${sections.length} sections to split`);
     logger.info(`Platforms: ${platforms.join(', ')}`);
 
-    // ── 预分配任务 ID（确保所有路径使用计数器，避免编号重复） ──
+    // ── 预分配任务 ID（v8.3.337+: 模块目录名优先对齐功能单元目录名）──
     for (const section of sections) {
       // v8.3.294+: bugfix 任务目录名拼「模块英文-内容英文」，其余类型保持原链
       const taskType = (section as any)._taskType || 'feature';
       const topic = buildTaskTopic(section, taskType);
-      const { id: taskId } = await nextTaskId(section.name, topic);
+      const moduleName = resolveModuleDirName(section);
+      let taskId: string;
+      if (moduleName) taskId = moduleName;
+      else taskId = (await nextTaskId(section.name, topic)).id;
       (section as any)._taskId = taskId;
     }
 
@@ -2065,11 +2087,11 @@ async function createTaskFromSection(iterationDir: string, taskId: string, secti
     logger.warn(`      建议先运行: speccore analyze -I ${iterationName} --auto`);
   }
 
-  // 预生成所有端的子任务 ID（保证同一端在所有文件中 ID 一致）
+  // 预生成所有端的子任务 ID（子任务名 = Task-{模块名}，不拼端名）
   const taskNum = taskId.replace(/^Task-/, '');
   const subtaskIdMap = new Map<string, string>();
   for (const p of taskPlatforms) {
-    subtaskIdMap.set(p, generateSubtaskId(taskNum, p));
+    subtaskIdMap.set(p, generateSubtaskId(taskNum));
   }
 
 
@@ -2750,7 +2772,7 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
     const fallbackBackend = allPlatforms.find(p =>
       p === 'backend' || p.startsWith('后台') || /-(service|api|server|backend)$/i.test(p)
     ) || 'backend';
-    const fallbackSubtaskId = subtaskIdMap.get(fallbackBackend) || generateSubtaskId(taskNum, fallbackBackend);
+    const fallbackSubtaskId = subtaskIdMap.get(fallbackBackend) || generateSubtaskId(taskNum);
     const autoSubtaskDir = join(taskDir, fallbackBackend, fallbackSubtaskId);
     await ensureDir(join(autoSubtaskDir, '.meta'));
     await writeFile(join(autoSubtaskDir, '.meta', 'type'), taskType);
@@ -2775,7 +2797,7 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
       `# ${section.name} — ${fallbackBackend}（自动补充）
 
 ## 子任务信息
-- **子任务 ID**: \`${taskId}-${fallbackBackend}-auto\`
+- **子任务 ID**: \`${fallbackSubtaskId}-auto\`
 - **所属模块**: \`${taskId}\`
 - **功能单元**: ${featureName}
 - **端**: ${fallbackBackend}
@@ -2796,7 +2818,8 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
     await writeFile(join(autoSubtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
     if (docSet.hasMonitor) await writeFile(join(autoSubtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
     taskPlatforms.push(fallbackBackend);
-    subtaskIdMap.set(fallbackBackend, `${taskId}-${fallbackBackend}-auto`);
+    // 自动补充的后端子任务名也遵循 Task-{模块名}-auto（后缀区分自动补充来源）
+    subtaskIdMap.set(fallbackBackend, `${fallbackSubtaskId}-auto`);
   }
 
   // ─ 5. 任务上下文 CONTEXT.md ─
@@ -4021,6 +4044,10 @@ interface StaffMember {
   name: string;
   platforms: string[];
   capacity: number; // 0-100
+  /** 岗位（v8.3.337+，可多个：web / 后端 / 移动端 等） */
+  roles: string[];
+  /** 分支代号（可选声明；未声明自动拼音首字母） */
+  initials?: string;
 }
 
 interface SectionComplexity {
@@ -4449,6 +4476,8 @@ function readStaffing(iterationDir: string): StaffMember[] | null {
     name: m.name,
     platforms: m.directions,
     capacity: m.capacity,
+    roles: m.roles,
+    initials: m.initials,
   }));
   return members.length > 0 ? members : null;
 }
@@ -4479,28 +4508,82 @@ async function resolveUnitOwnerFromMatrix(
 }
 
 /**
- * 根据平台和负荷自动推荐负责人
+ * 端名 → 需求岗位映射（v8.3.337+）：按端名关键词推断技术岗位维度。
+ * 用于 autoAssign 双维匹配——岗位（技术栈维度）+ 方向（业务端维度）正交筛选。
+ */
+function platformToRoles(platform: string): string[] {
+  const p = platform.toLowerCase();
+  const roles: string[] = [];
+  if (/web|admin|h5|frontend|pc|小程序/.test(p)) roles.push('web');
+  if (/service|api|server|backend|后台/.test(p)) roles.push('后端');
+  if (/app|mobile|移动|android|ios/.test(p)) roles.push('移动端');
+  return roles;
+}
+
+/** 岗位别名归一（成员表自由填写：web/前端、后端/服务端、移动端/APP 同义） */
+const ROLE_ALIASES: Record<string, string[]> = {
+  'web': ['前端', 'frontend'],
+  '后端': ['backend', '服务端', 'server'],
+  '移动端': ['mobile', 'app'],
+};
+
+/** 成员岗位是否命中任务所需岗位之一（v8.3.339+: 通配成员恒命中） */
+function memberRoleMatches(memberRoles: string[], needRoles: string[]): boolean {
+  if (needRoles.length === 0 || memberRoles.length === 0) return false;
+  if (memberRoles.includes(WILDCARD)) return true; // 全栈成员岗位恒命中
+  for (const need of needRoles) {
+    const n = need.toLowerCase();
+    const aliases = ROLE_ALIASES[n] ?? [];
+    for (const r of memberRoles) {
+      const rl = r.toLowerCase();
+      if (rl === n || rl.includes(n) || n.includes(rl)) return true;
+      if (aliases.some((a) => rl.includes(a.toLowerCase()) || a.toLowerCase().includes(rl))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 根据平台和负荷自动推荐负责人（v8.3.337+ 双维匹配）
+ *
+ * 三级匹配（从严格到宽松，同级内取负荷最低者）：
+ *   1. 岗位+方向双命中（技术栈与业务端都对口）
+ *   2. 仅方向命中（沿用 v8.3.319 语义）
+ *   3. 仅岗位命中（方向未声明但技术栈对口）
+ * 均无命中 → 未分配。已剔除「不在项目」成员（loadStaffing 过滤）。
  */
 function autoAssign(section: Section, platforms: string[], staffing: StaffMember[]): string {
   const targetPlatform = section.platform || '';
   if (!targetPlatform || !staffing.length) return '未分配';
-  
-  // 找到匹配平台的、负荷最低的人
-  let best: StaffMember | null = null;
-  let bestLoad = Infinity;
-  
-  for (const m of staffing) {
-    if (m.capacity <= 0) continue; // v8.3.319: 投入比例 0% = 本迭代不参与分配（如休假）
-    const platformMatch = m.platforms.some(p => 
-      targetPlatform.includes(p) || p.includes(targetPlatform)
-    );
-    if (platformMatch && m.capacity < bestLoad) {
-      best = m;
-      bestLoad = m.capacity;
+
+  const needRoles = platformToRoles(targetPlatform);
+  const pickLowest = (candidates: StaffMember[]): StaffMember | null => {
+    let best: StaffMember | null = null;
+    let bestLoad = Infinity;
+    for (const m of candidates) {
+      if (m.capacity <= 0) continue; // v8.3.319: 投入比例 0% = 本迭代不参与分配（如休假）
+      if (m.capacity < bestLoad) {
+        best = m;
+        bestLoad = m.capacity;
+      }
     }
-  }
-  
-  return best ? best.name : '未分配';
+    return best;
+  };
+
+  const directionHit = (m: StaffMember): boolean =>
+    m.platforms.includes(WILDCARD) || // v8.3.339+: 通配方向恒命中（全栈成员兜底）
+    m.platforms.some((p) => targetPlatform.includes(p) || p.includes(targetPlatform));
+  const roleHit = (m: StaffMember): boolean => memberRoleMatches(m.roles, needRoles);
+
+  // 1. 岗位+方向双命中
+  const dual = pickLowest(staffing.filter((m) => directionHit(m) && roleHit(m)));
+  if (dual) return dual.name;
+  // 2. 仅方向命中
+  const dirOnly = pickLowest(staffing.filter(directionHit));
+  if (dirOnly) return dirOnly.name;
+  // 3. 仅岗位命中
+  const roleOnly = pickLowest(staffing.filter(roleHit));
+  return roleOnly ? roleOnly.name : '未分配';
 }
 
 /**
@@ -4577,22 +4660,25 @@ async function detectExistingTasks(iterDir: string): Promise<string[]> {
   // 优先从 030-tasks/ 扫描
   const scanDir = join(iterDir, '030-tasks');
   const targetDir = (await pathExists(scanDir)) ? scanDir : iterDir;
-  const scanRecursive = async (dir: string) => {
+  // v8.3.337+: 新布局模块目录名=功能单元名（无 Task- 前缀），位于类型子目录直接层
+  // （030-tasks/{type}/{模块}）。depth ≤ 1 时按功能单元名识别为模块并停止深入，
+  // 避免误把端目录/子任务目录当任务收集。旧布局 030-tasks/Task-* 仍按前缀识别。
+  const scanRecursive = async (dir: string, depth: number) => {
     try {
       const entries = await readdir(dir, { withFileTypes: true });
       for (const e of entries) {
         if (e.isDirectory()) {
-          if (e.name.startsWith('Task-')) {
+          if (e.name.startsWith('Task-') || (depth <= 1 && isTaskModuleDirName(e.name))) {
             tasks.push(e.name);
           } else if (!e.name.startsWith('.')) {
             // 递归扫描类型子目录（feature/bugfix/refactor/research）
-            await scanRecursive(join(dir, e.name));
+            await scanRecursive(join(dir, e.name), depth + 1);
           }
         }
       }
     } catch {}
   };
-  await scanRecursive(targetDir);
+  await scanRecursive(targetDir, 0);
   return tasks;
 }
 
@@ -4619,7 +4705,8 @@ async function pruneTasksByModules(iterDir: string, modules: string[]): Promise<
       for (const e of await readdir(dir, { withFileTypes: true })) {
         if (!e.isDirectory()) continue;
         const full = join(dir, e.name);
-        if (e.name.startsWith('Task-')) {
+        // v8.3.337+: 新布局模块目录=功能单元名（无 Task- 前缀），同样按 .meta/feature 匹配
+        if (e.name.startsWith('Task-') || isTaskModuleDirName(e.name)) {
           let feature = '';
           try {
             feature = (await readFile(join(full, '.meta', 'feature'), 'utf-8')).trim();
@@ -5436,7 +5523,10 @@ async function tryModuleDrivenSplit(
   // 逐模块创建任务目录（按模块各自的涉及端）
   const createdSections: Section[] = [];
   for (const mod of modules) {
-    const { id: taskId } = await nextTaskId(mod.name, mod.slug);
+    // v8.3.337+: 模块目录名优先对齐功能单元目录名（mod.name 即功能单元名）
+    let taskId: string;
+    if (mod.name && /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(mod.name)) taskId = mod.name;
+    else taskId = (await nextTaskId(mod.name, mod.slug)).id;
     const modPlatforms = mod.platforms.length > 0 ? mod.platforms : [...allPlatforms];
 
     // v8.3.249+: section.content 从 sourceFile（SOURCE.md 等）读取——此前硬编码空串，

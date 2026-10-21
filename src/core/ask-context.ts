@@ -161,12 +161,24 @@ function detectProjectPhase(): ProjectContext['phase'] {
     if (!hasSpecs) return 'analyze';
     if (!hasTasks) return 'split';
 
-    // 检查是否有执行中的任务
+    // 检查是否有执行中的任务（v8.3.337+: 兼容新布局 030-tasks/{type}/{模块目录}）
     if (hasTasks) {
       try {
-        const taskDirs = readdirSync(join(iterPath, '030-tasks'), { withFileTypes: true })
+        const { isTaskModuleDirName } = require('./task-paths') as typeof import('./task-paths');
+        const tasksRoot = join(iterPath, '030-tasks');
+        const topDirs = readdirSync(tasksRoot, { withFileTypes: true })
           .filter((d: any) => d.isDirectory() && d.name.startsWith('Task-'));
-        if (taskDirs.length === 0) return 'plan';
+        let moduleCount = topDirs.length;
+        if (moduleCount === 0) {
+          for (const td of readdirSync(tasksRoot, { withFileTypes: true })) {
+            if (!td.isDirectory() || td.name.startsWith('.')) continue;
+            const sub = readdirSync(join(tasksRoot, td.name), { withFileTypes: true }).filter(
+              (d: any) => d.isDirectory() && isTaskModuleDirName(d.name)
+            );
+            moduleCount += sub.length;
+          }
+        }
+        if (moduleCount === 0) return 'plan';
       } catch {}
     }
 

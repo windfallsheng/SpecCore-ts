@@ -63,25 +63,40 @@ platforms:
 # ─────────────────────────────────────────────────────────────────────────────
 # Git 配置
 # ─────────────────────────────────────────────────────────────────────────────
-# default_base：默认基础分支（PR 合并目标）
+# default_base：创建任务分支的源分支兜底（branch_types[{type}].source 未配置时生效）
+# pr_target：PR 默认目标分支（与 default_base 解耦，v8.3.339+）
+#   - 回退链：--base 参数 > branch_types[{type}].pr_target > pr_target > default_base > main
+#   - 支持环境名引用（v8.3.340+）：值与 environments/ 下环境同名（如 pr_target: dev）时，
+#     自动取其 branch 字段（develop）——PR 目标与 pipeline/build/deploy 环境口径统一
 # branch_prefix：功能分支前缀
 # protected_branches：受保护分支（禁止直接 push，只能通过 PR 合并）
+# branch_format：分支名格式模板（全局兜底，可选）
+#   - 迭代 PROJECT_GRAPH / 子任务 git-config 未配置时从这里取（全自动执行兜底）
+#   - 支持变量: {type} 分支类型, {prefix} 前缀, {taskId} 任务 ID, {name} 任务名,
+#     {date} 日期（YYYYMMDD）, {hash4} 随机 4 位 hex
+#   - 示例: {type}/{prefix}{taskId}-{name} → feature/api-Task-001-用户管理
 # branch_types：分支类型定义
 #   - 类型名自带前缀（如 hotfix/、feature/）
-#   - prefix：任务名前的前缀（可选），如 api-、backend-
-#   - suffix：任务名后的后缀（可选），如 urgent、review
+#   - prefix：任务名前的前缀（可选，包含分隔符），如 api-、backend_
+#   - suffix：任务名后的后缀（可选，包含分隔符），如 -urgent、_review
 #   - source：创建源分支，如 develop、main
+#   - ⭐ 全局兜底：迭代/子任务未配置时，全自动执行按任务分支类型查本表
+#     prefix/suffix 生成分支名（如 feature 配 prefix=api- → feature/api-Task-XXX）
 # ─────────────────────────────────────────────────────────────────────────────
 git:
-  # 默认基础分支（PR 合并目标）
+  # 默认基础分支（创建任务分支的源分支兜底）
   default_base: main
+  # PR 默认目标分支（--base > branch_types[{type}].pr_target > 本值 > default_base > main；支持环境名引用，如 pr_target: dev → 取 dev.yaml 的 branch）
+  pr_target: main
   # 功能分支前缀
   branch_prefix: feature/
+  # 分支名格式模板（全局兜底，可选；不配默认 {type}/{prefix}{taskId}）
+  branch_format: "{type}/{prefix}{taskId}"
   # 受保护分支（禁止直接 push，只能通过 PR 合并）
   protected_branches:
     - main
     - master
-  # 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选
+  # 分支类型定义。prefix=任务前前缀, suffix=任务后后缀, 均可选（全局兜底）
   branch_types:
     feature:
       source: develop

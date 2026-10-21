@@ -74,8 +74,8 @@ export interface AskEngineOptions {
 const COMMAND_KB: CommandKnowledge[] = [
   { name: 'init', aliases: ['in'], description: '初始化 SpecCore 项目，创建 .speccore 目录和配置',
     usage: 'speccore init [--interactive] [--name <name>]', examples: ['speccore init', 'speccore init --name my-project'], related: ['run', 'config'], triggers: ['初始化', 'init', '开始', '新建项目', '创建项目'] },
-  { name: 'doc2spec', aliases: ['d2s'], description: '导入 PRD/Word 文档，AI + Pandoc 双路转换为 SpecCore MD。--classify 智能分类 sources/ 文档到 staging/（按类型提取 feature/bug/refactor/research）',
-    usage: 'speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai] [--classify [--prompt] [--response <json>]]', examples: ['speccore doc2spec -f PRD.docx --iter Q3', 'speccore doc2spec -f 需求.docx --iter Q2 --task T-01 --no-ai', 'speccore doc2spec --classify --prompt -I Q3', 'speccore doc2spec --classify -I Q3'], related: ['spec2doc', 'analyze'], triggers: ['导入', 'doc2spec', 'word转', '文档转换', 'PRD', '需求文档', '智能分类', 'classify', '分类文档', '提取需求'] },
+  { name: 'doc2spec', aliases: ['d2s'], description: '导入 PRD/Word 文档，AI + Pandoc 双路转换为 SpecCore MD。--classify 智能分类 sources/ 文档到 staging/（按类型提取 feature/bug/refactor/research）；--normalize 转换后按 SpecCore 标准标题体系重写标题（默认关闭，说「按标准文档转换」自动开启）',
+    usage: 'speccore doc2spec -f <file> --iter <iteration> [--task <task>] [--no-ai] [--normalize] [--classify [--prompt] [--response <json>]]', examples: ['speccore doc2spec -f PRD.docx --iter Q3', 'speccore doc2spec -f 需求.docx --iter Q2 --task T-01 --no-ai', 'speccore doc2spec --classify --prompt -I Q3', 'speccore doc2spec --classify -I Q3'], related: ['spec2doc', 'analyze'], triggers: ['导入', 'doc2spec', 'word转', '文档转换', 'PRD', '需求文档', '智能分类', 'classify', '分类文档', '提取需求', '按标准文档', '标准文档转换', '标准文档调整'] },
   { name: 'spec2doc', aliases: ['s2d'], description: 'SpecCore MD 导出为 Word/PDF/HTML/PPTX',
     usage: 'speccore spec2doc [-i <iteration>] [-t <task>] [-f <format>] [-o <output>]', examples: ['speccore spec2doc -i Q3 -o 需求.docx', 'speccore spec2doc -t T-01 -f html'], related: ['doc2spec'], triggers: ['导出', 'spec2doc', '生成文档', '导出word', '导出pdf'] },
   { name: 'dashboard', aliases: ['db'], description: '项目仪表盘：迭代状态/进度/健康度，--scope global 全量视图',
@@ -892,7 +892,7 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
       fullCommand += ` "${params.name}"`;
     }
     if (params.iteration) {
-      fullCommand += best.command === 'unitize'
+      fullCommand += (best.command === 'unitize' || best.command === 'doc2spec')
         ? ` --iter "${params.iteration}"`
         : ` --iteration "${params.iteration}"`;
     }
@@ -914,6 +914,16 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     } else if (best.command === 'unitize' && params.file) {
       fullCommand += ` --file "${params.file}"`;
       paramNotes.push(`📄 文档: ${params.file}`);
+    }
+    // v8.3.337+: doc2spec 文件参数（.md/.docx/.doc/.pdf 均提取）与 --normalize 显式开启
+    // （AI 标题规范化默认关闭，仅用户说「按标准文档转换/调整」时开启）
+    if (best.command === 'doc2spec' && params.file) {
+      fullCommand += ` -f "${params.file}"`;
+      paramNotes.push(`📄 文档: ${params.file}`);
+    }
+    if (best.command === 'doc2spec' && params.normalize) {
+      fullCommand += ` --normalize`;
+      paramNotes.push(`📝 标准标题: 转换后按 SpecCore 标准标题体系调整`);
     }
     // v8.3.334+: 单文档标题过滤（--titles）——文件+标题组合；与 --content 内容模式互斥
     if (best.command === 'unitize' && params.titles && !params.fileTitles && !params.content) {

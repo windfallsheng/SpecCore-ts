@@ -206,3 +206,38 @@ describe('内容切分参数提取（v8.3.318+）', () => {
     expect(best?.extractedParams?.content).toBeUndefined();
   });
 });
+
+// ── v8.3.337+: 「按标准文档转换/调整」→ doc2spec + normalize（默认关闭，明说才开）──
+describe('按标准文档转换的 normalize 参数提取（v8.3.337+）', () => {
+  it('「按标准文档转换 admin-web.docx」→ doc2spec + file + normalize', async () => {
+    const results = await recognizeIntent('按标准文档转换 admin-web.docx');
+    const best = results[0];
+    expect(
+      best.intent,
+      `前3: ${results.slice(0, 3).map(r => `${r.intent}:${r.confidence}`).join(' / ')}`,
+    ).toBe('doc2spec');
+    expect(best.extractedParams?.file).toBe('admin-web.docx');
+    expect(best.extractedParams?.normalize).toBe('true');
+  });
+
+  it('「转换文档并按标准文档调整」→ doc2spec + normalize', async () => {
+    const results = await recognizeIntent('把这份需求文档转换一下，并按标准文档调整标题');
+    const best = results[0];
+    expect(best.intent).toBe('doc2spec');
+    expect(best.extractedParams?.normalize).toBe('true');
+  });
+
+  it('「按标准文档转换某个需求文档」→ doc2spec + normalize（无文件名也要开）', async () => {
+    const results = await recognizeIntent('按标准文档转换某个需求文档');
+    const best = results[0];
+    expect(best.intent).toBe('doc2spec');
+    expect(best.extractedParams?.normalize).toBe('true');
+  });
+
+  it('普通「转换文档」不带标准文档字眼 → doc2spec 但 normalize 不开（默认关闭）', async () => {
+    const results = await recognizeIntent('把这个 Word 文档转换一下');
+    const best = results[0];
+    expect(best.intent).toBe('doc2spec');
+    expect(best.extractedParams?.normalize).toBeUndefined();
+  });
+});

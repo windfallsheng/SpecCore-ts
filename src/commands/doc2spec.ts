@@ -172,7 +172,7 @@ interface Word2SpecOptions {
   task?: string;     // --task: 导入到指定 Task 目录
   files?: string;    // batch: "path1.docx=平台1,path2.docx=平台2"
   ai?: boolean;
-  normalize?: boolean; // --no-normalize: 跳过 AI 标题规范化（默认转换后自动执行）
+  normalize?: boolean; // --normalize: 按 SpecCore 标准标题体系重写标题（默认关闭，用户明确要求才执行）
   prompt?: boolean;   // --prompt: 输出验证 Prompt 到 stdout
   response?: string;  // --response: 接收 AI 修正后的内容
   classify?: boolean; // --classify: AI 智能分类 → staging/
@@ -426,12 +426,12 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       `# ${platform || '通用'}需求\n\n<!-- \n  原型图片路径: 010-requirements/assets/extracted/\n  converted/ 引用方式: ![原型](../assets/extracted/xxx.png)\n  Task 引用方式: ![原型](../../../010-requirements/assets/extracted/xxx.png)\n  所有 Task 共享此目录，无需重复存放。\n-->\n\n#`
     );
 
-    // 5. AI 标题规范化（v8.3.335+）：产品原文档标题常不规范，转换后按 SpecCore
-    //     标准标题体系 AI 语义重写标题（正文一字不动，H1 文档标题也由 AI 给出）。
-    //     调整前版本快照到 backup/。--no-normalize / --no-ai / --task 跳过；
-    //     AI 不可用时静默降级不阻断
+    // 5. AI 标题规范化（v8.3.335+ / v8.3.337 默认关闭）：产品原文档标题常不规范，
+    //     用户明确要求（--normalize 或「按标准文档转换」）时按 SpecCore 标准标题体系
+    //     AI 语义重写标题（正文一字不动，H1 文档标题也由 AI 给出）。
+    //     调整前版本快照到 backup/。--no-ai / --task 场景跳过；AI 不可用时静默降级不阻断
     let normalizeReport: { applied: number; skipped: number; backupPath: string | null } | null = null;
-    if (options.normalize !== false && options.ai !== false && !taskId) {
+    if (options.normalize === true && options.ai !== false && !taskId) {
       const result = await normalizeTitlesWithAI(content, platform || sourceBase, outputPath);
       if (result) {
         content = result.content;
@@ -504,7 +504,7 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
       if (normalizeReport.backupPath) {
         logger.info(`   💾 调整前快照: ${normalizeReport.backupPath}`);
       }
-    } else if (options.normalize !== false && options.ai !== false && !taskId) {
+    } else if (options.normalize === true && options.ai !== false && !taskId) {
       logger.info('💡 标题规范化跳过（未配置 AI provider）——可配置 SPECCORE_LLM_KEY 后重试');
     }
     logger.info(`接口表: ${hasInterfaceTable ? '✅' : '⚠️ 缺失（已追加提示）'}`

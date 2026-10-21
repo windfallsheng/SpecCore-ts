@@ -122,3 +122,65 @@ describe('loadGitConfig — 全局 PROJECT.yaml 分支命名兜底（v8.3.336）
     expect(composeBranchName(cfg, 'feature', 'Task-001', '')).toBe('feature/web-Task-001_review');
   });
 });
+
+describe('owner 拼音首字母后缀兜底（v8.3.337+）', () => {
+  let origCwd: string;
+
+  beforeEach(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true });
+    mkdirSync(TEST_DIR, { recursive: true });
+    origCwd = process.cwd();
+    process.chdir(TEST_DIR);
+  });
+
+  afterEach(() => {
+    process.chdir(origCwd);
+    rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  /** 新命名链子任务目录：{type}/{模块}/{端}/Task-{模块}，.meta/owner 可选写入 */
+  function makeOwnerTaskDir(owner: string | null): string {
+    const taskDir = join(
+      TEST_DIR, '030-tasks', 'feature',
+      'admin-web-01-yudingguanli', 'admin-web', 'Task-admin-web-01-yudingguanli',
+    );
+    mkdirSync(join(taskDir, '.meta'), { recursive: true });
+    if (owner !== null) writeFileSync(join(taskDir, '.meta', 'owner'), owner);
+    return taskDir;
+  }
+
+  it('owner=张三 → taskSuffix=-zs（无显式配置时拼音兜底）', () => {
+    setupProjectYaml(`${BASE_YAML}  default_base: main
+`);
+    const cfg = loadGitConfig(undefined, makeOwnerTaskDir('张三'), 'feature');
+    expect(cfg.taskSuffix).toBe('-zs');
+    expect(composeBranchName(cfg, 'feature', 'Task-admin-web-01-yudingguanli', '')).toBe(
+      'feature/Task-admin-web-01-yudingguanli-zs',
+    );
+  });
+
+  it('owner=未分配 → 不拼后缀（分支名保持干净）', () => {
+    setupProjectYaml(`${BASE_YAML}  default_base: main
+`);
+    const cfg = loadGitConfig(undefined, makeOwnerTaskDir('未分配'), 'feature');
+    expect(cfg.taskSuffix).toBeUndefined();
+  });
+
+  it('owner 文件缺失 → 不拼后缀', () => {
+    setupProjectYaml(`${BASE_YAML}  default_base: main
+`);
+    const cfg = loadGitConfig(undefined, makeOwnerTaskDir(null), 'feature');
+    expect(cfg.taskSuffix).toBeUndefined();
+  });
+
+  it('全局 branch_types.suffix 优先于 owner 拼音兜底', () => {
+    setupProjectYaml(`${BASE_YAML}  default_base: main
+  branch_types:
+    feature:
+      suffix: -urgent
+      source: develop
+`);
+    const cfg = loadGitConfig(undefined, makeOwnerTaskDir('张三'), 'feature');
+    expect(cfg.taskSuffix).toBe('-urgent');
+  });
+});

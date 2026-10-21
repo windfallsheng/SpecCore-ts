@@ -10,14 +10,36 @@ import { getDefaultIteration, getIterationDir } from '../core/context';
 import { buildPrompt, formatPrompt } from '../core/prompt-builder';
 import { isProtectedBranch, isProtectedBranchAsync } from '../core/git-integration';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
+import { resolveEnvBranchRef } from '../core/environment-config';
 
 /**
- * PR 目标分支回退——读 PROJECT.yaml git.default_base（v8.3.300）
- * 此前硬编码 'main'，注释宣称 default_base 是 PR 合并目标但实现从不读取
+ * 从当前分支名第一段提取分支类型（feature/xxx → feature），非任务分支（无类型段）返回 undefined。
+ * v8.3.339+: PR 目标分支按类型区分的前提——从哪类分支发起 PR，就查该类分支的 pr_target。
+ */
+function currentBranchType(): string | undefined {
+  try {
+    const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+    const seg = branch.split('/')[0];
+    return seg && seg !== branch ? seg : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * PR 目标分支回退链（v8.3.339+ / v8.3.340+ 环境名引用）——与 default_base 解耦：
+ * --base 参数 > branch_types[{当前分支类型}].pr_target > git.pr_target > git.default_base > 'main'
+ * 按类型区分天然对齐部署环境线：feature/bugfix 合 develop（测试线），hotfix/release 合 main（生产线）。
+ * v8.3.340+: pr_target（含分支类型级）支持环境名引用——值若与 environments/ 下环境同名，
+ * 取其 branch 字段（如 pr_target: dev → develop），与 pipeline/build/deploy 环境口径统一。
  */
 async function resolvePrBase(): Promise<string> {
   try {
     const pc = await loadProjectConfig();
+    const type = currentBranchType();
+    const byType = type ? pc.git?.branch_types?.[type]?.pr_target : undefined;
+    if (byType) return await resolveEnvBranchRef(byType);
+    if (pc.git?.pr_target) return await resolveEnvBranchRef(pc.git.pr_target);
     return pc.git?.default_base || 'main';
   } catch {
     return 'main';

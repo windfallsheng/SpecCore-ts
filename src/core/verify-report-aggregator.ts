@@ -7,6 +7,7 @@
 
 import { join } from 'path';
 import { pathExists, readFile, ensureDir, writeFile, readdir } from 'fs-extra';
+import { isTaskModuleDirName } from './task-paths';
 import { logger } from '../utils/logger';
 
 // ─────────────────────────────────────────
@@ -96,12 +97,26 @@ export async function collectTaskReports(iterDir: string): Promise<TaskReport[]>
   const tasksDir = join(iterDir, '030-tasks');
   if (!(await pathExists(tasksDir))) return [];
 
+  // v8.3.337+: 兼容旧布局（030-tasks/Task-*）与新布局（030-tasks/{type}/{模块目录}）
   const entries = await readdir(tasksDir, { withFileTypes: true });
-  const taskDirs = entries.filter((e) => e.isDirectory() && e.name.startsWith('Task-'));
+  const taskDirs = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith('Task-')) {
+      taskDirs.push(e);
+    } else if (!e.name.startsWith('.') && !e.name.startsWith('0')) {
+      const subEntries = await readdir(join(tasksDir, e.name), { withFileTypes: true }).catch(() => []);
+      for (const se of subEntries) {
+        if (se.isDirectory() && isTaskModuleDirName(se.name)) {
+          taskDirs.push({ name: se.name, path: join(e.name, se.name) } as any);
+        }
+      }
+    }
+  }
 
   const reports: TaskReport[] = [];
   for (const d of taskDirs) {
-    const taskDir = join(tasksDir, d.name);
+    const taskDir = join(tasksDir, (d as any).path || d.name);
     const artifactsDir = join(taskDir, '99-artifacts');
 
     // 解析功能名: Task-001-login → login

@@ -63,14 +63,36 @@ export function getTaskDir(iteration: string, taskId: string): string {
 }
 
 /**
- * 扫描迭代中的任务列表
+ * 扫描迭代中的任务列表（v8.3.337+: 兼容 030-tasks 新旧布局）
+ * - 旧布局: 030-tasks/Task-* 直接层
+ * - 新布局: 030-tasks/{type}/{功能单元名}
+ * - 历史布局: Iteration-NNN/Task-* 直接层兜底
  */
 export function scanIterationTasks(iterationDir: string): string[] {
   try {
     const fs = require('fs');
-    return fs.readdirSync(iterationDir, { withFileTypes: true })
-      .filter((e: any) => e.isDirectory() && e.name.startsWith('Task-'))
-      .map((e: any) => e.name);
+    const path = require('path');
+    const { isTaskModuleDirName } = require('../core/task-paths');
+    const out: string[] = [];
+    const collect = (dir: string, depth: number) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue;
+        if (e.name.startsWith('Task-') || (depth <= 1 && isTaskModuleDirName(e.name))) {
+          out.push(e.name);
+        } else if (!e.name.startsWith('.')) {
+          collect(path.join(dir, e.name), depth + 1);
+        }
+      }
+    };
+    const tasksDir = path.join(iterationDir, '030-tasks');
+    if (fs.existsSync(tasksDir)) {
+      collect(tasksDir, 0);
+    } else {
+      for (const e of fs.readdirSync(iterationDir, { withFileTypes: true })) {
+        if (e.isDirectory() && e.name.startsWith('Task-')) out.push(e.name);
+      }
+    }
+    return out;
   } catch {
     return [];
   }

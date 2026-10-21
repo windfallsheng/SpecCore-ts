@@ -4,7 +4,7 @@ import { createInterface } from 'readline';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix, getIterationDir } from '../core/context';
-import { scanTasks, topologicalSort, TaskState } from '../core/state';
+import { scanTasks, topologicalSort, TaskState, filterTasksByModule } from '../core/state';
 import { acquireLock, releaseLock } from '../core/lock-manager';
 import { sendNotification } from '../core/notification';
 import { resolveTask, formatResolveResult } from '../core/resolver';
@@ -17,8 +17,8 @@ import { showNextSteps } from '../core/next-steps';
 import { cleanupByType } from './cleanup';
 import { extractQuestions, showQuestionChecklist } from '../core/question-checklist';
 import { resolvePlatform } from '../core/platform-registry';
-import { findTaskDir } from '../core/task-paths';
-import { collectSkeletonResidues, appendSkeletonTodos } from '../core/skeleton-residue';
+import { findTaskDir, isTaskModuleDirName } from '../core/task-paths';
+import { collectSkeletonResidues, appendSkeletonTodos, autoFillSkeletonFallback } from '../core/skeleton-residue';
 import { savePlan, markPlanExecuted, getPlan } from '../core/plan-store';
 import { generatePlan, formatPlanMarkdown } from './plan';
 import { generatePlanHtml } from '../core/plan-html';
@@ -294,10 +294,10 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     if (options.priority) tasks = tasks.filter(t => t.priority === options.priority);
     if (options.status) tasks = tasks.filter(t => t.status === options.status);
     if (options.assignee) tasks = tasks.filter(t => t.assignee === options.assignee);
-    // v8.3.288+: 按所属功能模块筛选（模糊包含，如「支付」命中「支付模块」）
+    // v8.3.288+ / v8.3.339+: 按所属功能模块筛选（逗号分隔多值，模糊匹配单元名/模块目录名）
     if (options.module) {
       const before = tasks.length;
-      tasks = tasks.filter(t => (t.feature || '').includes(options.module!));
+      tasks = filterTasksByModule(tasks, options.module);
       logger.info(`🎯 模块筛选「${options.module}」: ${before} → ${tasks.length} 个任务`);
     }
     // v8.3.145+: 使用项目实际端名过滤，不再硬编码 backend/frontend
@@ -625,6 +625,12 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
 
     await generateTaskSkeleton(task, iteration);
 
+    // v8.3.337+: 直接执行路径同样跑完成收尾（标记 completed + 骨架体检兑底）
+    try {
+      const tDir = await resolveTaskDir(await getIterationDir(iteration), task.id);
+      await finalizeTaskCompletion(iteration, task.id, tDir);
+    } catch { /* 收尾失败不阻断 */ }
+
     completed.push(`${task.id} - ${task.name || ''}`);
     logger.info(`  ✅ ${task.id} completed`);
     logger.info('');
@@ -893,6 +899,13 @@ async function processBatch(tasks: TaskState[], state: ExecutionState, iteration
     logger.info(`  🔄 执行中...`);
 
     await generateTaskSkeleton(task, iteration);
+
+    // v8.3.337+: 批次路径同样跑完成收尾（标记 completed + 骨架体检兑底）
+    try {
+      const tDir = await resolveTaskDir(await getIterationDir(iteration), task.id);
+      await finalizeTaskCompletion(iteration, task.id, tDir);
+    } catch { /* 收尾失败不阻断 */ }
+
     completed.push(task.id);
 
     // 写入任务摘要到 execution-state（文件即记忆）
@@ -2300,10 +2313,10 @@ async function listPendingTasks(iteration: string, options: ExecuteOptions): Pro
   // 过滤已完成的任务
   let pending = tasks.filter(t => t.status !== 'completed' && t.status !== 'archived');
 
-  // v8.3.288+: 按所属功能模块筛选（--module，匹配 .meta/feature）
+  // v8.3.288+ / v8.3.339+: 按所属功能模块筛选（--module 逗号分隔多值，模糊匹配单元名/模块目录名）
   if (options.module) {
     const before = pending.length;
-    pending = pending.filter(t => (t.feature || '').includes(options.module!));
+    pending = filterTasksByModule(pending, options.module);
     logger.info(`🎯 模块筛选「${options.module}」: ${before} → ${pending.length} 个任务`);
   }
   if (pending.length === 0) {
@@ -2350,8 +2363,20 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     const taskDir = (await pathExists(tasksDir30)) ? tasksDir30 : iterDir;
     let availableTasks: string[] = [];
     try {
-      const entries = await readdir(taskDir, { withFileTypes: true });
-      availableTasks = entries.filter((e: any) => e.isDirectory() && e.name.startsWith('Task-')).map((e: any) => e.name);
+      // v8.3.337+: 兼容 030-tasks 新旧布局（新布局模块目录=功能单元名，位于类型子目录层）
+      const { isTaskModuleDirName } = await import('../core/task-paths');
+      const collect = async (dir: string, depth: number): Promise<void> => {
+        const entries = await readdir(dir, { withFileTypes: true });
+        for (const e of entries) {
+          if (!e.isDirectory()) continue;
+          if (e.name.startsWith('Task-') || (depth <= 1 && isTaskModuleDirName(e.name))) {
+            availableTasks.push(e.name);
+          } else if (!e.name.startsWith('.')) {
+            await collect(join(dir, e.name), depth + 1);
+          }
+        }
+      };
+      await collect(taskDir, 0);
     } catch {}
     
     outputNeedsInfo({
@@ -2686,6 +2711,13 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
         if (dispatchResult.filesChanged && dispatchResult.filesChanged.length > 0) {
           process.stdout.write(`✅ 代码已由子 Agent 直接写入 ${dispatchResult.filesChanged.length} 个文件:\n`);
           for (const f of dispatchResult.filesChanged) process.stdout.write(`   📄 ${f}\n`);
+          // v8.3.337+: SDK 直连路径同样跑完成收尾（标记 completed + 骨架体检兑底），
+          // 修复子 Agent 只写代码不覆盖端级骨架时文档保持空模板的问题
+          try {
+            await finalizeTaskCompletion(iteration, task, taskDir);
+          } catch (e: any) {
+            logger.debug(`[execute] SDK 直连完成收尾失败（不阻断）: ${e.message}`);
+          }
           process.exitCode = 0;
           return;
         }
@@ -2746,6 +2778,79 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
 
   // 退出码 10: 表示等待 AI 处理
   process.exitCode = 10;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 任务完成收尾（v8.3.337+）——标记 completed + 联动 TASK.md + 完成骨架体检 + 组级聚合
+// 从 runApplyMode 尾部抽出为公共函数：SDK 直连（filesChanged）、--all、批次等
+// 所有执行路径共用，确保任何路径任务完成后端级骨架都有兜底体检。
+// ═══════════════════════════════════════════════════════════
+async function finalizeTaskCompletion(iteration: string, task: string, taskDir: string): Promise<void> {
+  // 更新 PROJECT_GRAPH
+  await updateProjectGraphStatus(iteration, task);
+
+  // ── 标记任务状态为 completed ──
+  try {
+    const metaDir = join(taskDir, '.meta');
+    await ensureDir(metaDir);
+    await writeFile(join(metaDir, 'status'), 'completed');
+  } catch {}
+
+  // v8.3.273+: 联动 TASK.md——状态行改「已完成」+ 工作清单全勾选（修复状态与 checklist 脱节）
+  try {
+    const taskMdPath = join(taskDir, 'TASK.md');
+    if (await pathExists(taskMdPath)) {
+      let md = await readFile(taskMdPath, 'utf-8');
+      md = md.replace(/^(- \*\*状态\*\*: ).*$/m, '$1已完成');
+      md = md.replace(/^- \[ \]/gm, '- [x]');
+      await writeFile(taskMdPath, md);
+    }
+  } catch { /* TASK.md 联动失败不阻断 */ }
+
+  // v8.3.313+: 完成骨架体检——端级文档仍含骨架占位时，先尝试 CLI 自动降级填充
+  // （REQ/TECH 从模块级 00-specs 真实规格派生端级快照），填不了的继续挂「骨架待补」待办（TASK.md + .issues.md 双账本）
+  try {
+    const residues = await collectSkeletonResidues(taskDir);
+    if (residues.length > 0) {
+      const filled = await autoFillSkeletonFallback(taskDir, residues);
+      const remain = residues.filter(r => !filled.has(r.rel));
+      if (filled.size > 0) {
+        logger.info(`   📄 完成骨架体检：${filled.size} 份端级骨架已由 CLI 自动降级填充（模块级规格快照，可在此基础上补充端级细节）`);
+      }
+      if (remain.length > 0) {
+        logger.warn(`   ⚠️  完成骨架体检：${remain.length} 份端级文档仍含骨架占位（无模块级规格可降级），已挂「骨架待补」待办（状态保持 completed，建议尽快补写规格）`);
+      }
+      await appendSkeletonTodos(taskDir, remain);
+    }
+  } catch { /* 完成骨架体检失败不阻断 */ }
+
+  // v8.3.273+: 组级状态聚合——所属 Task 组全部子任务完成后，组级 .meta/status 同步 completed
+  // v8.3.337+: 组目录定位改用 isTaskModuleDirName（兼容新命名链 admin-web-01-xxx 与旧 Task-NNN）
+  try {
+    const parts = taskDir.split('/');
+    const taskIdx = parts.findIndex(p => isTaskModuleDirName(p));
+    if (taskIdx >= 0) {
+      const groupDir = parts.slice(0, taskIdx + 1).join('/');
+      const statuses: string[] = [];
+      const collect = async (dir: string): Promise<void> => {
+        for (const e of await readdir(dir, { withFileTypes: true })) {
+          if (!e.isDirectory()) continue;
+          const stPath = join(dir, e.name, '.meta', 'status');
+          if (await pathExists(stPath)) {
+            statuses.push((await readFile(stPath, 'utf-8')).trim());
+          } else {
+            await collect(join(dir, e.name));
+          }
+        }
+      };
+      await collect(groupDir);
+      const subtaskStatuses = statuses.filter((_, i) => i !== 0); // 排除组级自身
+      if (subtaskStatuses.length > 0 && subtaskStatuses.every(s => s === 'completed')) {
+        await writeFile(join(groupDir, '.meta', 'status'), 'completed');
+        logger.info(`   📊 组级状态已同步: ${basename(groupDir)} → completed（${subtaskStatuses.length} 个子任务全部完成）`);
+      }
+    }
+  } catch { /* 组级聚合失败不阻断 */ }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3037,63 +3142,9 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
     }
   }
 
-  // 更新 PROJECT_GRAPH
-  await updateProjectGraphStatus(iteration, task);
-
-  // ── 标记任务状态为 completed ──
+  // v8.3.337+: 任务完成收尾（标记 completed + TASK.md 联动 + 骨架体检 + 组级聚合）抽为公共函数
   const taskDirForStatus = await resolveTaskDir(iterDir, task);
-  try {
-    const metaDir = join(taskDirForStatus, '.meta');
-    await ensureDir(metaDir);
-    await writeFile(join(metaDir, 'status'), 'completed');
-  } catch {}
-
-  // v8.3.273+: 联动 TASK.md——状态行改「已完成」+ 工作清单全勾选（修复状态与 checklist 脱节）
-  try {
-    const taskMdPath = join(taskDirForStatus, 'TASK.md');
-    if (await pathExists(taskMdPath)) {
-      let md = await readFile(taskMdPath, 'utf-8');
-      md = md.replace(/^(- \*\*状态\*\*: ).*$/m, '$1已完成');
-      md = md.replace(/^- \[ \]/gm, '- [x]');
-      await writeFile(taskMdPath, md);
-    }
-  } catch { /* TASK.md 联动失败不阻断 */ }
-
-  // v8.3.313+: 完成骨架体检——端级文档仍含骨架占位时 completed 照常，但挂「骨架待补」待办（TASK.md + .issues.md 双账本）
-  try {
-    const residues = await collectSkeletonResidues(taskDirForStatus);
-    if (residues.length > 0) {
-      logger.warn(`   ⚠️  完成骨架体检：${residues.length} 份端级文档仍含骨架占位，已挂「骨架待补」待办（状态保持 completed，建议尽快补写规格）`);
-      await appendSkeletonTodos(taskDirForStatus, residues);
-    }
-  } catch { /* 完成骨架体检失败不阻断 */ }
-
-  // v8.3.273+: 组级状态聚合——所属 Task 组全部子任务完成后，组级 .meta/status 同步 completed
-  try {
-    const parts = taskDirForStatus.split('/');
-    const taskIdx = parts.findIndex(p => /^Task-\d+/.test(p));
-    if (taskIdx >= 0) {
-      const groupDir = parts.slice(0, taskIdx + 1).join('/');
-      const statuses: string[] = [];
-      const collect = async (dir: string): Promise<void> => {
-        for (const e of await readdir(dir, { withFileTypes: true })) {
-          if (!e.isDirectory()) continue;
-          const stPath = join(dir, e.name, '.meta', 'status');
-          if (await pathExists(stPath)) {
-            statuses.push((await readFile(stPath, 'utf-8')).trim());
-          } else {
-            await collect(join(dir, e.name));
-          }
-        }
-      };
-      await collect(groupDir);
-      const subtaskStatuses = statuses.filter((_, i) => i !== 0); // 排除组级自身
-      if (subtaskStatuses.length > 0 && subtaskStatuses.every(s => s === 'completed')) {
-        await writeFile(join(groupDir, '.meta', 'status'), 'completed');
-        logger.info(`   📊 组级状态已同步: ${basename(groupDir)} → completed（${subtaskStatuses.length} 个子任务全部完成）`);
-      }
-    }
-  } catch { /* 组级聚合失败不阻断 */ }
+  await finalizeTaskCompletion(iteration, task, taskDirForStatus);
 
   logger.success(`\n📁 完成: ${writtenCount} 个文件已写入`);
   logger.info(`   📂 位置: ${iterDir}/`);

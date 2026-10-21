@@ -1,5 +1,103 @@
 # Changelog
 
+## v8.3.340 (2026-10-21) — 三层命名一致 + 成员模型扩展 + PR 目标分支环境名引用
+
+本版两大主题：①taskify 模块/子任务/Git 分支三层命名对齐功能单元名（去计数器、去端名冗余），Git 后缀默认 owner 拼音首字母；②成员模型扩展岗位/在项目口径/分支代号。另有迭代创建自动初始化成员与 Git 配置快照、运行时依赖声明修复（全局安装 MODULE_NOT_FOUND）、完成收尾全路径统一（execute 骨架填充兜底）、标题规范化改按需触发（默认关闭，ask 识别「按标准文档转换」）、config 升级链修复与静态 HTML 页面链路修复（引导页四模式页/提示词库链接 404 根治 + Qoder 宿主弹页展示指引）、成员通配语义（岗位/方向通配归一 + 匹配恒命中 + 候选推导防唯一误判）、PR 目标分支解耦（pr_target 独立配置 + 按分支类型区分）、execute --module 多值模糊匹配、PR 目标分支环境名引用（pr_target 与 environments/ 环境口径统一，v8.3.337~339 改动未单独发版，本版一并发布）。
+
+### 三层命名链（模块 = 功能单元名，子任务 = Task-模块名）
+
+此前三层命名各自为政：模块目录 Task-033-login-flow（全局计数器），子任务目录再拼端名（Task-033-login-flow-booking-service），分支名直接继承子任务 ID（端名跟着进了分支）。本次对齐功能单元目录名（与 features/、020-specs/ 完全一致）：
+
+- **模块目录名 = 功能单元名**：`030-tasks/{type}/{功能单元名}`（如 admin-web-01-yudingguanli，无 Task-NNN 计数器）；非目录名格式的单元回退原计数器链。
+- **子任务目录名 = Task-{模块名}**：端名由目录层级（{模块}/{端}/）承载，不再拼入子任务 ID；多端不主动区分，Git 分支重名时 `-hash4` 兜底（建分支前检测重名，已属于当前任务则复用）。
+- **存量兼容**：旧命名目录不迁移；全项目 20+ 处 Task- 前缀消费面适配新命名（state/status-panel/knowledge-graph/reindex-engine/ask-context/spec-merger/name-validator/validator/cli/execute 等 16 文件），统一辅助 `isTaskModuleDirName`；findTaskDir 支持 Task-{模块名} → 父模块 = 模块名的定位链。
+
+### Git 后缀 owner 拼音首字母
+
+后缀优先级链：子任务 git-config > 全局 branch_types[branchType].suffix > owner 拼音首字母 > 不拼。子任务 .meta/owner 未显式配置后缀时自动取姓名拼音首字母（张三 → -zs，John → -j），成员表声明的「分支代号」优先；owner 为「未分配」/缺失不拼，分支名保持干净。新增 pinyin-pro 工具 toPinyinInitials（汉字段逐字取首字母、字母段取单词首字母）。
+
+### 成员模型扩展（TEAM.md / STAFFING.md）
+
+- **岗位维度**：roles（web/后端/移动端/测试/产品，可多个），与平台方向正交（岗位=技术栈，方向=业务端）；autoAssign 双维匹配 + 在项目过滤 + 负荷均衡。
+- **在项目口径**：状态只看「是否在项目」（是/否），不看在职与否；词表兼容旧「在职/出项目」。
+- **分支代号**（可选声明）：Git 分支后缀；留空自动拼音首字母，重名建议声明区分。
+- **模板同步**：TEAM.md（9 列）/ STAFFING.md（5 列）主模板与 EXAMPLE 全族同步「岗位/在项目/分支代号」；mergeStaffing 新列空不覆盖（旧迭代 STAFFING 无新列不破坏基座值）。
+
+### 迭代创建自动初始化（成员 + Git 配置快照）
+
+`iteration create` 时把全局配置带出为迭代级快照，全自动执行等无人值守场景读迭代文件即有具体值：
+
+- **成员信息**：STAFFING.md 创建时自动从全局 TEAM.md 带出成员快照行（岗位/方向/比例/在项目照抄当前值），此后基座变更不影响已建迭代；基座缺失/空表静默降级空表。
+- **Git 配置**：PROJECT_GRAPH.md 的 Git 配置表格创建时从全局 PROJECT.yaml git 段带出默认分支/分支格式快照，未声明或值含表格破坏字符回落「继承全局配置」。
+- **覆盖链不变**：任务级 .meta/git-config > 迭代 PROJECT_GRAPH.md > 全局 PROJECT.yaml > CONSTITUTION > 默认值；前缀/后缀保留拼接，中间主体按新命名链规则（分支 = 子任务名）。
+
+### 运行时依赖声明修复（全局安装 MODULE_NOT_FOUND）
+
+用户全局安装后运行 `taskify` 报 `MODULE_NOT_FOUND`（require 堆栈指向 dist/core/code-graph/parser.js），与 Node 版本无关——根因是 dist 产物引用了未声明的运行时依赖：
+
+- **typescript 误入 devDependencies**：dist 的 code-graph/parser、structured-extractor 顶层静态 import typescript（TS 源码解析器），但 typescript 声明在 devDependencies，npm 全局/生产安装不装 → 必崩；移入 dependencies。
+- **zod 纯 phantom dependency**：schemas/error-feedback 静态 import zod，但 zod 从未声明（靠 @modelcontextprotocol/sdk 传递依赖扁平化侥幸解析）；显式声明进 dependencies。
+- **全量审计 dist**：inquirer（动态 import + try/catch）、xlsx（require 在 try/catch）为保护性动态加载，保留白名单不声明；其余外部模块全部收敛进运行时依赖。
+- **机器锁防回归**：新增测试扫描 src 静态 import + dist require，外部模块必须 ∈ dependencies/optionalDependencies（白名单除外）；typescript/zod 不得回退 devDependencies。
+- 端到端验证：npm pack → 干净目录 `--omit=dev` 安装 → 加载 code-graph/structured-extractor/schemas 全通过。
+
+### config 升级链修复（branch_format 收尾）
+
+- **DEFAULT_PROJECT_CONFIG 补 branch_format**：老项目 `config --upgrade` 自动补全并序列化带出。
+- **YAML 引号事故**：序列化器输出 `branch_format: {type}/{prefix}{taskId}` 无引号，`{type}` 被解析为流式映射语法 → parseYaml 静默失败 → 升级写盘后整个 PROJECT.yaml 解析为空；改 JSON.stringify 加引号（生产级事故，机器锁抓出）。
+- **开放式字典子树豁免**：原 OPEN_DICT_PATHS 全等匹配，递归进 git.branch_types.feature 子层后豁免失效，用户自定义 prefix/suffix 被误判 removed → config --upgrade 截停死循环；改前缀匹配。
+
+### PR 目标分支解耦（pr_target 独立配置 + 按分支类型区分）
+
+用户反馈「PR 目标分支不应该是 default_base，PR 分支要按环境区分（涉及部署）」。此前 default_base 一个字段背两个语义：既是 PR 合并目标（pr 命令），又是创建任务分支的源分支兜底（resolveTaskBaseBranch），Git Flow 项目（main 合入、develop 开发）下二者冲突。本次解耦：
+
+- **default_base 回归单一语义**：只做「创建任务分支的源分支兜底」（branch_types[{type}].source 未配置时生效），模板注释/序列化注释全部同步修正。
+- **新增 git.pr_target**：PR 默认目标分支独立配置，收录进 DEFAULT_PROJECT_CONFIG（老项目 config --upgrade 自动补全）。
+- **branch_types[{type}].pr_target**：按任务类型区分 PR 目标，天然对齐部署环境线——hotfix 合 main（生产线）、feature 合 develop（测试线）；pr 命令从当前分支名第一段提取类型后查表。
+- **回退链**：--base 参数 > branch_types[{type}].pr_target > git.pr_target > git.default_base > 'main'（default_base 兜底保留，存量零破坏）。
+- 校验/序列化/示例全族（PROJECT-EXAMPLE.yaml）同步 pr_target。
+- **环境名引用（v8.3.340+）**：pr_target（含 branch_types[{type}].pr_target）支持引用 environments/ 下环境名（如 pr_target: dev），自动取其 branch 字段（develop）——PR 目标与 pipeline/build/deploy 的环境口径统一；无同名环境或环境未声明 branch 时按纯分支名字面量使用（存量零破坏）。resolveEnvBranchRef 统一解析，含路径分隔符或 .yaml 后缀的值不做环境解析。
+
+### execute --module 多值模糊匹配（模块目录名）
+
+此前 --module 仅单值且只匹配 .meta/feature，多模块只能靠 --only 任务白名单变通。本次：
+
+- **逗号分隔多值**：--module "支付,订单"（中英文逗号均可）任一命中即保留。
+- **匹配面扩展**：功能单元名（feature）+ 模块目录名（id）+ 任务名（name）三面模糊包含——按模块目录名直接筛（如 --module yudingguanli）。
+- 抽取 state.filterTasksByModule 共享辅助，execute 主执行路径与 --list-pending 双消费点统一；新增 5 例测试。
+
+### 成员通配语义（岗位/方向 * = 全栈/所有方向）
+
+用户反馈「成员职责和平台方向不光是数组，可能是全部（全栈开发）」，本次落地通配语义（零破坏：空 = 继承不变，表格一眼可读）：
+
+- **解析归一**：TEAM.md / STAFFING.md 的岗位与平台方向写 `*` / all / 全部 / 所有 / 不限 / 全栈 / 全端 时，解析层整体归一为 [WILDCARD]（通配与具体值并列以通配为准）；导出 normalizeWildcard + isWildcard 供 analyze / taskify 两端消费。
+- **匹配恒命中**：matchDirection（analyze 候选推导）与 taskify autoAssign 双维匹配（directionHit / memberRoleMatches）遇通配恒命中——全栈成员参与所有端的自动分配与负荷均衡兜底。
+- **候选推导防唯一误判**：deriveOwnerCandidates 的通配成员不参与「方向唯一」判定，只有专向唯一命中才写 pending 候选，防全栈成员被误推为各端唯一负责人（保持报缺不脑补铁律）。
+- **模板注释**：TEAM.md / STAFFING.md 模板说明同步通配用法；「全栈 + 指定方向」组合自然成立（roles=*、directions=H5）。
+- 测试：unit-staffing-wildcard.test.ts 新增 6 例（归一 / isWildcard / 恒命中 / 解析归一 / 防唯一误判）。
+
+### 静态 HTML 页面链路修复（ask 引导页链接 404 根治 + Qoder 弹页展示）
+
+用户报障「HTML 页面打不开、链接跳转 404、升级后首次 ask 不弹引导页」，排查出三类根因并修复：
+
+- **四模式页「← 返回 ask 引导页」404**：explain/guide/match/pipeline 四模板页链接 `speccore-welcome.html`，该文件名早已废弃（welcome 命令实际输出 `welcome-SpecCore.html`），模板目录与 outputs 均无此文件，点击必 404。统一改为链接真实存在的 `speccore-ask-onboarding.html`（每次 ask 弹页都会生成）。
+- **「查看提示词库」链接 404**：setup-guide 与项目名片页链接 `speccore-prompts.html`，此前仅 `speccore prompts` 命令才会生成该页，普通 init/ask 后点击必 404。修复：prompts.ts 抽出可复用 `generatePromptsPage`，init 的 writeSetupGuide、welcome 命令、ask 弹页三入口联动生成 prompts.html（老项目无需重新 init，跑一次 ask 即补齐）。
+- **升级后首次 ask 弹页但宿主不展示**：CLI 弹页逻辑（marker 版本比对）本身正常，断链在宿主 AI——SKILL 指引要求 `present_files` 展示，但 Qoder 无此工具导致标记被忽略。修复：spec-ask / speccore-router 两个 SKILL.md 增加 Qoder 环境展示指引（后台静态服务器 + RunPreview 打开，file:// 链接兜底），并补充 [SPECCORE_PROMPTS] 标记处理条目。
+- 验证：outputs 内全部页面相对链接目标存在性校验通过；弹页全链路（marker 旧版本 → [SPECCORE_ONBOARD] 输出 → 7 个关联页面生成 → marker 更新）端到端验证通过。
+
+### 完成收尾全路径统一（execute 骨架填充兜底）
+
+此前完成骨架体检只挂在 `--apply`（runApplyMode）收尾里，宿主 AI 常用路径全部绕行：SDK 直连（子 Agent 直接写文件）直接 return、`--all` 直跑与批次路径只 generateTaskSkeleton——任务标完 completed 后端级文档仍保持空骨架。本版把完成收尾（标记 completed + 联动 TASK.md + 骨架体检 + 组级聚合）抽为公共函数 finalizeTaskCompletion，SDK 直连 filesChanged、`--all`、批次、`--apply` 四路径统一调用；组目录定位改用 isTaskModuleDirName 兼容新命名链。端级 REQ/TECH 骨架残留时 CLI 自动降级填充（从模块级 00-specs 真实规格派生端级快照），填不了的挂「骨架待补」双账本待办。新增 autoFillSkeletonFallback 单测 4 例（降级填充/骨架源不传染/前端四文档不降级/无模块源不误写）。
+
+### 标题规范化改按需触发
+
+v8.3.335 引入的 AI 标题规范化原为「转换后自动执行」，改为**用户明说才做**：默认不触发，仅当用户表达「按标准文档转换/调整」或显式 `--normalize` 时执行。
+
+- **默认关闭，`--normalize` 显式开启**：原 `--no-normalize`（跳过）语义翻转，`--normalize`（开启）取而代之；默认转换后标题保持原样、不产生调整前快照，显式开启才 AI 重写 + 快照 backup/。
+- **ask 准确识别「按标准文档」表达**：意图词典新增触发词（按标准文档/标准文档转 换/标准文档调整），参数提取层识别「按标准文档转换/调整」「标准标题」→ doc2spec  拼 `--normalize`；doc2spec 场景文件参数扩展支持 .docx/.doc/.pdf 提取。
+- **顺手修复 ask 拼装断链**：doc2spec 的 `-f` 文件参数此前不拼入命令；`--iter`  此前误拼为未注册的 `--iteration` 死参数——迭代名静默丢失。两条均已修复。
+- **测试**：+4 用例（按标准文档转换带文件/不带文件/无标准字眼默认关闭/混合表达）。
+
 ## v8.3.336 (2026-10-20) — Git 分支命名全局兜底：branch_format 模板 + branch_types 前缀后缀
 
 全自动执行（execute --all / 无人值守流水线）创建任务分支时，迭代可能没来得及配置（PROJECT_GRAPH 缺失、未 taskify 无子任务 git-config），此前分支命名直接掉到硬编码默认 `{type}/{prefix}{taskId}`，用户的命名规范失效。本次把分支命名配置补进全局 PROJECT.yaml git 段作为兜底源。

@@ -615,16 +615,19 @@ async function createDefaultFiles(projectRoot: string, speccoreDir: string): Pro
     `# 团队与 Git 映射
 
 > **全员名册（全局基座，v8.3.319+）**: 成员在此登记后，所有迭代的 STAFFING.md 自动继承。
-> 各迭代 STAFFING.md 只写差异（同名成员整体覆盖其方向/比例）；本表是团队人员的唯一事实源。
+> 各迭代 STAFFING.md 只写差异（同名成员整体覆盖其岗位/方向/比例）；本表是团队人员的唯一事实源。
 
-| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 | 平台方向 | 投入比例 | 状态 |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| | | | | | | | |
+| 成员 | Git 用户名 | 岗位 | 技术栈 | 负责模块 | 平台方向 | 投入比例 | 在项目 | 分支代号 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| | | | | | | | | |
 
 > 说明:
+> - **岗位**（v8.3.337+）: web / 后端 / 移动端 / 测试 / 产品，多个用逗号分隔——与平台方向正交（岗位=技术栈维度，方向=业务端维度），taskify 自动分配时双维匹配
 > - **平台方向**: 后台 / 小程序 / Web / APP，多个用逗号分隔（也可直接写标准端名）
 > - **投入比例**: 0-100%（缺省按 100），用于 taskify 时自动分配和负荷均衡
-> - **状态**: 在职（缺省）/ 出项目——出项目成员不参与自动填充（analyze 候选推导、taskify 负荷均衡自动跳过）
+> - **在项目**（v8.3.337+ 口径）: 是（缺省）/ 否——只看是否在项目，不看在职与否；写「否」的成员不参与自动填充
+> - **分支代号**（v8.3.337+，可选）: Git 分支后缀代号；留空默认取姓名拼音首字母（张三→zs），重名场景（张三/张四）建议声明区分
+> - **通配**（v8.3.339+）: 岗位/平台方向可写星号 *（或 all / 全部 / 所有 / 全栈），表示全栈/所有方向——匹配时恒命中、候选推导不参与「唯一」判定；通配与具体值并列时以通配为准
 > - 旧版本表（无「平台方向」列）兼容读取：缺此列时全局基座不参与合并，各迭代 STAFFING.md 独立生效
 `
   );
@@ -2481,6 +2484,13 @@ async function writeSetupGuide(projectRoot: string, _speccoreDir: string): Promi
   const outputPath = join(projectRoot, 'outputs', 'speccore-setup-guide.html');
   await ensureDir(join(projectRoot, 'outputs'));
   await writeFile(outputPath, html);
+
+  // v8.3.338+: 联动生成提示词库页，保证 setup-guide 内「查看提示词库」链接可达
+  try {
+    const { generatePromptsPage } = await import('./prompts');
+    await generatePromptsPage(join(projectRoot, 'outputs', 'speccore-prompts.html'));
+  } catch { /* 联动生成失败不阻断 init */ }
+
   return outputPath;
 }
 
@@ -2506,8 +2516,8 @@ examples/
 ├── README.md                    ← 本文件
 ├── config/                      ← 配置文件示例
 │   ├── CONSTITUTION-EXAMPLE.md  ← CONSTITUTION.md 完整示例（多工程）
-│   ├── TEAM-EXAMPLE.md          ← TEAM.md 全员名册示例（7 列，含状态）
-│   ├── STAFFING-EXAMPLE.md      ← STAFFING.md 迭代排期示例（差异覆盖，含状态）
+│   ├── TEAM-EXAMPLE.md          ← TEAM.md 全员名册示例（9 列，含在项目/分支代号）
+│   ├── STAFFING-EXAMPLE.md      ← STAFFING.md 迭代排期示例（差异覆盖，含岗位/在项目）
 │   ├── PROJECT-EXAMPLE.yaml     ← PROJECT.yaml 完整示例（多工程）
 │   ├── SPECCORE-YML-EXAMPLE.yml ← .speccore.yml 主配置完整示例（v8.3.296+）
 │   ├── GIT-CONFIG-EXAMPLE.txt   ← 子任务 .meta/git-config 格式示例
@@ -2534,7 +2544,7 @@ examples/
 8. 查看 \`config/DEPLOY-EXAMPLE.yaml\`，了解部署配置格式（用于 \`speccore deploy\`）
 9. 查看 \`config/VERIFY-EXAMPLE.yaml\`，了解测试验证配置格式（用于 \`speccore verify --config\`）
 10. 查看 \`config/SPECCORE-YML-EXAMPLE.yml\`，了解主配置 .speccore.yml 全部字段（质量门禁/冒烟三时机/流水线/AI provider）
-11. 查看 \`config/TEAM-EXAMPLE.md\` 与 \`config/STAFFING-EXAMPLE.md\`，了解人员配置两级继承（TEAM 全员基座 + STAFFING 迭代差异），「状态」列支持出项目成员免分配
+11. 查看 \`config/TEAM-EXAMPLE.md\` 与 \`config/STAFFING-EXAMPLE.md\`，了解人员配置两级继承（TEAM 全员基座 + STAFFING 迭代差异），「在项目」列支持出项目成员免分配
 12. 查看 \`ci/github-actions.yml\`，复制到 \`.github/workflows/\` 启用 CI 校验
 13. 修改后运行 \`speccore update\` 更新配置结构（Git 策略以 \`.speccore/PROJECT.yaml\` 的 \`git\` 段为机器事实源）
 
@@ -2750,36 +2760,39 @@ examples/
   const teamExample = `# TEAM.md — 团队与 Git 映射（全员名册，示例）
 
 > **全员名册（全局基座，v8.3.319+）**: 成员在此登记后，所有迭代的 STAFFING.md 自动继承。
-> 各迭代 STAFFING.md 只写差异（同名成员整体覆盖其方向/比例/状态）；本表是团队人员的唯一事实源。
+> 各迭代 STAFFING.md 只写差异（同名成员整体覆盖其岗位/方向/比例）；本表是团队人 员的唯一事实源。
 
-| 成员 | Git 用户名 | 角色 | 技术栈 | 负责模块 | 平台方向 | 投入比例 | 状态 |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 张三 | zhangsan | 后端 | Java/Spring Boot | 订单模块 | backend-api | 100% | 在职 |
-| 李四 | lisi | 前端 | Vue 3 | 商城页面 | admin-web, h5-mobile | 80% | 在职 |
-| 王五 | wangwu | 前端 | 原生小程序 | 小程序 | miniapp | 60% | 在职 |
-| 赵六 | zhaoliu | 后端 | Go | 消息推送 | backend-api | 0% | 出项目 |
+| 成员 | Git 用户名 | 岗位 | 技术栈 | 负责模块 | 平台方向 | 投入比例 | 在项目 | 分支代号 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 张三 | zhangsan | 后端 | Java/Spring Boot | 订单模块 | backend-api | 100% | 是 | zs |
+| 李四 | lisi | web | Vue 3 | 商城页面 | admin-web, h5-mobile | 80% | 是 | ls |
+| 王五 | wangwu | 移动端 | 原生小程序 | 小程序 | miniapp | 60% | 是 | ww |
+| 赵六 | zhaoliu | 后端 | Go | 消息推送 | backend-api | 0% | 否 | zl |
 
 > 说明:
+> - **岗位**（v8.3.337+）: web / 后端 / 移动端 / 测试 / 产品，多个用逗号分隔——与平台方向正交（岗位=技术栈维度，方向=业务端维度），taskify 自动分配时双维匹配
 > - **平台方向**: 后台 / 小程序 / Web / APP，多个用逗号分隔（也可直接写标准端名）
 > - **投入比例**: 0-100%（缺省按 100），用于 taskify 时自动分配和负荷均衡
-> - **状态**: 在职（缺省）/ 出项目——出项目成员不参与自动填充（analyze 候选推导、taskify 负荷均衡自动跳过）；迭代层写「在职」可临时复活（如赵六回归某期）
+> - **在项目**（v8.3.337+ 口径）: 是（缺省）/ 否——只看是否在项目，不看在职与否；写「否」的成员不参与自动填充（analyze 候选推导、taskify 负荷均衡自动跳过）；迭代层写「是」可临时复活（如赵六回归某期）
+> - **分支代号**（v8.3.337+，可选）: Git 分支后缀代号；留空默认取姓名拼音首字母（张三→zs）
 `;
   await writeFile(join(configDir, 'TEAM-EXAMPLE.md'), teamExample);
 
   const staffingExample = `# STAFFING.md — 迭代人员排期（差异覆盖层，示例）
 
-> **本文件只写差异**: 与基座 TEAM.md 同名的成员整体覆盖其方向/比例/状态；基座成员未列出的默认参与本迭代。
-> 全员名册见 .speccore/PROJECT/TEAM.md（全局基座，自动继承）。
+> **本文件只写差异**: 与基座 TEAM.md 同名的成员整体覆盖其岗位/方向/比例；基座成员未列出的默认参与本迭代。
+> 全员名册见 .speccore/PROJECT/TEAM.md（全局基座，创建迭代时自动带出成员快照）。
 
-| 成员 | 平台方向 | 投入比例 | 状态 |
-| :--- | :--- | :--- | :--- |
-| 李四 | admin-web | 100% | 在职 |
-| 赵六 | backend-api | 50% | 在职 |
+| 成员 | 岗位 | 平台方向 | 投入比例 | 在项目 |
+| :--- | :--- | :--- | :--- | :--- |
+| 李四 | web | admin-web | 100% | 是 |
+| 赵六 | 后端 | backend-api | 50% | 是 |
 
 > 说明:
+> - **岗位**（v8.3.337+）: web / 后端 / 移动端 / 测试 / 产品，多个用逗号分隔（留空则继承基座）
 > - **平台方向**: 后台 / 小程序 / Web / APP，多个用逗号分隔（也可直接写标准端名）
 > - **投入比例**: 0-100%，用于 taskify 时自动分配和负荷均衡；写 0% 表示本迭代不参与
-> - **状态**: 在职（缺省）/ 出项目——出项目成员不参与自动填充；留空则继承基座状态。示例中赵六基座「出项目」，本迭代写「在职 50%」= 临时回归
+> - **在项目**（v8.3.337+ 口径）: 是（缺省）/ 否——只看是否在项目，不看在职与否；留空则继承基座。示例中赵六基座「否」，本迭代写「是 50%」= 临时回归
 > - 编辑此文件后重新运行 taskify 即可更新默认分配
 `;
   await writeFile(join(configDir, 'STAFFING-EXAMPLE.md'), staffingExample);
@@ -2850,7 +2863,12 @@ platforms:
 # ─────────────────────────────────────────────────────────────────────────────
 # Git 配置
 # ─────────────────────────────────────────────────────────────────────────────
-# default_base：默认基础分支（PR 合并目标）
+# default_base：创建任务分支的源分支兜底（branch_types[{type}].source 未配置时生效）
+# pr_target：PR 默认目标分支（与 default_base 解耦，v8.3.339+）
+#   - 回退链：--base 参数 > branch_types[{type}].pr_target > pr_target > default_base > main
+#   - 按部署环境区分时用 branch_types[{type}].pr_target：如 hotfix 合 main（生产线）、feature 合 develop（测试线）
+#   - 支持环境名引用（v8.3.340+）：值与 environments/ 下环境同名（如 pr_target: dev）时，
+#     自动取其 branch 字段（develop）——PR 目标与 pipeline/build/deploy 的环境口径统一
 # branch_prefix：功能分支前缀
 # protected_branches：受保护分支（禁止直接 push，只能通过 PR 合并）
 # branch_format：分支名格式模板（全局兜底，可选）
@@ -2863,16 +2881,19 @@ platforms:
 #   - prefix：任务名前的前缀（可选，包含分隔符），如 api-、backend_
 #   - suffix：任务名后的后缀（可选，包含分隔符），如 -urgent、_review
 #   - source：创建源分支，如 develop、main
+#   - pr_target：该类型任务的 PR 目标分支（可选），如 hotfix 合 main、feature 合 develop（对齐部署环境线）；支持环境名引用（如 pr_target: staging → 取 staging.yaml 的 branch）
 #   - ⭐ 全局兜底：迭代/子任务未配置时，全自动执行按任务分支类型查本表
 #     prefix/suffix 生成分支名（如 feature 配 prefix=api- → feature/api-Task-XXX）
 # ─────────────────────────────────────────────────────────────────────────────
 git:
-  # 默认基础分支（PR 合并目标）
+  # 默认基础分支（创建任务分支的源分支兜底）
   default_base: main
+  # PR 默认目标分支（--base > branch_types[{type}].pr_target > 本值 > default_base > main）
+  pr_target: main
   # 功能分支前缀
   branch_prefix: feature/
   # 分支名格式模板（全局兜底，可选；不配默认 {type}/{prefix}{taskId}）
-  # branch_format: "{type}/{prefix}{taskId}-{name}"
+  branch_format: "{type}/{prefix}{taskId}"
   # 受保护分支（禁止直接 push，只能通过 PR 合并）
   protected_branches:
     - main

@@ -58,3 +58,55 @@ describe('deleteNestedKey 嵌套键清理', () => {
     expect(obj).toEqual({ quality_gates: { verify_ui: { enabled: false } } });
   });
 });
+
+// ── v8.3.337+: 开放式字典子树豁免（branch_types prefix/suffix 误判 removed 修复）──
+import { detectConfigDiff, DEFAULT_PROJECT_CONFIG } from '../../../src/core/unified-config';
+
+describe('detectConfigDiff 开放式字典子树豁免（v8.3.337+）', () => {
+  it('branch_types.feature 自定义 prefix/suffix 不再判 removed（此前截停升级死循环）', () => {
+    const current = {
+      git: {
+        default_base: 'main',
+        branch_types: {
+          feature: { prefix: 'api-', suffix: '-urgent', source: 'develop' },
+        },
+      },
+    };
+    const diff = detectConfigDiff(current, DEFAULT_PROJECT_CONFIG as unknown);
+    const removedInBranchTypes = diff.removed.filter(p => p.includes('branch_types'));
+    expect(removedInBranchTypes).toEqual([]);
+  });
+
+  it('branch_types 自定义类型名（开放式键）仍豁免 removed', () => {
+    const current = {
+      git: {
+        default_base: 'main',
+        branch_types: {
+          experiment: { prefix: 'exp-', source: 'develop' },
+        },
+      },
+    };
+    const diff = detectConfigDiff(current, DEFAULT_PROJECT_CONFIG as unknown);
+    const removedInBranchTypes = diff.removed.filter(p => p.includes('branch_types'));
+    expect(removedInBranchTypes).toEqual([]);
+  });
+
+  it('git 段真正废弃的未知字段仍判 removed（豁免不泛滥）', () => {
+    const current = {
+      git: {
+        default_base: 'main',
+        obsolete_field: 'should-be-removed',
+      },
+    };
+    const diff = detectConfigDiff(current, DEFAULT_PROJECT_CONFIG as unknown);
+    expect(diff.removed).toContain('git.obsolete_field');
+  });
+
+  it('DEFAULT_PROJECT_CONFIG 收录 branch_format 默认值（老项目升级自动带出）', () => {
+    expect((DEFAULT_PROJECT_CONFIG.git as { branch_format?: string }).branch_format).toBe('{type}/{prefix}{taskId}');
+    // 与 GitConfig 硬编码默认一致 → 补全后行为零变化
+    const noBranchFormat = { git: { default_base: 'main' } };
+    const diff = detectConfigDiff(noBranchFormat, DEFAULT_PROJECT_CONFIG as unknown);
+    expect(diff.added).toContain('git.branch_format');
+  });
+});

@@ -14,6 +14,8 @@ import { join } from 'path';
 import { execSync } from 'child_process';
 import { randomBytes } from 'crypto';
 import { loadRawProjectConfig, parseYaml } from './unified-config';
+import { toPinyinInitials } from './pinyin-initials';
+import { parseStaffingTable } from './unit-staffing';
 import { getProjectRoot } from '../utils/task-utils';
 
 const gitMappingPath = () => join(getProjectRoot(), '.speccore', '.git-mapping.json');
@@ -221,6 +223,45 @@ function warnGitSourceMismatch(): void {
  *
  * v8.3.87+: 增加 cwd 参数，支持 speccore 与工程代码分离的目录结构
  */
+/**
+ * 检测分支是否已存在（本地或远端引用，v8.3.337+）
+ * 用于多端同模块子任务同名分支的冲突兜底。
+ */
+function branchExists(branchName: string, cwd: string): boolean {
+  try {
+    execSync(`git rev-parse --verify "${branchName}"`, { cwd, stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * owner → 分支后缀代号（v8.3.337+）
+ * 1. 成员表声明的「分支代号」优先（TEAM.md 基座 + 迭代 STAFFING.md，解决重名拼音碰撞）
+ * 2. 姓名拼音首字母兜底（张三 → zs）
+ */
+function resolveOwnerBranchInitials(owner: string, iteration?: string): string {
+  try {
+    const root = getProjectRoot();
+    const teamPath = join(root, '.speccore', 'PROJECT', 'TEAM.md');
+    if (existsSync(teamPath)) {
+      const members = parseStaffingTable(readFileSync(teamPath, 'utf-8'));
+      if (iteration) {
+        const staffingPath = join(root, `Iteration-${iteration}`, 'STAFFING.md');
+        if (existsSync(staffingPath)) {
+          members.push(...parseStaffingTable(readFileSync(staffingPath, 'utf-8')));
+        }
+      }
+      const member = members.find((m) => m.name === owner);
+      if (member?.initials && /^[a-z0-9]+$/i.test(member.initials)) {
+        return member.initials.toLowerCase();
+      }
+    }
+  } catch { /* 成员表读取失败回退拼音 */ }
+  return toPinyinInitials(owner);
+}
+
 export function createTaskBranch(
   taskId: string,
   taskName: string,
@@ -267,19 +308,32 @@ export function createTaskBranch(
       execSync(`git checkout "${effectiveBase}"`, { cwd: gitCwd, stdio: 'pipe' });
     }
 
-    execSync(`git checkout -b "${branchName}"`, { cwd: gitCwd, stdio: 'pipe' });
+    // v8.3.337+: 分支重名兜底——子任务名不再拼端名后，多端同模块子任务的分支名相同，
+    // 已存在的同名分支若属于当前任务（重跑）则复用，否则拼 -hash4 区分（最多 3 次）。
+    let finalBranchName = branchName;
+    if (branchExists(branchName, gitCwd)) {
+      const existing = findBranchByTaskId(taskId, gitCwd);
+      if (existing) return existing;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const candidate = `${branchName}-${randomBytes(2).toString('hex')}`;
+        if (!branchExists(candidate, gitCwd)) {
+          finalBranchName = candidate;
+          break;
+        }
+      }
+    }
+
+    execSync(`git checkout -b "${finalBranchName}"`, { cwd: gitCwd, stdio: 'pipe' });
 
     // 记录关联
     const mapping = loadMapping();
-    mapping[branchName] = { taskId, taskName: taskName, createdAt: new Date().toISOString() };
+    mapping[finalBranchName] = { taskId, taskName: taskName, createdAt: new Date().toISOString() };
     saveMapping(mapping);
 
-    return branchName;
+    return finalBranchName;
   } catch (e: any) {
     // v8.3.6+: 分支创建失败时输出错误信息，不要静默吞掉
     if (e.message?.includes('already exists')) {
-      // v8.3.293+: 优先从 git-mapping.json / 本地分支列表找回已存在分支（命名规则可能被
-      // 用户手动调整过，重建名字不一定与已存在分支一致）；找不到时按当前配置重建。
       const existing = findBranchByTaskId(taskId, gitCwd);
       if (existing) return existing;
       const cfg = loadGitConfig(iteration, taskDir, taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : undefined);
@@ -602,6 +656,23 @@ export function loadGitConfig(iteration?: string, taskDir?: string, branchType?:
     if (subtaskConfig.mergeDependencies !== undefined) config.mergeDependencies = subtaskConfig.mergeDependencies;
     if (subtaskConfig.mergeWhitelist !== undefined) config.mergeWhitelist = subtaskConfig.mergeWhitelist;
     if (subtaskConfig.mergeBlacklist !== undefined) config.mergeBlacklist = subtaskConfig.mergeBlacklist;
+  }
+
+  // ── 3.5 v8.3.337+: 后缀 owner 拼音首字母兜底 ──
+  // 显式 taskSuffix / 全局 branch_types suffix 均未配置时，读 .meta/owner：
+  // 成员表声明的「分支代号」优先，否则姓名拼音首字母（张三 → -zs）；
+  // owner 为「未分配」/缺失 → 不拼后缀，分支名保持干净。
+  if (config.taskSuffix === undefined && taskDir) {
+    try {
+      const ownerPath = join(taskDir, '.meta', 'owner');
+      if (existsSync(ownerPath)) {
+        const owner = readFileSync(ownerPath, 'utf-8').trim();
+        if (owner && owner !== '未分配') {
+          const initials = resolveOwnerBranchInitials(owner, iteration);
+          if (initials) config.taskSuffix = `-${initials}`;
+        }
+      }
+    } catch { /* owner 读取失败静默降级（不阻断分支创建） */ }
   }
 
   // ── 4. 合并默认值 ──

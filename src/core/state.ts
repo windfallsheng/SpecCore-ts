@@ -1,5 +1,6 @@
 import { readFile, pathExists, readdir, stat } from 'fs-extra';
 import { join } from 'path';
+import { isTaskModuleDirName } from './task-paths';
 
 export interface TaskState {
   id: string;
@@ -190,6 +191,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
   };
   
   // 递归扫描: 支持 030-tasks/Task-XXX/ 和 030-tasks/{type}/Task-XXX/ 两种布局
+  // v8.3.337+: 模块目录名可为功能单元名（无 Task- 前缀），用 isTaskModuleDirName 统一识别
   const taskDirs: { taskId: string; taskPath: string }[] = [];
   const rootEntries = await readdir(scanRoot, { withFileTypes: true });
   
@@ -205,7 +207,7 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
       const typeDir = join(scanRoot, entry.name);
       const typeEntries = await readdir(typeDir, { withFileTypes: true }).catch(() => []);
       for (const te of typeEntries) {
-        if (te.isDirectory() && te.name.startsWith('Task-')) {
+        if (te.isDirectory() && isTaskModuleDirName(te.name)) {
           taskDirs.push({ taskId: te.name, taskPath: join(typeDir, te.name) });
         }
       }
@@ -441,4 +443,23 @@ export function topologicalSort(tasks: TaskState[]): TaskState[] {
   }
   
   return result;
+}
+
+
+/**
+ * 按模块多值模糊过滤任务（v8.3.339+）。
+ * --module 支持逗号分隔多值（如 "支付,订单"），任一命中即保留；
+ * 匹配面 = 功能单元名（.meta/feature）+ 模块目录名（id）+ 任务名（name）的模糊包含。
+ */
+export function filterTasksByModule<T extends { id: string; name?: string; feature?: string }>(
+  tasks: T[],
+  moduleSpec?: string,
+): T[] {
+  if (!moduleSpec) return tasks;
+  const needles = moduleSpec.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+  if (needles.length === 0) return tasks;
+  return tasks.filter((t) => {
+    const haystack = [t.feature, t.id, t.name].filter(Boolean).join(' ');
+    return needles.some((n) => haystack.includes(n));
+  });
 }

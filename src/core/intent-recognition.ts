@@ -577,8 +577,8 @@ const COMMAND_MAPPINGS: CommandMapping[] = [
     id: 'doc2spec',
     intent: 'doc2spec',
     priority: 45,
-    triggers: ['导入文档', 'word转', '需求文档', 'doc2spec', 'Word需求', 'PRD导入', '转换文档', 'docx'],
-    patterns: ['导入.*文档', '.*word.*转', '需求.*word', 'PRD.*导入', '文档.*转换'],
+    triggers: ['导入文档', 'word转', '需求文档', 'doc2spec', 'Word需求', 'PRD导入', '转换文档', 'docx', '按标准文档', '标准文档转换', '标准文档调整'],
+    patterns: ['导入.*文档', '.*word.*转', '需求.*word', 'PRD.*导入', '文档.*转换', '按标准.*文档.*(?:转换|调整)', '标准文档.*(?:转换|调整)'],
     description: 'Word 需求文档导入 — 将 .docx/.doc 格式的 PRD 转换为 SpecCore Markdown',
   },
   // 需求文档智能合成（已整合到 analyze --full，v8.3.257: id 正名 analyze，避免路由到已删的 synthesize 命令）
@@ -1053,6 +1053,17 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
   const fileMatch = input.match(/([^\s，,。；;：:"“”'']+\.(?:md|markdown))/i);
   if (fileMatch) {
     params.file = fileMatch[1];
+  }
+  // v8.3.337+: doc2spec 场景额外支持 .docx/.doc/.pdf 源文件（「按标准文档转换 PRD.docx」）
+  if (!params.file && mapping.intent === 'doc2spec') {
+    const docxMatch = input.match(/([^\s，,。；;：:"“”'']+\.(?:docx|doc|pdf))/i);
+    if (docxMatch) params.file = docxMatch[1];
+  }
+
+  // v8.3.337+: 「按标准文档转换/调整」「标准标题」→ doc2spec --normalize
+  // （AI 标题规范化默认关闭，仅用户明确表达时才开启）
+  if (/(?:按标准(?:文档)?(?:转换|调整)|标准文档(?:标题)?(?:转换|调整)|标准标题|规范化标题|标题规范化)/.test(input)) {
+    params.normalize = 'true';
   }
 
   // v8.3.334+: unitize 标题过滤——「切 admin-web.md 里的预订管理、消息中心」

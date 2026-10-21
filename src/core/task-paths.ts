@@ -8,9 +8,34 @@
 
 import { join } from 'path';
 import { pathExists, readdir } from 'fs-extra';
+import { existsSync } from 'fs';
 
 export const TASKS_DIR = '030-tasks';
 export const TASK_TYPES = ['feature', 'bugfix', 'refactor', 'research'] as const;
+
+/**
+ * 任务模块目录名判断（v8.3.337+）
+ * - 旧格式兼容：Task-NNN-*（存量迭代）
+ * - 新格式：功能单元目录名（小写字母开头含连字符，如 admin-web-01-yudingguanli）
+ * 排除：隐藏目录（.backup）、数字开头（00-specs）、下划线开头（_shared）
+ */
+export function isTaskModuleDirName(name: string): boolean {
+  if (name.startsWith('Task-')) return true;
+  return /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(name);
+}
+
+/**
+ * 任务模块目录判断（带路径精确版，v8.3.337+）：
+ * 目录名符合模块命名 + 目录内存在 .meta/ 或 00-specs/ 结构
+ */
+export function isTaskModuleDir(dirPath: string): boolean {
+  try {
+    return isTaskModuleDirName(dirPath.split(/[\/\\]/).pop() || '')
+      && (existsSync(join(dirPath, '.meta')) || existsSync(join(dirPath, '00-specs')));
+  } catch {
+    return false;
+  }
+}
 
 /** 获取指定迭代中某个 Task 的完整目录路径（新布局：含类型子目录） */
 export function getTaskPath(iteration: string, taskId: string, cwd?: string): string {
@@ -65,10 +90,15 @@ export async function findTaskDir(tasksRoot: string, taskId: string): Promise<st
   // 原实现只截取前两段（Task-{seq}），对多段任务组名必然解析失败。
   // 改为从最长前缀逐段递减尝试匹配（Task-222-admin-web-02-admin-web →
   // 依次尝试父组 Task-222-admin-web-02-admin-web / Task-222-admin-web-02 / Task-222）。
+  // v8.3.337+: 新命名的父模块目录不带 Task- 前缀（Task-{模块名} → 父目录 = 模块名），
+  // 优先直接匹配；同时保持旧格式逐段递减兼容。
   if (taskId.startsWith('Task-')) {
+    const moduleCandidates = [taskId.slice(5)]; // Task-admin-web-01-yudingguanli → admin-web-01-yudingguanli
     const parts = taskId.split('-');
     for (let k = parts.length - 1; k >= 2; k--) {
-      const parentTaskId = parts.slice(0, k).join('-');
+      moduleCandidates.push(parts.slice(0, k).join('-'));
+    }
+    for (const parentTaskId of moduleCandidates) {
       for (const type of TASK_TYPES) {
         const typeDir = join(tasksRoot, type);
         if (!(await pathExists(typeDir))) continue;

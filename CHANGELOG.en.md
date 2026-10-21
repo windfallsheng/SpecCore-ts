@@ -4,6 +4,12 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.340 (2026-10-21) — three-tier task naming alignment + member model expansion + PR target env reference
+
+Major themes: ①taskify module/subtask/Git-branch three-tier naming aligned to feature unit names (no global counter, no platform-name redundancy), Git suffix defaults to owner pinyin initials; ②member model expansion (roles / on-project status / branch code). Also: iteration creation auto-initializes staffing & Git config snapshot, runtime dependency fix (MODULE_NOT_FOUND on global install), done/archival full-path unification, title normalization on-demand (off by default), config upgrade chain & static HTML page links fix, member wildcard semantics (* = full-stack / all directions), PR target decoupling (git.pr_target + branch_types[{type}].pr_target, independent of default_base), execute --module multi-value fuzzy matching, and PR target environment-name reference (pr_target: dev resolves to the environment's branch field in .speccore/environments/, unifying PR target with the pipeline/build/deploy environment model; literal branch names still work when no matching env file exists).
+
+**PR target environment-name reference (v8.3.340+)**: `pr_target` (both `git.pr_target` and `branch_types[{type}].pr_target`) may reference an environment name defined under `.speccore/environments/` (e.g. `pr_target: dev` → `develop`); resolution falls back to the literal branch name when no matching env file exists or the env declares no `branch`. Values containing path separators or `.yaml`/`.yml` suffixes are treated as branch names, never resolved as environments.
+
 ## v8.3.301 (2026-10-08) — global from-source reinforced: EARS five-pattern ACs + traceability anchors + verification ring, ask auto-maps platform names
 
 ### Reverse requirement chain (global from-source)

@@ -8,6 +8,7 @@ import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { getDefaultIteration } from '../core/context';
 import { readGlobalIndex } from '../core/global-layer';
 import { GLOBAL_SPECS_DIR } from '../core/spec-paths';
+import { isTaskModuleDirName } from '../core/task-paths';
 
 export interface StatusPanelOptions {
   export?: string;
@@ -203,8 +204,10 @@ async function collectTasks(iterDir: string): Promise<any[]> {
   }
   for (const root of roots) {
     const entryList = await readdir(root, { withFileTypes: true });
+    // v8.3.337+: 新布局模块目录=功能单元名（无 Task- 前缀），仅在类型子目录层识别
+    const isTypeRoot = ['feature', 'bugfix', 'refactor', 'research'].includes(root.split('/').pop() || '');
     for (const e of entryList) {
-      if (e.isDirectory() && e.name.startsWith('Task-')) {
+      if (e.isDirectory() && (e.name.startsWith('Task-') || (isTypeRoot && isTaskModuleDirName(e.name)))) {
         const taskDir = join(root, e.name);
         // v8.3.288+: .meta 优先（task new 任务无 00-specs/TASK.md，状态/类型/模块都在 .meta）
         let feature = '';
@@ -321,27 +324,16 @@ async function getTaskStats(iterDir: string): Promise<{ total: number; done: num
 }
 
 async function hasTaskFiles(iterDir: string): Promise<boolean> {
-  try {
-    const entries = await readdir(iterDir, { withFileTypes: true });
-    return entries.some(e => e.isDirectory() && e.name.startsWith('Task-'));
-  } catch { return false; }
+  // v8.3.337+: 复用 collectTasks 多根扫描（新命名模块目录无 Task- 前缀）
+  const tasks = await collectTasks(iterDir);
+  return tasks.length > 0;
 }
 
 async function countTasksInState(iterDir: string, states: string): Promise<number> {
-  try {
-    const entries = await readdir(iterDir, { withFileTypes: true });
-    const tasks = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-'));
-    let count = 0;
-    const stateList = states.split('|');
-    for (const t of tasks) {
-      const taskMd = join(iterDir, t.name, '00-specs', 'TASK.md');
-      if (await pathExists(taskMd)) {
-        const content = await readFile(taskMd, 'utf-8');
-        if (stateList.some(s => content.includes(s))) count++;
-      }
-    }
-    return count;
-  } catch { return 0; }
+  // v8.3.337+: 复用 collectTasks 多根扫描；状态来自 TASK.md 或 .meta/status
+  const tasks = await collectTasks(iterDir);
+  const stateList = states.split('|');
+  return tasks.filter(t => stateList.some(s => (t.status || '').includes(s))).length;
 }
 
 function buildProgressBar(done: number, total: number): string {
@@ -658,8 +650,10 @@ export async function defaultPhase(iterDir: string): Promise<string> {
   const analysis = join(specDir, GLOBAL_SPECS_DIR, 'ANALYSIS.md');
   if (!(await pathExists(reqDoc))) return 'init';
   if (!(await pathExists(analysis))) return 'require';
-  const tasks = await readdir(iterDir, { withFileTypes: true });
-  if (!tasks.some((e: any) => e.isDirectory() && e.name.startsWith('Task-'))) return 'analyze';
+  // v8.3.337+: 改用 collectTasks 多根扫描（兼容 030-tasks 新旧布局，
+  // 此前只扫迭代根级 Task- 目录，新命名模块在面板判为空）
+  const tasks = await collectTasks(iterDir);
+  if (tasks.length === 0) return 'analyze';
   return 'dev';
 }
 
@@ -1424,13 +1418,15 @@ function setFs(s){document.documentElement.className=document.documentElement.cl
 async function showHealthReport(config: any, iteration: string | null): Promise<void> {
   if (!iteration) { logger.info("无活跃迭代"); return; }
   const iterDir = resolveIterDir(iteration);
-  const tasks = await scanTaskDirs(iterDir);
-  
-  let totalTasks = tasks.length, completed = 0, hasTest = 0, hasReview = 0;
-  for (const t of tasks) {
-    if (await isTaskDone(iterDir, t)) completed++;
-    if (await taskHasFile(iterDir, t, 'TEST.md')) hasTest++;
-    if (await taskHasFile(iterDir, t, 'REVIEW.md')) hasReview++;
+  // v8.3.337+: 改用 collectTasks 多根扫描（兼容 030-tasks 新旧布局；
+  // 旧 scanTaskDirs 只扫迭代根级 Task- 目录，新命名模块漏计）
+  const taskList = await collectTasks(iterDir);
+
+  let totalTasks = taskList.length, completed = 0, hasTest = 0, hasReview = 0;
+  for (const t of taskList) {
+    if (/完成|completed|done/i.test(t.status || '')) completed++;
+    if (await pathExists(join(t.dir, 'TEST.md'))) hasTest++;
+    if (await pathExists(join(t.dir, 'REVIEW.md'))) hasReview++;
   }
   
   const donePct = totalTasks > 0 ? Math.round(completed / totalTasks * 100) : 0;

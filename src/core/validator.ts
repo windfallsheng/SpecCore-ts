@@ -75,7 +75,19 @@ async function validateTask(
     passRate: 0
   };
   
-  const taskPath = join(getProjectRoot(), `Iteration-${iteration}`, taskId);
+  // v8.3.337+: 任务目录路径解析——优先历史直接层（Iteration-NNN/{taskId}），
+  // 不存在时查 030-tasks 类型子目录（新布局模块名=功能单元名，旧布局 Task-*）
+  let taskPath = join(getProjectRoot(), `Iteration-${iteration}`, taskId);
+  if (!(await pathExists(taskPath))) {
+    const tasksRoot = join(getProjectRoot(), `Iteration-${iteration}`, '030-tasks');
+    for (const type of ['feature', 'bugfix', 'refactor', 'research']) {
+      const candidate = join(tasksRoot, type, taskId);
+      if (await pathExists(candidate)) {
+        taskPath = candidate;
+        break;
+      }
+    }
+  }
   
   // Check if task directory exists
   if (!(await pathExists(taskPath))) {
@@ -251,14 +263,37 @@ async function findIterations(): Promise<string[]> {
 async function findTasks(iteration: string): Promise<string[]> {
   const { pathExists, readdir } = await import('fs-extra');
   const { join } = await import('path');
-  
+  const { isTaskModuleDirName } = await import('./task-paths');
+
   const iterPath = `Iteration-${iteration}`;
   if (!(await pathExists(iterPath))) return [];
-  
-  const entries = await readdir(iterPath, { withFileTypes: true });
-  return entries
-    .filter(e => e.isDirectory() && e.name.startsWith('Task-'))
-    .map(e => e.name);
+
+  // v8.3.337+: 兼容 030-tasks 新旧布局（旧: Task-* 直接层；新: {type}/{功能单元名}）
+  // 及历史布局 Iteration-NNN/Task-* 直接层兜底
+  const tasks: string[] = [];
+  const collect = async (dir: string, depth: number) => {
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        if (!e.isDirectory()) continue;
+        if (e.name.startsWith('Task-') || (depth <= 1 && isTaskModuleDirName(e.name))) {
+          tasks.push(e.name);
+        } else if (!e.name.startsWith('.')) {
+          await collect(join(dir, e.name), depth + 1);
+        }
+      }
+    } catch { /* 跳过 */ }
+  };
+  const tasksDir = join(iterPath, '030-tasks');
+  if (await pathExists(tasksDir)) {
+    await collect(tasksDir, 0);
+  } else {
+    const entries = await readdir(iterPath, { withFileTypes: true }).catch(() => []);
+    for (const e of entries) {
+      if (e.isDirectory() && e.name.startsWith('Task-')) tasks.push(e.name);
+    }
+  }
+  return tasks;
 }
 
 export function formatValidationResult(result: ValidationResult, format: 'text' | 'json'): string {

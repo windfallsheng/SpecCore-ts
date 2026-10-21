@@ -19,6 +19,7 @@ import { join, basename, relative } from 'path';
 import { logger } from '../utils/logger';
 import { indexDirectoryDocuments, loadRagIndex, buildRagIndex, saveRagIndex } from './rag-engine';
 import { refreshKnowledgeGraph } from './knowledge-graph';
+import { isTaskModuleDirName } from './task-paths';
 
 export interface GlobalKnowledgeOptions {
   iteration?: string;
@@ -45,16 +46,27 @@ export async function syncGlobalKnowledge(options: GlobalKnowledgeOptions = {}):
     if (await pathExists(iterSpecsDir)) {
       specsDirs.push(iterSpecsDir);
     }
-    // 扫描该迭代的所有任务目录
+    // 扫描该迭代的所有任务目录（v8.3.337+: 兼容新布局 030-tasks/{type}/{模块目录}）
     const tasksDir = join(cwd, `Iteration-${iteration}`, '030-tasks');
     if (await pathExists(tasksDir)) {
-      const tasks = await readdir(tasksDir, { withFileTypes: true });
-      for (const t of tasks) {
-        if (t.isDirectory() && t.name.startsWith('Task-')) {
-          const taskSpecsDir = join(tasksDir, t.name, '00-specs');
-          const taskSharedDir = join(tasksDir, t.name, '_shared');
-          if (await pathExists(taskSpecsDir)) specsDirs.push(taskSpecsDir);
-          if (await pathExists(taskSharedDir)) specsDirs.push(taskSharedDir);
+      const collect = async (dir: string) => {
+        const taskSpecsDir = join(dir, '00-specs');
+        const taskSharedDir = join(dir, '_shared');
+        if (await pathExists(taskSpecsDir)) specsDirs.push(taskSpecsDir);
+        if (await pathExists(taskSharedDir)) specsDirs.push(taskSharedDir);
+      };
+      const top = await readdir(tasksDir, { withFileTypes: true });
+      for (const t of top) {
+        if (!t.isDirectory()) continue;
+        if (t.name.startsWith('Task-')) {
+          await collect(join(tasksDir, t.name));
+        } else if (!t.name.startsWith('.') && !t.name.startsWith('0')) {
+          const sub = await readdir(join(tasksDir, t.name), { withFileTypes: true }).catch(() => []);
+          for (const s of sub) {
+            if (s.isDirectory() && isTaskModuleDirName(s.name)) {
+              await collect(join(tasksDir, t.name, s.name));
+            }
+          }
         }
       }
     }

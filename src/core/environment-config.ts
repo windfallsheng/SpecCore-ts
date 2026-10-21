@@ -245,3 +245,23 @@ export async function loadEnvironmentByNameOrPath(input?: string): Promise<Envir
   }
   return config;
 }
+
+/**
+ * 解析「分支 / 环境名引用」（v8.3.340+）。
+ *
+ * pr_target / branch_types[{type}].pr_target 支持两种写法：
+ *   1. 环境名 —— environments/{值}.yaml 存在时，取其 branch 字段（PR 目标与
+ *      pipeline / build / deploy 的环境口径统一，如 pr_target: dev → develop）；
+ *   2. 纯分支名 —— 无同名环境文件、或环境未声明 branch 时，按字面量当作分支名。
+ *
+ * 含路径分隔符或 .yaml/.yml 后缀的值一律视为分支名 / 文件路径，不做环境解析。
+ */
+export async function resolveEnvBranchRef(value: string): Promise<string> {
+  if (!value) return value;
+  if (value.includes('/') || value.includes('\\') || value.endsWith('.yaml') || value.endsWith('.yml')) {
+    return value;
+  }
+  const { config } = await resolveEnvironmentConfig(value);
+  if (config?.branch) return config.branch;
+  return value;
+}

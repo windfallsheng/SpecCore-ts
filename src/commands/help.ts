@@ -129,7 +129,7 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
       { flag: '-p, --platform <p>', meaning: '平台：<端名>（工程标识，如 CONSTITUTION.md 端列表中的端名）' },
       { flag: '--iter <name>', meaning: '目标迭代（必填）' },
       { flag: '--classify', meaning: 'AI 智能分类 sources/ 文档 → staging/' },
-      { flag: '--no-normalize', meaning: '跳过 AI 标题规范化（默认转换后按标准标题体系重写，调整前版本快照 backup/）' },
+      { flag: '--normalize', meaning: '按 SpecCore 标准标题体系重写标题（AI 语义调整，默认关闭；调整前版本快照 backup/）' },
     ],
     examples: [
       'speccore doc2spec -f PRD.docx -p <端名> --iter Q1',

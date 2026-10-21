@@ -43,6 +43,15 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
     const outPath = _options.output || join(process.cwd(), 'outputs', 'welcome-SpecCore.html');
     await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, html);
+
+    // v8.3.338+: 已初始化项目联动生成提示词库页，保证项目名片内「查看提示词库」链接可达
+    if (isInit) {
+      try {
+        const { generatePromptsPage } = await import('./prompts');
+        await generatePromptsPage(join(process.cwd(), 'outputs', 'speccore-prompts.html'));
+      } catch { /* 联动生成失败不阻断 welcome */ }
+    }
+
     process.stdout.write(`✅ 页面已生成: file://${outPath}\n`);
     process.stdout.write(`[SPECCORE_WELCOME: ${outPath}]\n`);
     return;

@@ -15,6 +15,9 @@ import {
   parseStaffingTable,
   mergeStaffing,
   matchDirection,
+  WILDCARD,
+  normalizeWildcard,
+  isWildcard,
   parseOwnerDecls,
   renderOwnersBlock,
   deriveOwnerCandidates,
@@ -82,7 +85,8 @@ describe('loadStaffing 两级合并（v8.3.319+: 全局 TEAM.md 基座 + 迭代 
       '| 李四 | ls | 前端 | React | 订单 | Web, APP | 70% |',
     ]));
     const members = loadStaffing(iterDir);
-    expect(members).toEqual([
+    // v8.3.337+: toMatchObject 容忍新增字段（gitUser/roles/initials）
+    expect(members).toMatchObject([
       { name: '张三', directions: ['后台'], capacity: 80, status: 'active' },
       { name: '李四', directions: ['Web', 'APP'], capacity: 70, status: 'active' },
     ]);
@@ -99,7 +103,7 @@ describe('loadStaffing 两级合并（v8.3.319+: 全局 TEAM.md 基座 + 迭代 
       '| 李四 | 小程序 | 100% |',
       '| 王五 | APP | 60% |',
     ].join('\n'));
-    expect(loadStaffing(iterDir)).toEqual([
+    expect(loadStaffing(iterDir)).toMatchObject([
       { name: '张三', directions: ['后台'], capacity: 80, status: 'active' },
       { name: '李四', directions: ['小程序'], capacity: 100, status: 'active' },
       { name: '王五', directions: ['APP'], capacity: 60 },
@@ -115,7 +119,7 @@ describe('loadStaffing 两级合并（v8.3.319+: 全局 TEAM.md 基座 + 迭代 
       '| :--- | :--- | :--- |',
       '| 张三 | | 0% |',
     ].join('\n'));
-    expect(loadStaffing(iterDir)).toEqual([
+    expect(loadStaffing(iterDir)).toMatchObject([
       { name: '张三', directions: [], capacity: 0, status: 'active' },
     ]);
   });
@@ -132,7 +136,7 @@ describe('loadStaffing 两级合并（v8.3.319+: 全局 TEAM.md 基座 + 迭代 
       '| :--- | :--- | :--- |',
       '| 李四 | Web | 70% |',
     ].join('\n'));
-    expect(loadStaffing(iterDir)).toEqual([
+    expect(loadStaffing(iterDir)).toMatchObject([
       { name: '李四', directions: ['Web'], capacity: 70 },
     ]);
   });
@@ -145,14 +149,14 @@ describe('parseStaffingTable / mergeStaffing', () => {
       '| :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
       '| 张三 | zs | 后端 | Node.js | 订单 | 后台，Web | 80% |',
     ].join('\n'));
-    expect(team).toEqual([{ name: '张三', directions: ['后台', 'Web'], capacity: 80 }]);
+    expect(team).toMatchObject([{ name: '张三', directions: ['后台', 'Web'], capacity: 80 }]);
 
     const staffing = parseStaffingTable([
       '| 成员 | 平台方向 | 投入比例 |',
       '| :--- | :--- | :--- |',
       '| 李四 | 小程序、APP | 70% |',
     ].join('\n'));
-    expect(staffing).toEqual([{ name: '李四', directions: ['小程序', 'APP'], capacity: 70 }]);
+    expect(staffing).toMatchObject([{ name: '李四', directions: ['小程序', 'APP'], capacity: 70 }]);
   });
 
   it('mergeStaffing 空基座/空覆盖快捷路径', () => {
@@ -186,7 +190,7 @@ describe('成员状态（v8.3.321+: 出项目成员不参与自动填充）', ()
       '| 李四 | ls | 前端 | React | 订单 | h5 | 70% | 出项目 |',
       '| 赵六 | zl | 前端 | Vue | 活动 | miniapp | 60% | |',
     ]));
-    expect(loadStaffing(iterDir)).toEqual([
+    expect(loadStaffing(iterDir)).toMatchObject([
       { name: '张三', directions: ['admin'], capacity: 80, status: 'active' },
       { name: '赵六', directions: ['miniapp'], capacity: 60, status: 'active' },
     ]);
@@ -201,7 +205,7 @@ describe('成员状态（v8.3.321+: 出项目成员不参与自动填充）', ()
       '| :--- | :--- | :--- | :--- |',
       '| 李四 | h5 | 100% | 在职 |',
     ].join('\n'));
-    expect(loadStaffing(iterDir)).toEqual([
+    expect(loadStaffing(iterDir)).toMatchObject([
       { name: '李四', directions: ['h5'], capacity: 100, status: 'active' },
     ]);
   });
@@ -216,7 +220,7 @@ describe('成员状态（v8.3.321+: 出项目成员不参与自动填充）', ()
       '| :--- | :--- | :--- | :--- |',
       '| 张三 | admin | 80% | 出项目 |',
     ].join('\n'));
-    expect(loadStaffing(iterDir)).toEqual([
+    expect(loadStaffing(iterDir)).toMatchObject([
       { name: '李四', directions: ['h5'], capacity: 70, status: 'active' },
     ]);
   });
@@ -228,7 +232,7 @@ describe('成员状态（v8.3.321+: 出项目成员不参与自动填充）', ()
       '| :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
       '| 张三 | zs | 后端 | Node.js | 订单 | admin | 80% |',
     ].join('\n'));
-    expect(loadStaffing(iterDir)).toEqual([
+    expect(loadStaffing(iterDir)).toMatchObject([
       { name: '张三', directions: ['admin'], capacity: 80, status: 'active' },
     ]);
   });
@@ -400,5 +404,107 @@ describe('OWNERS.md 视图', () => {
     const viewPath = join(specDir, 'unit-c', 'overview', 'OWNERS.md');
     expect(existsSync(viewPath)).toBe(true);
     expect(readFileSync(viewPath, 'utf-8')).toContain('| admin-web | 李四 | ✅ confirmed |');
+  });
+});
+
+// ── v8.3.337+: 成员模型扩展（岗位/在项目口径/分支代号/Git 用户名）──
+describe('成员模型扩展（v8.3.337+: 岗位/在项目/分支代号）', () => {
+  it('parseStaffingTable 解析岗位/在项目/分支代号列', () => {
+    const team = parseStaffingTable([
+      '| 成员 | Git 用户名 | 岗位 | 技术栈 | 负责模块 | 平台方向 | 投入比例 | 在项目 | 分支代号 |',
+      '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
+      '| 张三 | zs | web, 后端 | Node.js | 订单 | 后台 | 80% | 是 | zs |',
+      '| 李四 | lisi | 测试 | Go | 支付 | backend-api | 70% | 否 | |',
+    ].join('\n'));
+    expect(team[0]).toMatchObject({
+      name: '张三', gitUser: 'zs', roles: ['web', '后端'], initials: 'zs',
+      directions: ['后台'], capacity: 80, status: 'active',
+    });
+    expect(team[1].status).toBe('inactive');
+    expect(team[1].initials).toBeUndefined();
+  });
+
+  it('旧表「状态」列仍兼容（在职/出项目 → active/inactive）', () => {
+    const staffing = parseStaffingTable([
+      '| 成员 | 平台方向 | 投入比例 | 状态 |',
+      '| :--- | :--- | :--- | :--- |',
+      '| 王五 | APP | 60% | 在职 |',
+      '| 赵六 | APP | 50% | 出项目 |',
+    ].join('\n'));
+    expect(staffing[0].status).toBe('active');
+    expect(staffing[1].status).toBe('inactive');
+  });
+
+  it('mergeStaffing 空不覆盖：旧迭代 STAFFING 无新列时继承基座岗位/代号', () => {
+    const g = [{
+      name: '张三', directions: ['后台'], capacity: 80,
+      status: 'active' as const, roles: ['后端'], gitUser: 'zs', initials: 'zs',
+    }];
+    const i = [{
+      name: '张三', directions: ['后台'], capacity: 90,
+      status: undefined, roles: [] as string[],
+    }];
+    const merged = mergeStaffing(g, i);
+    expect(merged[0]).toMatchObject({
+      capacity: 90,       // 比例整体覆盖
+      status: 'active',   // 状态空不覆盖（继承基座）
+      roles: ['后端'],    // 岗位空不覆盖（继承基座）
+      gitUser: 'zs',
+      initials: 'zs',
+    });
+  });
+});
+
+// ── v8.3.339+: 通配语义（* / all / 全部 / 全栈 = 全部）──
+describe('通配语义（v8.3.339+: 岗位/方向 * = 全部）', () => {
+  it('normalizeWildcard 归一：通配词整体归一为 [WILDCARD]', () => {
+    expect(normalizeWildcard(['*'])).toEqual(['*']);
+    expect(normalizeWildcard(['all'])).toEqual(['*']);
+    expect(normalizeWildcard(['全部'])).toEqual(['*']);
+    expect(normalizeWildcard(['全栈'])).toEqual(['*']);
+    expect(normalizeWildcard(['全端'])).toEqual(['*']);
+    expect(normalizeWildcard(['web', '全部'])).toEqual(['*']);   // 与具体值并列以通配为准
+    expect(normalizeWildcard(['web', '后端'])).toEqual(['web', '后端']); // 无通配原样返回
+  });
+
+  it('isWildcard 只认归一后的 [WILDCARD]', () => {
+    expect(isWildcard(['*'])).toBe(true);
+    expect(isWildcard(['web'])).toBe(false);
+    expect(isWildcard([])).toBe(false);
+    expect(isWildcard(['*', 'web'])).toBe(false);
+  });
+
+  it('matchDirection 通配恒命中', () => {
+    expect(matchDirection('booking-service', WILDCARD)).toBe(true);
+    expect(matchDirection('admin-web', WILDCARD)).toBe(true);
+  });
+
+  it('parseStaffingTable 解析时归一 roles/directions 通配', () => {
+    const members = parseStaffingTable([
+      '| 成员 | 岗位 | 平台方向 | 投入比例 |',
+      '| :--- | :--- | :--- | :--- |',
+      '| 张三 | 全栈 | * | 80% |',
+      '| 李四 | web | all | 70% |',
+    ].join('\n'));
+    expect(members[0].roles).toEqual(['*']);
+    expect(members[0].directions).toEqual(['*']);
+    expect(members[1].roles).toEqual(['web']);
+    expect(members[1].directions).toEqual(['*']);
+  });
+
+  it('deriveOwnerCandidates 通配成员不参与「唯一」判定（防唯一误判）', () => {
+    const staffing = [
+      { name: '全栈甲', directions: ['*'], capacity: 50 },
+      { name: '张三', directions: ['后台'], capacity: 80 },
+    ];
+    // booking-service：张三唯一专向 → 候选；h5-mobile：仅全栈甲命中 → 不推导
+    const decls = deriveOwnerCandidates(['booking-service', 'h5-mobile'], staffing);
+    expect(decls).toHaveLength(1);
+    expect(decls[0]).toEqual({ platform: 'booking-service', name: '张三', status: 'pending' });
+  });
+
+  it('deriveOwnerCandidates 只有通配成员 → 全部不推导（报缺不脑补）', () => {
+    const staffing = [{ name: '全栈甲', directions: ['全部'], capacity: 50 }];
+    expect(deriveOwnerCandidates(['booking-service', 'h5-mobile'], staffing)).toEqual([]);
   });
 });
