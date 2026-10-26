@@ -1,5 +1,16 @@
 # Changelog
 
+## v8.3.346 (2026-10-26) — 命令面收敛：help 面板 51 → 22 核心命令
+
+`speccore --help` 此前把全部 51 个命令裸列在核心盒子之下，「60 多个命令」劝退新用户。本次收敛为三层：
+
+- **对外展示 22 个核心命令**：流水线 13 阶段（init → doc2spec → req-doc → unitize → analyze → taskify → plan → execute → verify → pipeline → pr → done → spec2doc）+ 基础管理（iteration/task）+ 智能入口（ask/run/next/dashboard/status/about/help）。
+- **隐藏 29 个命令但功能保留**：低频/运维/内部编排命令（doctor/migrate/change/validate/global/search 等）从 help 面板隐藏——ask 引擎意图词典、run 流水线编排、内部逻辑调用仍直接可用，直接输入命令照常执行。隐藏 ≠ 删除。
+- **全量清单入口**：新增 `speccore help --all`，分「⭐ 核心命令 / 🔧 更多命令」两段展示全部命令；`speccore help` 默认分类视图同步收敛为 6 类核心命令，并补齐 doc2spec/verify/pipeline/spec2doc 等 9 个缺失的命令详情。
+- **单一事实源**：新增 `src/core/command-visibility.ts`（CORE_COMMANDS 名单），cli.ts 隐藏遍历与 help.ts 全量视图共同消费，增删命令只改一处；实现基于 commander 11 的 `hidden` 选项（visibleCommands 自动过滤），零功能损失。
+- **核心盒子同步**：help-panel.ts 顶部盒子更新为完整 13 阶段流水线行，删去已隐藏的 change/validate/rename/prompts，补 verify/pipeline/req-doc/status，底部加 `help --all` 提示。
+- **文档同步**：README 中英两版「完整命令（分类）」收敛为 22 核心命令表（删「60 个命令」文案）；静态模板 templates/html/speccore-help.html 清理幽灵命令（code-index/history/knowledge/refresh/track）并重写为 6 类核心命令 + help --all 提示；docs/command-reference.md 与 docs/commands.en.md 补充面板收敛说明。
+
 ## v8.3.345 (2026-10-26) — FUNCTION_MAP 单元ID 新表头兼容
 
 修复「功能单元名解析错位」断链：analyze 落盘 FUNCTION_MAP 的表头已演进为「| 单元ID | 功能模块/功能单元 | 中文名 | 涉及端 | 优先级 |」（首列是 M-01 这类单元ID），但 parseFunctionMapTable 仍取首列作单元名——解析出 name='M-01' 而非目录名，导致 taskify 三处下游受害：模块驱动拆分任务名/slug 全变成 m-01、extractOverviewContext 关键词拆分后为空（功能单元上下文全部丢失）、功能点覆盖校验误报遗漏。

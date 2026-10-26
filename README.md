@@ -123,7 +123,7 @@ settings:
 
 ## 常用命令
 
-记不住 60 个命令？高频就这几个：
+记不住命令？高频就这几个：
 
 | 命令 | 作用 |
 |------|------|
@@ -139,7 +139,7 @@ settings:
 | `spec2doc` | 导出 Word/PDF/HTML |
 | `status` | 查看进度 |
 
-> 完整命令见 [命令参考](docs/command-reference.md)，或 `speccore help` 查看分类。
+> 完整命令见 [命令参考](docs/command-reference.md)，或 `speccore help` 查看分类；全部命令（含低频/运维/内部编排）用 `speccore help --all`。
 
 ---
 
@@ -202,18 +202,18 @@ speccore run --skip-smoke                  # 单次跳过冒烟
 
 ---
 
-## 完整命令（分类）
+## 核心命令（分类）
 
 | 分类 | 命令 |
 |------|------|
-| 流水线 / 核心 | `run` `ask` `doc2spec` `req-doc` `analyze` `validate` `taskify` `plan` `execute` |
-| 收尾 | `pipeline` `pr` `done` `spec2doc` |
-| 状态 / 导航 | `status` `next` `dashboard` `progress` |
-| 初始化 / 配置 | `init` `config` `doctor` `update` |
-| 管理工具 | `units` `pattern` `rename` `cleanup` |
-| 变更 / 专项 | `change` `retro` `review` `sync` |
-| 知识检索 | `search` |
+| 初始化 / 导入 | `init` `doc2spec` `req-doc` |
+| 迭代 / 任务 | `iteration` `task` |
+| 分析 / 计划 | `analyze` `plan` |
+| 切分 / 导出 | `unitize` `spec2doc` |
+| 执行 / 交付 | `execute` `verify` `pipeline` `pr` `done` |
+| 智能入口 | `ask` `run` `next` `dashboard` `status` `about` `help` |
 
+> 🔧 低频/运维/内部编排命令（`validate` `change` `sync` 等 29 个）不在面板展示但功能保留，完整清单见 `speccore help --all`。
 > 💡 **全命令 Skill**：所有命令均支持 `/命令 + 自然语言` 快捷入口，如 `/deploy 部署到测试环境`、`/verify 跑冒烟测试`。
 
 ---

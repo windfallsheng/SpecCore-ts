@@ -123,7 +123,7 @@ Even when clarification is skipped, a **quality review report** (`010-requiremen
 
 ## Common Commands
 
-Can't remember 60 commands? These are the ones that matter:
+Can't remember commands? These are the ones that matter:
 
 | Command | Purpose |
 |---------|---------|
@@ -139,7 +139,7 @@ Can't remember 60 commands? These are the ones that matter:
 | `spec2doc` | export Word/PDF/HTML |
 | `status` | check progress |
 
-> Full list: [Command Reference](docs/commands.en.md), or `speccore help`.
+> Full list: [Command Reference](docs/command-reference.md), or `speccore help` for categories; every command (including low-frequency/ops/internal) via `speccore help --all`.
 
 ---
 
@@ -182,17 +182,18 @@ speccore verify -t Task-001 --ui
 
 ---
 
-## Complete Commands (categorized)
+## Core Commands (categorized)
 
 | Category | Commands |
 |----------|----------|
-| Pipeline / core | `run` `ask` `doc2spec` `req-doc` `analyze` `validate` `taskify` `plan` `execute` |
-| Finishing | `pipeline` `pr` `done` `spec2doc` |
-| Status / nav | `status` `next` `dashboard` `progress` |
-| Init / config | `init` `config` `doctor` `update` |
-| Management | `units` `pattern` `rename` `cleanup` |
-| Change / special | `change` `retro` `review` `sync` |
-| Knowledge | `search` |
+| Init / import | `init` `doc2spec` `req-doc` |
+| Iteration / task | `iteration` `task` |
+| Analyze / plan | `analyze` `plan` |
+| Split / export | `unitize` `spec2doc` |
+| Execute / deliver | `execute` `verify` `pipeline` `pr` `done` |
+| Smart entry | `ask` `run` `next` `dashboard` `status` `about` `help` |
+
+> 🔧 Low-frequency/ops/internal commands (`validate` `change` `sync` and 26 more) stay available but off the panel; see `speccore help --all` for the full list.
 
 ---
 

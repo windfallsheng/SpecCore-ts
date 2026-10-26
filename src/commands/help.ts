@@ -6,14 +6,16 @@
 import { logger } from '../utils/logger';
 import { isAiContext, detectHostAi } from '../core/ask-host-ai';
 import { getAllCommandMappings, getCommandMapping } from '../core/intent-recognition';
+import { CORE_COMMANDS } from '../core/command-visibility';
 
 export interface HelpOptions {
   command?: string;
   search?: string;
   examples?: boolean;
+  all?: boolean;
 }
 
-export async function helpCommand(options: HelpOptions): Promise<void> {
+export async function helpCommand(options: HelpOptions, program?: import('commander').Command): Promise<void> {
   // 非 TTY → HTML 页面
   if (isAiContext() || !process.stdout.isTTY) {
     await helpHtml(options);
@@ -35,6 +37,11 @@ export async function helpCommand(options: HelpOptions): Promise<void> {
     return;
   }
 
+  if (options.all) {
+    showAllCommandsFull(program);
+    return;
+  }
+
   showAllCommands();
 }
 
@@ -46,6 +53,68 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
     desc: '初始化 SpecCore 项目',
     params: [],
     examples: ['speccore init', 'speccore init --interactive'],
+  },
+  'req-doc': {
+    desc: '需求文档化：口语化需求 → PRD 级文档',
+    params: [
+      { flag: '--from <file>', meaning: '从文件读取原始需求' },
+      { flag: '--to <iteration>', meaning: '目标迭代' },
+    ],
+    examples: ['speccore req-doc "用户能用手机号登录" --to Q1'],
+  },
+  taskify: {
+    desc: '拆功能单元 → 开发任务（同 iteration taskify）',
+    params: [
+      { flag: '-i, --iteration <iteration>', meaning: '目标迭代' },
+      { flag: '--modules <modules>', meaning: '只重建指定模块' },
+    ],
+    examples: ['speccore taskify -i Q1'],
+  },
+  verify: {
+    desc: '代码验证：编译 + Lint + 单测 + UI 冒烟（质量门禁）',
+    params: [
+      { flag: '--ui', meaning: '启用 UI 验证（冒烟 + 视觉检查）' },
+      { flag: '--smoke-only', meaning: '仅执行冒烟测试' },
+    ],
+    examples: ['speccore verify', 'speccore verify --ui'],
+  },
+  pipeline: {
+    desc: '流水线：合并分支 → 构建 → 部署（环境驱动）',
+    params: [
+      { flag: '-e, --env <env>', meaning: '目标环境（默认 staging）' },
+      { flag: '-p, --platforms <list>', meaning: '逗号分隔端列表' },
+    ],
+    examples: ['speccore pipeline --env staging'],
+  },
+  spec2doc: {
+    desc: 'Spec MD → Word/PDF/HTML/PPTX 导出',
+    params: [
+      { flag: '-i, --iteration <name>', meaning: '目标迭代' },
+      { flag: '--format <format>', meaning: 'docx | pdf | html | pptx' },
+    ],
+    examples: ['speccore spec2doc -i Q1 --format docx'],
+  },
+  status: {
+    desc: '项目状态面板（迭代/全局）',
+    params: [
+      { flag: '-i, --iteration <iteration>', meaning: '目标迭代' },
+      { flag: '--scope <scope>', meaning: 'iteration | global' },
+    ],
+    examples: ['speccore status'],
+  },
+  about: {
+    desc: '版本信息 & 升级内容 & 文档链接',
+    params: [],
+    examples: ['speccore about'],
+  },
+  help: {
+    desc: '命令帮助与搜索（--all 全量清单）',
+    params: [
+      { flag: '--command <command>', meaning: '查看单命令详解' },
+      { flag: '--search <keyword>', meaning: '关键词搜索命令' },
+      { flag: '--all', meaning: '显示全部命令（含低频/运维）' },
+    ],
+    examples: ['speccore help', 'speccore help --all'],
   },
   'status-panel': {
     desc: '项目状态看板 → 已合并到 dashboard',
@@ -359,6 +428,30 @@ const COMMAND_PARAMS: Record<string, { desc: string; params: { flag: string; mea
 };
 
 // ============================================================
+// 全量命令视图（--all）
+// 含被 help 面板隐藏的低频/运维/内部编排命令——隐藏 ≠ 删除，
+// ask 引擎意图词典、run 流水线编排、内部逻辑调用仍直接可用。
+// ============================================================
+function showAllCommandsFull(program?: import('commander').Command): void {
+  logger.info('📖 SpecCore 全部命令');
+  logger.info('');
+  const all = [...(program?.commands ?? [])].sort((a, b) => a.name().localeCompare(b.name()));
+  const visible = all.filter((c) => CORE_COMMANDS.has(c.name()));
+  const hidden = all.filter((c) => !CORE_COMMANDS.has(c.name()));
+  const render = (title: string, cmds: typeof all): void => {
+    logger.info(title);
+    for (const c of cmds) {
+      const desc = (c.description() || '').split('\n')[0];
+      logger.info(`  ${c.name().padEnd(22)} ${desc}`);
+    }
+    logger.info('');
+  };
+  render('⭐ 核心命令（help 面板展示）', visible);
+  render('🔧 更多命令（低频/运维/内部编排，ask 说人话仍可触发）', hidden);
+  logger.info('💡 speccore help --command=<命令> 查看详细参数');
+}
+
+// ============================================================
 // 展示
 // ============================================================
 
@@ -367,13 +460,12 @@ function showAllCommands(): void {
   logger.info('');
 
   const categories: Record<string, string[]> = {
-    '🏗️ 初始化': ['init', 'doc2spec'],
-    '📋 迭代与任务': ['iteration create', 'iteration taskify', 'task new', 'rename'],
-    '🔍 分析与计划': ['analyze', 'global', 'plan'],
-    '⚡ 执行与审查': ['execute', 'pr', 'done'],
-    '🐛 变更与修复': ['change', 'task new'],
-    ' 状态与查询': ['status', 'validate', 'reindex'],
-    ' 智能入口': ['ask', 'run', 'prompts'],
+    '🏗️ 初始化与导入': ['init', 'doc2spec', 'req-doc'],
+    '📋 迭代与任务': ['iteration create', 'iteration taskify', 'taskify', 'task new'],
+    '🔍 分析与计划': ['analyze', 'plan'],
+    '🔪 切分与导出': ['unitize', 'spec2doc'],
+    '⚡ 执行与交付': ['execute', 'verify', 'pipeline', 'pr', 'done'],
+    '💡 智能入口': ['ask', 'run', 'next', 'dashboard', 'status', 'about', 'help'],
   };
 
   for (const [cat, cmds] of Object.entries(categories)) {

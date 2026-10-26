@@ -61,6 +61,7 @@ import { searchCommand } from './commands/search';
 import { promptsCommand } from './commands/prompts';
 import { cleanupCommand } from './commands/cleanup';
 import { HELP_PANEL } from './core/help-panel';
+import { CORE_COMMANDS } from './core/command-visibility';
 import { i18n } from './i18n';
 
 // ─────────────────────────────────────────
@@ -756,7 +757,8 @@ program
   .option('--command <command>', 'Show detailed help for specific command')
   .option('--search <keyword>', 'Search commands by keyword')
   .option('--examples', 'Show complete scenario examples')
-  .action(helpCommand);
+  .option('--all', '显示全部命令（含低频/运维/内部编排命令）')
+  .action((options: any) => helpCommand(options, program));
 
 // ================================================================
 // 🌐 全量层命令
@@ -1077,11 +1079,21 @@ program
   .option('--web', '强制输出 HTML 页面')
   .action(welcomeCommand);
 
+// ── 命令面收敛：help 面板只展示核心命令，其余隐藏但功能保留 ──
+// 隐藏 ≠ 删除：ask 引擎意图词典、run 流水线编排、内部逻辑调用仍直接可用；
+// 全量清单入口: speccore help --all（名单见 core/command-visibility.ts）
+for (const cmd of program.commands) {
+  if (!CORE_COMMANDS.has(cmd.name())) {
+    (cmd as unknown as { _hidden: boolean })._hidden = true;
+  }
+}
+
 // Parse arguments
 // ── 帮助分层：核心命令前置 ──
 program.addHelpText('beforeAll', HELP_PANEL);
 
 program.addHelpText('afterAll', `
+💡 更多命令: speccore help --all（低频/运维/内部编排命令仍可用）
 💡 完整文档: https://github.com/windfallsheng/SpecCore-ts
 `);
 
@@ -1090,7 +1102,7 @@ if (process.argv.length <= 2) {
   const { existsSync, readdirSync, readFileSync } = require('fs');
   const { join } = require('path');
   const { logger } = require('./utils/logger');
-  const pkg = require('../../package.json');
+  const pkg = require('../package.json');
 
   let phase = 'init', iteration = '', total = 0, done2 = 0;
   let nextCmd = 'speccore init', nextDesc = '初始化 SpecCore 项目';
@@ -1171,7 +1183,7 @@ if (process.argv.length <= 2) {
 
   logger.info('');
   logger.info('┌──────────────────────────────────────────┐');
-  logger.info('│    SpecCore · v' + pkg.version + ' · 59 commands              │');
+  logger.info('│    SpecCore · v' + pkg.version + ' · 需求到部署全流程          │');
   logger.info('├──────────────────────────────────────────┤');
   if (iteration) logger.info('│  迭代: ' + iteration.padEnd(33) + '│');
   logger.info('│  状态: ' + icons[phase] + ' ' + (names[phase] || phase).padEnd(33) + '│');

@@ -1,6 +1,6 @@
 # SpecCore — Command Reference
 
-> ⚠️ **This page is a legacy quick reference (v6.16.0 era).** For the complete, up-to-date command reference (v8.3.x: 40+ commands, subcommands, and examples), see the Chinese [command-reference.md](command-reference.md) or run `speccore help`.
+> ⚠️ **This page is a legacy quick reference (v6.16.0 era).** For the complete, up-to-date command reference, see the Chinese [command-reference.md](command-reference.md) or run `speccore help` (22 core commands) / `speccore help --all` (full list).
 
 > 🔧 Legacy quick commands · v6.16.0 · See [README](../README.en.md)
 

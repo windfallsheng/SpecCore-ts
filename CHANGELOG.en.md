@@ -4,6 +4,17 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.346 (2026-10-26) — Command surface convergence: help panel 51 → 22 core commands
+
+`speccore --help` used to list all 51 commands below the core box — "60+ commands" scared off new users. Now converged into three tiers:
+
+- **22 core commands shown**: 13 pipeline stages (init → doc2spec → req-doc → unitize → analyze → taskify → plan → execute → verify → pipeline → pr → done → spec2doc) + base management (iteration/task) + smart entries (ask/run/next/dashboard/status/about/help).
+- **29 commands hidden but fully functional**: low-frequency/ops/internal-orchestration commands (doctor/migrate/change/validate/global/search …) are hidden from the help panel — the ask intent dictionary, run pipeline orchestration, and internal calls still work, and typing the command directly still executes it. Hidden ≠ deleted.
+- **Full-list entry**: new `speccore help --all` shows all commands in two sections (⭐ core / 🔧 more); the default `speccore help` category view converges to 6 core categories, with 9 missing command details (doc2spec/verify/pipeline/spec2doc …) filled in.
+- **Single source of truth**: new `src/core/command-visibility.ts` (CORE_COMMANDS set) consumed by both the cli.ts hide pass and the help.ts full view — add/remove a command in one place; built on commander 11's `hidden` option (visibleCommands filtering), zero functional loss.
+- **Core box synced**: help-panel.ts header box now shows the full 13-stage pipeline line, drops the hidden change/validate/rename/prompts, adds verify/pipeline/req-doc/status, and points to `help --all` at the bottom.
+- **Docs synced**: README (zh/en) "complete commands" tables converge to the 22 core commands (dropped the "60 commands" wording); the static template templates/html/speccore-help.html removes ghost commands (code-index/history/knowledge/refresh/track) and rewrites into 6 core categories + a `help --all` hint; docs/command-reference.md and docs/commands.en.md note the panel convergence.
+
 ## v8.3.345 (2026-10-26) — FUNCTION_MAP unit-ID header compatibility
 
 Fixes the "feature-unit name column misparse" breakage: analyze now writes FUNCTION_MAP with the header "| 单元ID | 功能模块/功能单元 | 中文名 | 涉及端 | 优先级 |" (first column is a unit ID like M-01), but parseFunctionMapTable still took the first column as the unit name — parsing name='M-01' instead of the directory name. Three taskify downstreams suffered: module-driven split produced task names/slugs like "m-01", extractOverviewContext keyword splitting yielded an empty set (feature-unit context entirely lost), and the coverage check reported false omissions.
