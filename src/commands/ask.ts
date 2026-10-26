@@ -187,7 +187,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
   }
 
   // ── 🎉 升级仪式：首次使用 / 版本升级时展示引导页 ──
-  const { pathExists, readFile, writeFile, ensureDir, copy } = await import('fs-extra');
+  const { pathExists, readFile, writeFile, ensureDir } = await import('fs-extra');
   const { join } = await import('path');
   const markerDir = join(process.cwd(), '.speccore', 'local');
   const markerFile = join(markerDir, '.ask-onboarded');
@@ -197,21 +197,9 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     try { lastVersion = (await readFile(markerFile, 'utf-8')).trim(); } catch {}
   }
   if (lastVersion !== ver) {
-    const html = renderOnboardingHtml();
-    const outPath = join(process.cwd(), 'outputs', 'speccore-ask-onboarding.html');
-    await ensureDir(join(process.cwd(), 'outputs'));
-    await writeFile(outPath, html);
-    // 复制关联模板页面到 outputs/（v8.3.295+: 模板源改为包内定位，修复升级后链接页 404）
-    const tplDir = join(__dirname, '..', '..', 'templates', 'html');
-    for (const f of ['speccore-ask-explain.html','speccore-ask-guide.html','speccore-ask-match.html','speccore-ask-pipeline.html','speccore-help.html']) {
-      const src = join(tplDir, f);
-      if (await pathExists(src)) await copy(src, join(process.cwd(), 'outputs', f));
-    }
-    // v8.3.338+: 联动生成提示词库页，保证 setup-guide/项目名片内「查看提示词库」链接可达（老项目无需重新 init）
-    try {
-      const { generatePromptsPage } = await import('./prompts');
-      await generatePromptsPage(join(process.cwd(), 'outputs', 'speccore-prompts.html'));
-    } catch { /* 联动生成失败不阻断 ask */ }
+    // v8.3.342+: 页面家族联动——onboarding + 四个模式页 + 帮助页 + 提示词库一并补齐
+    const { ensureAskPages } = await import('../core/page-bundle');
+    const outPath = await ensureAskPages(process.cwd());
     await writeFile(markerFile, ver);
     // 输出 SPECCORE_ONBOARD 标记让 AI 展示引导页
     process.stdout.write(`[SPECCORE_ONBOARD: ${outPath}]\n`);
@@ -455,7 +443,7 @@ function buildPage(title: string, body: string, input: string, accent: string): 
 .footer{text-align:center;color:var(--muted);font-size:10px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}</style></head><body><div class="scanlines"></div><div class="grid-pattern"></div><div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div><h1>SPECCORE ASK</h1><div class="query">"${input}"</div><div class="badge">${title}</div>${body}<div class="footer">由 SpecCore 驱动 v${ver} · ${new Date().toISOString().split('T')[0]}</div></div></body></html>`;
 }
 
-function renderOnboardingHtml(): string {
+export function renderOnboardingHtml(): string {
   const ver = require('../../package.json').version;
   return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Speccore Ask 首次引导</title><style>@import url(\'https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700\');*{box-sizing:border-box}body{margin:0;padding:24px 20px;background:#0b1929;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:\'JetBrains Mono\',monospace;position:relative}.scanlines{position:fixed;inset:0;pointer-events:none;z-index:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px)}.grid-pattern{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(14,165,233,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(14,165,233,.03) 1px,transparent 1px);background-size:60px 60px}.card{max-width:800px;width:100%;background:rgba(13,31,56,.95);border:1px solid rgba(14,165,233,.15);border-radius:16px;padding:24px;position:relative;overflow:hidden;z-index:1}.card::before{content:\'\';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX 3s linear infinite}.card::after{content:\'\';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#0ea5e9,transparent);animation:scanX-rev 3s linear infinite}.vline{position:absolute;top:0;width:1px;bottom:0;pointer-events:none}.vline.l{left:0;background:linear-gradient(0deg,transparent,#0ea5e9,transparent);animation:scanY-rev 3s linear infinite}.vline.r{right:0;background:linear-gradient(0deg,transparent,#0ea5e9,transparent);animation:scanY 3s linear infinite}@keyframes scanX{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}@keyframes scanX-rev{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes scanY{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}@keyframes scanY-rev{0%{transform:translateY(100%)}100%{transform:translateY(-100%)}}.wrap svg{display:block;width:100%;height:auto}.badge-line{text-align:center;margin-top:14px;position:relative;z-index:1;color:#5b7fa5;font-size:11px}.badge-line code{background:rgba(14,165,233,.15);color:#0ea5e9;padding:4px 14px;border-radius:6px;font-size:13px;border:1px solid rgba(14,165,233,.2)}.sub{color:#5b7fa5;font-size:12px;letter-spacing:1px;text-align:center;margin-top:6px}.bottom-bar{text-align:center;margin-top:14px;padding:12px 20px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.15);border-radius:10px}.bottom-bar .entry{color:#bae6fd;font-size:12px}.bottom-bar .flow-desc{color:#5b7fa5;font-size:10px;margin-top:6px}.ft{text-align:center;color:#5b7fa5;font-size:10px;margin-top:16px;z-index:1}@keyframes cardGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}.card-bg{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 10%,rgba(14,165,233,.25) 0%,transparent 70%);animation:cardGlow 3s ease-in-out infinite;transform-origin:top center}@keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 20px rgba(14,165,233,.4)) drop-shadow(0 0 60px rgba(14,165,233,.15))}50%{filter:drop-shadow(0 0 30px rgba(14,165,233,.7)) drop-shadow(0 0 80px rgba(14,165,233,.3))}}h1,h2{font-family:\'Orbitron\',sans-serif;font-size:40px;font-weight:900;background:linear-gradient(135deg,#0ea5e9,#6366f1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px;text-align:center;animation:titleGlow 3s ease-in-out infinite}.mode-rect{transition:all .3s;cursor:pointer}.mode-rect:hover{filter:brightness(1.4) drop-shadow(0 0 8px currentColor)}.ask-circle{cursor:pointer;transition:all .3s}.ask-circle:hover{filter:drop-shadow(0 0 16px rgba(14,165,233,.6))}.start-bar{text-align:center;margin-top:18px;position:relative;z-index:1}.start-btn{display:inline-block;padding:12px 36px;background:linear-gradient(135deg,#0ea5e9 0%,#6366f1 100%);border:none;border-radius:40px;color:#fff;font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer;box-shadow:0 0 24px rgba(14,165,233,.3);transition:all .3s;text-decoration:none}.start-btn:hover{box-shadow:0 0 40px rgba(14,165,233,.5);transform:translateY(-1px)}.copy-hint{display:inline-block;margin-top:10px;color:#5b7fa5;font-size:10px;cursor:pointer;transition:color .2s}.copy-hint:hover{color:#0ea5e9}</style></head><body><div class="scanlines"></div><div class="grid-pattern"></div><div class="card"><div class="card-bg"></div><div class="vline l"></div><div class="vline r"></div><h1>ask — SpecCore 万能AI入口</h1><div class="sub">一个命令解决所有问题：解释 / 指引 / 匹配 / 编排</div><div class="wrap">'+SVG_ONBOARD+'</div><div class="badge-line">任意自然语言，AI 自动匹配最佳模式</div><div class="start-bar"><a class="start-btn" href="speccore-help.html">知道了，开始使用</a><div class="copy-hint" onclick="navigator.clipboard.writeText(\'/spec-ask 你的需求\');this.textContent=\'✅ 已复制到剪贴板\'" title="点击复制">📋 点击复制命令</div></div><div class="bottom-bar"><div class="entry">统一入口: /spec-ask 任意自然语言，AI 自动理解意图</div><div class="flow-desc">AI 自动判断模式 → 执行匹配逻辑 → 展示结果 → 用户确认</div></div><div class="ft">SpecCore v'+ver+' — 下次直接显示结果</div></div></body></html>';
 }

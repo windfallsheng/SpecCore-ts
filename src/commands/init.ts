@@ -2459,32 +2459,9 @@ async function writeSetupGuide(projectRoot: string, _speccoreDir: string): Promi
   const name = basename(projectRoot);
   const pkgVersion = await readFile(join(projectRoot, 'package.json'), 'utf-8').then(s => JSON.parse(s).version).catch(() => '0.0.0');
 
-  // 读取静态模板（v8.3.295+: 模板源改为包内定位，与部署/测试示例复制同源）
-  const templatePath = join(__dirname, '..', '..', 'templates', 'html', 'speccore-setup-guide.html');
-  let template: string;
-  if (await pathExists(templatePath)) {
-    template = await readFile(templatePath, 'utf-8');
-  } else {
-    // 降级：如果模板不存在，使用内置简短提示（不应该发生）
-    template = '<!DOCTYPE html><html><body><h1>SpecCore 配置引导</h1><p>模板文件缺失，请检查包内 templates/html/speccore-setup-guide.html</p></body></html>';
-  }
-
-  // 替换变量
-  const html = template
-    .replace(/\{\{PROJECT_NAME\}\}/g, name)
-    .replace(/\{\{VERSION\}\}/g, pkgVersion);
-
-  const outputPath = join(projectRoot, 'outputs', 'speccore-setup-guide.html');
-  await ensureDir(join(projectRoot, 'outputs'));
-  await writeFile(outputPath, html);
-
-  // v8.3.338+: 联动生成提示词库页，保证 setup-guide 内「查看提示词库」链接可达
-  try {
-    const { generatePromptsPage } = await import('./prompts');
-    await generatePromptsPage(join(projectRoot, 'outputs', 'speccore-prompts.html'));
-  } catch { /* 联动生成失败不阻断 init */ }
-
-  return outputPath;
+  // v8.3.342+: 复用页面家族联动模块（模板复制 + 变量替换 + 提示词库联动一并补齐）
+  const { ensureSetupGuidePage } = await import('../core/page-bundle');
+  return ensureSetupGuidePage(projectRoot, name, pkgVersion);
 }
 
 // ─────────────────────────────────────────

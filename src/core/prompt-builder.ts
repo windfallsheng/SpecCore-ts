@@ -2360,6 +2360,22 @@ export async function buildPrompt(
     } catch { /* 忽略读取失败 */ }
   }
 
+  // v8.3.344+: 注入迭代素材资产（原型 HTML + 参考截图/设计稿）。
+  // 补齐盲区：010-requirements/prototypes/ 与 assets/ 下未被文档引用的素材此前完全无通道。
+  if ((command === 'execute' || command === 'analyze') && options.iteration) {
+    try {
+      const mediaIterDir = await getIterationDir(options.iteration);
+      if (mediaIterDir) {
+        const mediaVision = await loadVisionConfig(cwd);
+        const mediaSpec = await collectIterationMediaAssets(mediaIterDir, mediaVision);
+        if (mediaSpec) {
+          extraSpecs.push(mediaSpec);
+          logger?.info?.(`   🖼️ 迭代素材: 原型/截图已注入上下文（${Math.round(mediaSpec.content.length / 1000)}K 字符）`);
+        }
+      }
+    } catch { /* 素材扫描失败不阻断 */ }
+  }
+
   // 加载全局上下文（智能注入）
   const globalContext = await loadGlobalContext(cwd, command, options.platform);
 
@@ -2415,8 +2431,12 @@ export async function buildPrompt(
       };
       const rawPrompt = await buildMultiDocPrompt('analyze', ctx, options.analyzeOptions);
       // v8.3.3xx+: rawPrompt 路由会丢弃常规 extraSpecs，阅读清单（CLI 导航 + 宿主 AI 深读）单独追加
-      const readingList = extraSpecs.find(s => s.name === '📖 相关源码阅读清单');
-      const finalRawPrompt = readingList ? `${rawPrompt}\n\n${readingList.content}` : rawPrompt;
+      // v8.3.344+: 素材资产（原型/截图）同样随路由追加，保证 analyze 阶段也能看到视觉素材
+      const carryOver = extraSpecs.filter(s =>
+        s.name === '📖 相关源码阅读清单' || s.name.startsWith('🖼️ 迭代素材资产'));
+      const finalRawPrompt = carryOver.length > 0
+        ? `${rawPrompt}\n\n${carryOver.map(s => s.content).join('\n\n')}`
+        : rawPrompt;
       return {
         marker: '[SPECCORE_PROMPT]',
         version: '1.0',
@@ -3266,6 +3286,127 @@ export async function processMarkdownContent(
     options?.maxSvgChars ?? 2000,
   );
   return processed;
+}
+
+/**
+ * v8.3.344+: 扫描迭代素材资产（原型 HTML + 参考截图/设计稿/提取图片）。
+ * 补齐盲区：此前只有「被已加载文档以 Markdown 链接引用」的资产会进入上下文，
+ * 010-requirements/prototypes/ 与 assets/ 下未被引用的原型/截图完全无通道。
+ * 策略：CLI 渲染 HTML 原型语义结构（ARIA 树 + 截图）与视觉描述关键图片，
+ * 其余列路径清单——宿主 AI 按需打开原文件。限额防撑爆上下文。
+ * 导出供单测直接调用（构造临时迭代目录即可验证注入行为）。
+ */
+export async function collectIterationMediaAssets(
+  iterDir: string,
+  visionConfig?: VisionModelConfig,
+): Promise<TaskExtraSpec | null> {
+  const reqDir = join(iterDir, '010-requirements');
+  const scanRoots = [
+    join(reqDir, 'prototypes'),
+    join(reqDir, 'assets'),
+  ];
+  const htmlFiles: string[] = [];
+  const imageFiles: string[] = [];
+  for (const root of scanRoots) {
+    if (!(await pathExists(root))) continue;
+    await walkMediaFiles(root, htmlFiles, imageFiles, 3);
+  }
+  if (htmlFiles.length === 0 && imageFiles.length === 0) return null;
+
+  const lines: string[] = [];
+  lines.push('## 🖼️ 迭代素材资产（原型 HTML + 参考截图/设计稿）');
+  lines.push('');
+  lines.push('> 以下素材来自迭代需求目录（010-requirements/prototypes/ 与 assets/）。');
+  lines.push('> CLI 已渲染 HTML 原型语义结构与截图、描述关键图片；');
+  lines.push('> 宿主 AI 请按需打开原文件/截图查看完整视觉细节（多模态宿主可直接读截图 PNG）。');
+  lines.push('');
+
+  // 1. HTML 原型：ARIA 语义树 + 截图路径，渲染失败降级纯文本
+  const MAX_HTML = 3;
+  const MAX_ARIA_CHARS = 1200;
+  for (const htmlPath of htmlFiles.slice(0, MAX_HTML)) {
+    const rel = relative(iterDir, htmlPath);
+    const proto = await renderHtmlPrototype(htmlPath);
+    lines.push(`### 原型: \`${rel}\``);
+    lines.push('');
+    if (proto?.accessibilityTree) {
+      const tree = proto.accessibilityTree.length > MAX_ARIA_CHARS
+        ? proto.accessibilityTree.slice(0, MAX_ARIA_CHARS) + '\n…(结构截断)'
+        : proto.accessibilityTree;
+      lines.push('```yaml');
+      lines.push(tree);
+      lines.push('```');
+      if (proto.screenshotPath) {
+        lines.push(`> 📷 截图: \`${proto.screenshotPath}\`（多模态宿主可直接查看）`);
+      }
+      recordAssetAudit(rel, '原型已渲染（ARIA 结构 + 截图）');
+    } else {
+      const htmlContent = await readFile(htmlPath, 'utf-8').catch(() => '');
+      lines.push('> ⚠️ Playwright 渲染失败，以下为纯文本降级提取；宿主 AI 请直接打开 HTML 查看。');
+      lines.push('');
+      lines.push(extractHtmlText(htmlContent).slice(0, MAX_ARIA_CHARS));
+      recordAssetAudit(rel, '原型纯文本降级（请宿主打开原文件）');
+    }
+    lines.push('');
+  }
+  if (htmlFiles.length > MAX_HTML) {
+    const rest = htmlFiles.slice(MAX_HTML).map(p => `\`${relative(iterDir, p)}\``).join(', ');
+    lines.push(`> 其余 ${htmlFiles.length - MAX_HTML} 个原型未注入（宿主 AI 可按需打开）: ${rest}`);
+    lines.push('');
+  }
+
+  // 2. 参考图片：视觉模型描述前 N 张，其余列路径 + 大小
+  const MAX_IMAGES = 10;
+  const MAX_VISION = 3;
+  lines.push('### 参考图片（截图/设计稿/提取素材）');
+  lines.push('');
+  let visionUsed = 0;
+  for (const imgPath of imageFiles.slice(0, MAX_IMAGES)) {
+    const rel = relative(iterDir, imgPath);
+    if (isVisionEnabled(visionConfig) && visionUsed < MAX_VISION) {
+      const result = await describeImage(imgPath, visionConfig!);
+      if (result.success) {
+        visionUsed++;
+        lines.push(`- **${rel}**（视觉描述）: ${result.description.slice(0, 300)}`);
+        recordAssetAudit(rel, '视觉模型已描述');
+        continue;
+      }
+    }
+    const size = await stat(imgPath).then(s => `${(s.size / 1024).toFixed(1)}KB`).catch(() => '?');
+    lines.push(`- \`${rel}\`（${size}，宿主 AI 请打开查看）`);
+    recordAssetAudit(rel, '图片已列入清单（宿主 AI 请打开查看）');
+  }
+  if (imageFiles.length > MAX_IMAGES) {
+    lines.push(`> 其余 ${imageFiles.length - MAX_IMAGES} 张图片未列出。`);
+  }
+
+  return {
+    name: '🖼️ 迭代素材资产（原型/截图/设计稿）',
+    path: 'iteration-media-assets.md',
+    content: lines.join('\n'),
+  };
+}
+
+/** 递归收集素材文件（HTML 原型 + 图片），限深度防爆炸 */
+async function walkMediaFiles(
+  dir: string,
+  htmlOut: string[],
+  imgOut: string[],
+  maxDepth: number,
+  depth: number = 0,
+): Promise<void> {
+  if (depth > maxDepth) return;
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => [] as any[]);
+  for (const e of entries as any[]) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) {
+      await walkMediaFiles(p, htmlOut, imgOut, maxDepth, depth + 1);
+    } else if (/\.html?$/i.test(e.name)) {
+      htmlOut.push(p);
+    } else if (/\.(png|jpe?g|gif|webp|svg)$/i.test(e.name)) {
+      imgOut.push(p);
+    }
+  }
 }
 
 function generateExamples(command: string, req: Omit<NeedsInfoRequest, 'marker'>): string[] {

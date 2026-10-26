@@ -4,6 +4,38 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.345 (2026-10-26) — FUNCTION_MAP unit-ID header compatibility
+
+Fixes the "feature-unit name column misparse" breakage: analyze now writes FUNCTION_MAP with the header "| 单元ID | 功能模块/功能单元 | 中文名 | 涉及端 | 优先级 |" (first column is a unit ID like M-01), but parseFunctionMapTable still took the first column as the unit name — parsing name='M-01' instead of the directory name. Three taskify downstreams suffered: module-driven split produced task names/slugs like "m-01", extractOverviewContext keyword splitting yielded an empty set (feature-unit context entirely lost), and the coverage check reported false omissions.
+
+- **Name-column header locating**: parseFunctionMapTable gains nameColIdx — the column whose header contains 「功能模块/功能单元」 but not 「涉及端」 (correct for both the new 2nd-column layout and the old 1st-column layout); without header info, fall back to — first cell if it's a unit-ID pattern (M-01/F-01) → take the second cell, otherwise take the first (legacy "| 目录名 | 名称 | …").
+- **Trigger widened**: inTable detection for both the table parser and raw-row parser now accepts 「功能单元/功能模块」 dual headers, so the analyze aggregate template (「功能模块」 header) also triggers parsing and detection.
+- **Detection unaffected**: detectNarrowPlatformDeclarations anchors on any cell exactly equal to the feature-unit directory name, decoupled from name-column locating; end-to-end verification on the meeting project real data returns gaps=0.
+
+## v8.3.344 (2026-10-26) — iteration media asset injection (prototype HTML + reference screenshots/designs)
+
+Closes the "asset directories have no channel" blind spot: previously only assets referenced by Markdown links inside already-loaded docs reached the context (processMarkdownContent expands in-doc links/images), while unreferenced prototype HTML, reference screenshots, and design mockups under 010-requirements/prototypes/ and assets/ (extracted/prototypes/designs/screenshots) had no channel at all — execute generated code without ever seeing the prototype, and analyze produced UI_SPEC without seeing the designs.
+
+- **collectIterationMediaAssets**: buildPrompt scans the media directories for execute/analyze with an iteration (bounded-depth recursion). HTML prototypes go through renderHtmlPrototype for an ARIA semantic tree + screenshot path (multimodal hosts can view directly), with extractHtmlText fallback on render failure; images get vision-model descriptions (first 3) or a path+size listing (max 10). Caps prevent context bloat; no assets → silent null; scan failure is non-blocking.
+- **analyze rawPrompt routing handoff**: the rawPrompt route discards regular extraSpecs, so media assets are appended alongside the reading list — analyze phase (UI_SPEC generation) now sees the visual assets too.
+- **Asset-audit consistency**: all media injection goes through recordAssetAudit, so broken links/degradations stay visible in the audit block instead of silently vanishing.
+
+## v8.3.343 (2026-10-23) — FUNCTION_MAP platform-coverage cross-check (narrow-declaration detection)
+
+Fixes the "platforms declared at split-time ≠ platforms realized at analyze-time" breakage: the `platforms` field doc2spec writes into `_matrix.md` means "which platform this platform-level requirement doc belongs to" (often single), while the platform coverage analyze-phase AI writes into FUNCTION_MAP means "which platforms this feature unit involves across-end collaboration" (multiple) — both carried by the same field with no cross-check. Skeletons converge to the single-platform declaration, so backend platform-level specs for multi-platform units went largely missing: taskify had no backend specs to work from (hallucinated or skipped tasks), and execute generated incomplete code.
+
+- **Narrow-declaration detection**: new `src/core/function-map.ts`. After analyze skeleton progress detection, FUNCTION_MAP coverage is compared against `_matrix` declarations (rows anchored by a cell exactly equal to the feature-unit directory name, with adaptive platform-column locating). Two gap classes are warned separately: ①missing — in FUNCTION_MAP but not `_matrix`, with no real specs under the platform dir → back-fill hint; ②undeclared — platform specs exist but `_matrix` doesn't declare them → declaration-sync hint (taskify's readMatrixPlatforms trusts any non-empty declaration, so without syncing, multi-platform subtasks still won't be generated). Warn-only, never writes back, so AI-generated FUNCTION_MAP can't pollute the authoritative declaration.
+- **FUNCTION_MAP parsing consolidated**: `parseFunctionMap` (table + tree formats, adaptive platform-column tolerance) moved from taskify.ts into function-map.ts, shared by analyze detection and taskify splitting — eliminating dual-implementation drift.
+- **DOC_MATRIX top-level check fix**: feature projects now skip the legacy `020-specs/{platform}/` top-level platform-doc check (already covered by computeFeatureBasedAnalyzeManifest under `{feature}/{platform}/`), fixing spurious top-level skeleton file creation.
+
+## v8.3.342 (2026-10-22) — HTML page family linkage
+
+Fixes the broken-link class of bugs where commands pop up HTML pages that don't exist, or whose in-page jump targets are missing: the welcome project card links to the ask onboarding / setup guide / help pages, but those targets were only generated after their own commands had been run; worse, welcome's TTY branches emitted the `[SPECCORE_WELCOME]` marker without writing the HTML file — host AIs opened a path that didn't exist. New `src/core/page-bundle.ts` idempotently back-fills all jump targets; welcome/ask/init entry points unified onto it.
+
+- **Page-family bundle module**: `ensureAskPages` (onboarding + four mode pages + help + prompts), `ensureSetupGuidePage` (setup guide + prompts), `ensureWelcomeTargets` (all card jump targets) — idempotent, non-blocking on failure; ask.ts loaded via runtime dynamic import to avoid circular deps.
+- **welcome broken-link fix**: AI branch and all three TTY branches now write the card and back-fill the family before emitting the marker — fixing the previous "marker without file" bug; phase/task-count computation hoisted to function scope.
+- **ask/init consolidation**: ask's first-use/upgrade ceremony now calls `ensureAskPages` (copy + prompts linkage collapsed into one place); init's `writeSetupGuide` reuses `ensureSetupGuidePage`.
+
 ## v8.3.341 (2026-10-21) — engineering health + command inventory consolidation
 
 Two themes: ①four improvements from the full-project health review — deploy engine switched from execSync template concatenation to execFileSync argument arrays (the only security-bearing item — closes the "config-as-command" injection surface), branch-type extraction and env-dir resolution consolidated into shared exports, pure functions in three core engines exported and slice-tested, analyze.ts monolithic function progressively split (8 mode-early-exit blocks, 476 lines, extracted into module-level functions); ②command inventory consolidation — 20 edge commands removed (pipeline core commands, progress exports, and friendly commands like welcome/help/about retained), all mention points (help / ask dictionary / completion / README / docs / IDE slash commands / runtime hints / template presets) cleaned up, index maintenance unified into reindex. Zero behavior change; full suite 621/621 passing.

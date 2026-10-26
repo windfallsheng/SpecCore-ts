@@ -1,5 +1,37 @@
 # Changelog
 
+## v8.3.345 (2026-10-26) — FUNCTION_MAP 单元ID 新表头兼容
+
+修复「功能单元名解析错位」断链：analyze 落盘 FUNCTION_MAP 的表头已演进为「| 单元ID | 功能模块/功能单元 | 中文名 | 涉及端 | 优先级 |」（首列是 M-01 这类单元ID），但 parseFunctionMapTable 仍取首列作单元名——解析出 name='M-01' 而非目录名，导致 taskify 三处下游受害：模块驱动拆分任务名/slug 全变成 m-01、extractOverviewContext 关键词拆分后为空（功能单元上下文全部丢失）、功能点覆盖校验误报遗漏。
+
+- **名称列表头定位**：parseFunctionMapTable 新增 nameColIdx——按表头含「功能模块/功能单元」且非「涉及端」的列定位单元名（新格式取第 2 列、旧格式取第 1 列均正确）；无表头信息时兜底——首列若为单元ID 模式（M-01/F-01）取第二列，否则取首列（旧数据「| 目录名 | 名称 | …」）。
+- **触发条件扩展**：表格与原始行解析的 inTable 触发从「功能单元」扩展到「功能单元/功能模块」双表头，analyze 汇总模板（「功能模块」表头）也能触发检测与解析。
+- **检测不受影响确认**：detectNarrowPlatformDeclarations 锚定用「与功能单元目录名精确相等」的任意单元格，与名称列定位解耦，未受影响；会议项目真实数据端到端 gaps=0 验证通过。
+
+## v8.3.344 (2026-10-26) — 迭代素材资产注入（原型 HTML + 参考截图/设计稿）
+
+补齐「素材目录无通道」盲区：此前只有「被已加载文档以 Markdown 链接引用」的资产会进入上下文（processMarkdownContent 展开文档内链接/图片），而 010-requirements/prototypes/ 与 assets/（extracted/prototypes/designs/screenshots）下未被引用的原型 HTML、参考截图、设计稿完全无通道——execute 生成代码时看不到原型、analyze 产出 UI_SPEC 时看不到设计稿。
+
+- **collectIterationMediaAssets**：buildPrompt 在 execute/analyze 且指定迭代时扫描素材目录（递归限深度），HTML 原型走 renderHtmlPrototype 渲染 ARIA 语义树 + 截图路径（多模态宿主可直看），渲染失败降级 extractHtmlText；图片走视觉模型描述（前 3 张）或路径+大小清单（最多 10 张）。限额防撑爆上下文，无素材静默返回 null，扫描失败不阻断。
+- **analyze rawPrompt 路由衔接**：rawPrompt 路由会丢弃常规 extraSpecs，素材资产与阅读清单一并随路由追加，保证 analyze 阶段（UI_SPEC 生成）也能看到视觉素材。
+- **资产审计一致**：素材注入全部走 recordAssetAudit，断链/降级在审计清单可见，不再静默丢失。
+
+## v8.3.343 (2026-10-23) — FUNCTION_MAP 端覆盖交叉校验（声明过窄检测）
+
+修复「切分层声明的端 ≠ 分析层落实的端」断链：doc2spec 写进 _matrix.md 的 platforms 语义是「端级需求文档归属端」（常单端），而 analyze 阶段 AI 写入 FUNCTION_MAP 的端覆盖语义是「功能单元跨端协作涉及端」（多端）——两者被同一字段承载却无交叉校验，骨架按单端声明收敛后，多端单元的后端端级规格大面积缺失，taskify 拿不到后端规格（瞎编/漏任务）、execute 时代码生成不完整。
+
+- **声明过窄检测**：新增 `src/core/function-map.ts`，analyze 骨架检测完成后比对 FUNCTION_MAP 端覆盖与 _matrix 声明（以「与功能单元目录名精确相等的单元格」锚定行 + 端列自适应定位），分两类缺口警告——①missing：FUNCTION_MAP 有、_matrix 无、端目录无真实规格 → 提示补端分析；②undeclared：端级规格已存在但 _matrix 未声明 → 提示同步声明（taskify 的 readMatrixPlatforms 非空即采信，声明不更新则多端子任务依然不会生成）。只告警不回灌，避免 AI 生成的 FUNCTION_MAP 污染权威声明。
+- **FUNCTION_MAP 解析收敛**：parseFunctionMap（表格+树形双格式、端列自适应容错）从 taskify.ts 迁至 function-map.ts，analyze 检测与 taskify 拆分共用同一解析器，消除双份实现漂移。
+- **DOC_MATRIX 顶层校验修正**：feature 项目的平台文档校验跳过 020-specs/{端}/ 顶层旧架构路径（已由 computeFeatureBasedAnalyzeManifest 按 {feature}/{端}/ 覆盖），修复此前误建顶层骨架文件的问题。
+
+## v8.3.342 (2026-10-22) — HTML 页面家族联动
+
+修复「命令弹出页面但页面不存在/页面内跳转目标缺失」的断链：welcome 项目名片跳 ask 引导页/配置指南/帮助页，但此前只有 ask/init/help 各自跑过才会生成目标页，且 welcome 的 TTY 分支输出 [SPECCORE_WELCOME] 标记却不写文件——宿主 AI 拿到标记打开不存在的页面。新增 `src/core/page-bundle.ts` 页面家族联动模块，幂等补齐跳转目标；welcome/ask/init 三个入口统一接入。
+
+- **页面家族联动模块**：`ensureAskPages`（onboarding + 四模式页 + 帮助页 + 提示词库）、`ensureSetupGuidePage`（配置引导页 + 提示词库）、`ensureWelcomeTargets`（名片全部跳转目标），均幂等可重复调用、失败不阻断主流程；对 ask.ts 采用运行时动态 import 避免循环依赖。
+- **welcome 断链修复**：AI 分支与 TTY 三个分支统一先落盘名片并联动补齐家族，再输出标记——修复此前 TTY 分支「标记在文件不在」的 bug；阶段/任务数计算上提为函数级共用。
+- **ask/init 收编**：ask 首次/升级仪式改为调用 ensureAskPages（原有复制+prompts 联动逻辑收敛到一处）；init 的 writeSetupGuide 复用 ensureSetupGuidePage。
+
 ## v8.3.341 (2026-10-21) — 工程健康度优化 + 命令盘点精简
 
 两大主题：①全项目体检后按性价比落地的四项改进——deploy 引擎 execSync 模板拼接改为 execFileSync 参数数组（带安全属性的唯一项，杜绝「配置即命令」注入面）、分支类型提取与环境目录定位收敛为共享导出、三个核心引擎纯函数导出并补切片测试、analyze.ts 巨函数渐进拆分（8 个模式早退块 476 行抽出为模块级函数）；②命令盘点精简——移除 20 个边缘命令（流水线核心命令、进度导出与 welcome/help/about 等友好命令保留），全部提及点（help/ask 词典/补全/README/docs/IDE slash/运行时提示/模板预设）同步清理，索引维护统一入口收敛为 reindex。行为零变化，全量 621/621 通过。

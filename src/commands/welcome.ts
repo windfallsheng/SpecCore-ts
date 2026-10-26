@@ -28,30 +28,35 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
   const iteration = await getDefaultIteration('');
   const iterName = (!iteration || iteration.includes('---') || iteration.length < 2) ? '' : iteration;
 
-  if (isAiContext() || !process.stdout.isTTY || _options.web) {
-    let taskCount = 0;
-    if (iterName) { try { const entries = await readdir(`Iteration-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {} }
-    let phase = 'doc';
-    if (iterName) {
-      const reqDoc = join(getProjectRoot(), `Iteration-${iterName}`, '020-specs', 'REQUIREMENT.md');
-      if (!(await pathExists(reqDoc))) phase = 'doc';
-      else if (!(await pathExists(join(getProjectRoot(), `Iteration-${iterName}`, '020-specs', 'ANALYSIS.md')))) phase = 'analyze';
-      else if (taskCount === 0) phase = 'split';
-      else phase = 'execute';
-    }
+  // 阶段与任务数统一计算（HTML 名片与联动页面共用，TTY 分支同样落盘）
+  let taskCount = 0;
+  if (iterName) { try { const entries = await readdir(`Iteration-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {} }
+  let phase = 'doc';
+  if (iterName) {
+    const reqDoc = join(getProjectRoot(), `Iteration-${iterName}`, '020-specs', 'REQUIREMENT.md');
+    if (!(await pathExists(reqDoc))) phase = 'doc';
+    else if (!(await pathExists(join(getProjectRoot(), `Iteration-${iterName}`, '020-specs', 'ANALYSIS.md')))) phase = 'analyze';
+    else if (taskCount === 0) phase = 'split';
+    else phase = 'execute';
+  }
+
+  // 落盘名片 + 补齐跳转目标（v8.3.342+：任何分支输出 [SPECCORE_WELCOME] 标记前必须写文件，
+  // 修复此前 TTY 分支输出标记但文件不存在的断链）
+  const emitPage = async (): Promise<string> => {
     const html = renderWelcomeHtml(version, isInit, iterName, phase, taskCount);
     const outPath = _options.output || join(process.cwd(), 'outputs', 'welcome-SpecCore.html');
     await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, html);
+    // 名片内跳转目标：ask 引导页家族（含帮助页/提示词库）+ 配置引导页（已初始化时）
+    try {
+      const { ensureWelcomeTargets } = await import('../core/page-bundle');
+      await ensureWelcomeTargets(process.cwd(), isInit);
+    } catch { /* 联动生成失败不阻断 welcome */ }
+    return outPath;
+  };
 
-    // v8.3.338+: 已初始化项目联动生成提示词库页，保证项目名片内「查看提示词库」链接可达
-    if (isInit) {
-      try {
-        const { generatePromptsPage } = await import('./prompts');
-        await generatePromptsPage(join(process.cwd(), 'outputs', 'speccore-prompts.html'));
-      } catch { /* 联动生成失败不阻断 welcome */ }
-    }
-
+  if (isAiContext() || !process.stdout.isTTY || _options.web) {
+    const outPath = await emitPage();
     process.stdout.write(`✅ 页面已生成: file://${outPath}\n`);
     process.stdout.write(`[SPECCORE_WELCOME: ${outPath}]\n`);
     return;
@@ -67,23 +72,23 @@ export async function welcomeCommand(_options: WelcomeOptions): Promise<void> {
     logger.info(box('📦 项目状态', ['', `${C.gray}尚未初始化${C.r}`, '', `${C.cyan}◆ 快速开始:${C.r}  speccore init`]));
     logger.info('');
     showAskGuide();
-    process.stdout.write(`[SPECCORE_WELCOME: ${join(process.cwd(), 'outputs', 'welcome-SpecCore.html')}]\n`);
+    const outPath = await emitPage();
+    process.stdout.write(`[SPECCORE_WELCOME: ${outPath}]\n`);
     return;
   }
   if (!iterName) {
     logger.info(box('📦 项目状态', [`${C.gray}无活跃迭代${C.r}`, `${C.b}speccore iteration create -n Q1${C.r}`]));
     logger.info('');
     showAskGuide();
-    process.stdout.write(`[SPECCORE_WELCOME: ${join(process.cwd(), 'outputs', 'welcome-SpecCore.html')}]\n`);
+    const outPath = await emitPage();
+    process.stdout.write(`[SPECCORE_WELCOME: ${outPath}]\n`);
     return;
   }
-  let taskCount = 0;
-  try { const entries = await readdir(`Iteration-${iterName}`, { withFileTypes: true }); taskCount = entries.filter(e => e.isDirectory() && e.name.startsWith('Task-')).length; } catch {}
   logger.info(box(`📦 项目状态 · ${iterName}`, [`${C.gray}任务数: ${taskCount}${C.r}`, `${C.b}speccore next（下一步）${C.r}`, `${C.b}speccore run（全自动）${C.r}`]));
   logger.info('');
   showAskGuide();
   // 始终输出标记，确保 AI 宿主弹出页面
-  const outPath = join(process.cwd(), 'outputs', 'welcome-SpecCore.html');
+  const outPath = await emitPage();
   process.stdout.write(`[SPECCORE_WELCOME: ${outPath}]\n`);
 }
 

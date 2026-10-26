@@ -5313,31 +5313,64 @@ sequenceDiagram
             }
           }
           // v8.1.1+: Phase 2 平台文档交叉校验
-          const expectedPlatformDocs = PLATFORM_DOCS.filter(d => includeDocs.includes(d));
-          const missingPlatformDocs: string[] = [];
-          for (const platform of platforms) {
-            for (const doc of expectedPlatformDocs) {
-              const docPath = join(specDir, platform, doc);
-              if (!await pathExists(docPath)) {
-                missingPlatformDocs.push(`${platform}/${doc}`);
+          // v8.3.343+: 功能模块项目的平台文档位于 {feature}/{platform}/，
+          // 已由 computeFeatureBasedAnalyzeManifest 覆盖（上方的骨架进度检测按 feature-based 路径校验）；
+          // 此顶层校验仅适用于无功能模块的旧架构项目（020-specs/{端}/ 平铺），
+          // feature 项目跳过，避免在 020-specs/{端}/ 顶层误建骨架文件。
+          if (!hasFeatures) {
+            const expectedPlatformDocs = PLATFORM_DOCS.filter(d => includeDocs.includes(d));
+            const missingPlatformDocs: string[] = [];
+            for (const platform of platforms) {
+              for (const doc of expectedPlatformDocs) {
+                const docPath = join(specDir, platform, doc);
+                if (!await pathExists(docPath)) {
+                  missingPlatformDocs.push(`${platform}/${doc}`);
+                }
+              }
+            }
+            if (missingPlatformDocs.length > 0) {
+              logger.warn(`⚠️ DOC_MATRIX 交叉校验发现 ${missingPlatformDocs.length} 个平台文档缺失: ${missingPlatformDocs.slice(0, 5).join(', ')}${missingPlatformDocs.length > 5 ? '...' : ''}`);
+              logger.info(`🔧 自动补建平台骨架文件...`);
+              const missingPlatformEntries = computeAnalyzeManifest(platforms, '2', ctx.iteration)
+                .filter(e => {
+                  const relName = e.relPath; // e.g. "overview/TECH.md" relative to specDir
+                  return missingPlatformDocs.some(mp => relName.endsWith(mp) || mp.endsWith(relName));
+                });
+              if (missingPlatformEntries.length > 0) {
+                await generateSkeleton(specDir, missingPlatformEntries);
+                logger.info(`✅ 已补建 ${missingPlatformEntries.length} 个平台骨架文件，请继续填充`);
+                const newManifest = computeAnalyzeManifest(platforms, undefined, ctx.iteration);
+                perDocStatus = await detectSkeletonProgress(specDir, newManifest);
               }
             }
           }
-          if (missingPlatformDocs.length > 0) {
-            logger.warn(`⚠️ DOC_MATRIX 交叉校验发现 ${missingPlatformDocs.length} 个平台文档缺失: ${missingPlatformDocs.slice(0, 5).join(', ')}${missingPlatformDocs.length > 5 ? '...' : ''}`);
-            logger.info(`🔧 自动补建平台骨架文件...`);
-            const missingPlatformEntries = computeAnalyzeManifest(platforms, '2', ctx.iteration)
-              .filter(e => {
-                const relName = e.relPath; // e.g. "overview/TECH.md" relative to specDir
-                return missingPlatformDocs.some(mp => relName.endsWith(mp) || mp.endsWith(relName));
-              });
-            if (missingPlatformEntries.length > 0) {
-              await generateSkeleton(specDir, missingPlatformEntries);
-              logger.info(`✅ 已补建 ${missingPlatformEntries.length} 个平台骨架文件，请继续填充`);
-              const newManifest = computeAnalyzeManifest(platforms, undefined, ctx.iteration);
-              perDocStatus = await detectSkeletonProgress(specDir, newManifest);
-            }
+        }
+        // v8.3.343+: 声明过窄检测——FUNCTION_MAP 端覆盖 × _matrix 声明交叉校验。
+        // doc2spec 写进 _matrix 的 platforms 语义是「端级需求文档归属端」（常单端），
+        // FUNCTION_MAP 的端覆盖语义是「单元跨端协作涉及端」（多端）。多端单元若只有
+        // 单端端级规格，taskify 拿不到后端规格（瞎编/漏任务）、execute 代码生成不完整。
+        // 两类缺口分别警告：missing=缺端级规格（补端分析）；undeclared=规格已存在但
+        // _matrix 未声明（taskify 的 readMatrixPlatforms 非空即采信，声明不更新则
+        // 多端子任务依然不会生成）。策略：只读检测 + 警告，不回灌 _matrix。
+        try {
+          const { detectNarrowPlatformDeclarations } = await import('../core/function-map');
+          const narrowGaps = await detectNarrowPlatformDeclarations(iterDir, features, featurePlatforms, platforms);
+          const specGaps = narrowGaps.filter(g => g.missing.length > 0);
+          const declGaps = narrowGaps.filter(g => g.undeclared.length > 0);
+          if (specGaps.length > 0) {
+            const gapLines = specGaps.map(g =>
+              `   ${g.feature}: _matrix 声明 [${g.declared.length > 0 ? g.declared.join(', ') : '无'}]，FUNCTION_MAP 涉及 [${g.functionMap.join(', ')}]，缺端级规格 [${g.missing.join(', ')}]`);
+            logger.warn(`⚠️ 声明过窄检测: ${specGaps.length} 个功能单元的端级规格缺失（FUNCTION_MAP 覆盖超出 _matrix 声明）:\n${gapLines.join('\n')}`);
+            logger.info(`💡 建议: 对缺失端补端分析（analyze --apply 写 020-specs/{单元}/{端}/）`);
           }
+          if (declGaps.length > 0) {
+            const declLines = declGaps.map(g =>
+              `   ${g.feature}: _matrix 声明 [${g.declared.length > 0 ? g.declared.join(', ') : '无'}]，端级规格已存在但未声明 [${g.undeclared.join(', ')}]`);
+            logger.warn(`⚠️ _matrix 声明滞后: ${declGaps.length} 个功能单元已补端级规格但 platforms 未同步:\n${declLines.join('\n')}`);
+            logger.info(`💡 建议: 更新 010-requirements/features/{单元}/_matrix.md 的 platforms 为 FUNCTION_MAP 口径（否则 taskify 仍只拆声明端子任务）`);
+          }
+        } catch (e: any) {
+          logger.debug(`声明过窄检测跳过（非关键）: ${e.message}`);
         }
       }
     } catch (e: any) {
