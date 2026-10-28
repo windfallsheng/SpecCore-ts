@@ -13,6 +13,7 @@ import { buildAskContext, formatContextForHostAi } from './ask-context';
 import { loadFreshKnowledgeGraph, GraphEntity } from './knowledge-graph';
 import { loadProjectConfig, type PlatformConfig } from './unified-config';
 import { parsePlatformList } from './spec-paths';
+import { matchProjectsFromText, formatProjectCardInjection } from './project-cards';
 
 // ============================================================
 // 类型定义
@@ -59,6 +60,8 @@ export interface AskResult {
   pipeline?: PipelinePlan;
   /** AI 模式下可直接执行的命令（自动而非打印给人） */
   autoExec?: { command: string; args: string; confirm?: boolean };
+  /** 按需注入的项目名片块（用户句中出现端名/业务名/类型词时命中，未命中为空） */
+  projectCards?: string;
 }
 
 /** Ask 引擎选项 */
@@ -1367,6 +1370,9 @@ export async function askEngine(input: string, options?: AskEngineOptions): Prom
   // 知识图谱语义增强：如果本地引擎匹配到需要 task 的命令但缺少参数，尝试从图谱补全
   localResult = await enrichWithKG(localResult, input);
 
+  // 项目名片按需注入：用户句中出现端名/业务名/类型词（前端/后端/H5端）时，把对应名片附到结果
+  localResult = await enrichWithProjectCards(localResult, input);
+
   // 计算本地置信度（explain/guide/pipeline 视为高置信度）
   // v8.3.184+ degrade to honesty：按匹配层级诚实赋值，触发词匹配不得伪装成精确匹配
   const hasKbMatch = localResult.commands.length > 0 && localResult.mode === 'match' && !localResult.summary.includes('未识别');
@@ -1408,8 +1414,9 @@ export async function askEngine(input: string, options?: AskEngineOptions): Prom
 
     if (hostResult && hostResult.commands.length > 0) {
       // AI 返回有效结果 → 优先AI（语义理解更精准）
-      if (config.routing.cacheEnabled) await cacheIntent(input, hostResult, 'host-ai');
-      return hostResult;
+      const enriched = await enrichWithProjectCards(hostResult, input);
+      if (config.routing.cacheEnabled) await cacheIntent(input, enriched, 'host-ai');
+      return enriched;
     }
     // AI 不可用或失败 → 回退本地
     if (config.routing.cacheEnabled) await cacheIntent(input, localResult, 'local');
@@ -1422,14 +1429,16 @@ export async function askEngine(input: string, options?: AskEngineOptions): Prom
     if (mode === 'match' || mode === 'ambiguous') {
       const hostResult = await tryHostAiEnhanced(input, localCandidates);
       if (hostResult && hostResult.commands.length > 0) {
-        if (config.routing.cacheEnabled) await cacheIntent(input, hostResult, 'host-ai');
-        return hostResult;
+        const enriched = await enrichWithProjectCards(hostResult, input);
+        if (config.routing.cacheEnabled) await cacheIntent(input, enriched, 'host-ai');
+        return enriched;
       }
       // 自有LLM冗余（用户配置了provider时启用）
       const llmResult = await tryLlmProviders(input, config);
       if (llmResult) {
-        if (config.routing.cacheEnabled) await cacheIntent(input, llmResult, 'llm');
-        return llmResult;
+        const enriched = await enrichWithProjectCards(llmResult, input);
+        if (config.routing.cacheEnabled) await cacheIntent(input, enriched, 'llm');
+        return enriched;
       }
     }
   }
@@ -1539,6 +1548,27 @@ async function enrichWithKG(
       ? { ...result.autoExec, args: newArgs }
       : { command: primaryCommand, args: newArgs, confirm: true },
   };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 项目名片按需注入：用户句中出现端名/业务名/类型词时，把对应名片附到结果
+// 设计：未提到项目 → 零注入（0 token）；提到 N 端 → 注入 N 张小名片（约 40 token/端）
+// ═══════════════════════════════════════════════════════════
+
+async function enrichWithProjectCards(result: AskResult, input: string): Promise<AskResult> {
+  if (!input || !result || result.mode === 'explain') return result;
+  if (result.projectCards) return result; // 已注入过，幂等防重
+  let platforms: PlatformConfig[] = [];
+  try {
+    const cfg = await loadProjectConfig();
+    platforms = cfg?.platforms || [];
+  } catch {
+    return result; // 配置缺失时静默跳过，不影响主流程
+  }
+  const hits = matchProjectsFromText(input, platforms);
+  if (hits.length === 0) return result;
+  const block = formatProjectCardInjection(hits);
+  return { ...result, projectCards: block, detail: result.detail + '\n\n' + block };
 }
 
 // ═══════════════════════════════════════════════════════════

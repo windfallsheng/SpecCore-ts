@@ -315,6 +315,8 @@ export async function askCommand(input: string, _options: any): Promise<void> {
         process.stdout.write(`[SPECCORE_INTENT]\n`);
         process.stdout.write(`我识别到你的意图是执行以下命令:\n\n`);
         process.stdout.write(`  ${COLORS.bold}speccore ${result.autoExec.command} ${result.autoExec.args}${COLORS.reset}\n\n`);
+        // 项目名片按需注入：用户句中提到端名/业务名/类型词时，附上对应项目信息给 AI
+        if (result.projectCards) process.stdout.write(`${result.projectCards}\n\n`);
         if (process.stdout.isTTY && !isAiContext()) {
           // 纯终端交互环境：等待用户确认
           process.stdout.write(`输入 y/回车 确认执行，或重新描述你的需求。\n`);

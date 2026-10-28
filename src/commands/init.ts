@@ -17,6 +17,7 @@ import {
 import { getBuiltinRuleContents } from '../core/rule-loader';
 import { isTimestampBackup } from '../utils/task-utils';
 import { decideStampedSync, stampContent, stripAssetStamp } from '../core/asset-stamp';
+import { buildQuickIndex, writeGlobalProjectsDoc } from '../core/project-cards';
 // v6.87.0+: COMMANDS 命令模板
 import { getBuiltinCommandContents } from '../core/command-loader';
 // v6.88.0+: SKILLS + HOOKS
@@ -1989,7 +1990,20 @@ export async function syncAgentsMd(projectRoot: string, force = false): Promise<
     sections.push('## 规范与参考\n\n' + ruleParts.join('\n\n'));
   }
 
-  // 2c. 所有 Agent 共用的核心约束
+  // 2c. 项目速查（PROJECT.yaml platforms → 每端一行，宿主 AI 常驻可见）
+  try {
+    const { loadProjectConfig } = await import('../core/unified-config');
+    const cfg = await loadProjectConfig();
+    const platforms = cfg?.platforms || [];
+    if (platforms.length > 0) {
+      const quickIndex = buildQuickIndex(platforms);
+      if (quickIndex) sections.push(quickIndex);
+      // 同步生成全量名片文件（.speccore/GLOBAL/PROJECTS.md，AI 按需 Read）
+      await writeGlobalProjectsDoc(projectRoot, platforms);
+    }
+  } catch { /* 项目配置缺失时静默跳过 */ }
+
+  // 2d. 所有 Agent 共用的核心约束
   sections.push('## 核心约束\n\n' + [
     '- 不要自己创建目录 — 使用 `speccore` CLI',
     '- 不要写脚本绕过 CLI — 所有操作通过 `speccore` 命令完成',
