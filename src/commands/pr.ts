@@ -72,6 +72,8 @@ export interface PrOptions {
   createPr?: boolean;   // 推送后自动创建 Pull Request
   merge?: boolean;      // 合并当前 PR 到 base 分支
   autoMerge?: boolean;  // 创建 PR 后自动合并
+  /** v8.3.348+: run 流水线步参数，展开为 --force + --create-pr（非交互自动提交并建 PR） */
+  auto?: boolean;
 }
 
 // ── UI 验证状态检查（v8.3.48+）──
@@ -271,6 +273,13 @@ async function mergePullRequest(auto?: boolean, cwd?: string): Promise<{ success
 }
 
 export async function prCommand(options: PrOptions): Promise<void> {
+  // v8.3.348+: --auto 展开为 --force + --create-pr（run 流水线步参数，修复死参数——
+  // 此前 cli.ts 未注册该选项，流水线的 pr --auto 被静默吞掉后退化成交互式等待）
+  if (options.auto) {
+    options.force = true;
+    options.createPr = true;
+  }
+
   // v8.3.88+: 确定工程代码目录
   let gitCwd = process.cwd();
   try {

@@ -4,6 +4,31 @@
 
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
 
+## v8.3.348 (2026-10-28) — Deploy chain transparency: plan panel + automatic branch resolution + live config reads
+
+The whole deploy journey is now visible — which environment, which platforms, which branch, which build command, where it deploys, and how it went:
+
+- **Deploy plan panel**: before executing, deploy prints a per-platform plan — target branch (with source) → build command → deploy target, with dry-run / skip-build flags annotated.
+- **Automatic branch resolution (4-level fallback)**: deploy no longer builds the workspace as-is; it resolves the target branch via "env platform-level branch → env global branch → PROJECT.yaml default_branch → subtask git-config source branch" and then checkout + pull; explicit --branch wins. New shared module src/core/deploy/branch-resolver.ts, reused by pipeline.
+- **Transparent git output**: checkout / pull / merge output is passed through directly (what was pulled, conflict reasons) instead of being silently piped away.
+- **Summary report branch column**: both deploy and pipeline summaries show the branch actually used per platform.
+- **Live config reads on every run**: deploy re-reads PROJECT.yaml and environments/{env}.yaml from disk on every launch (no caching anywhere in the chain) — user edits to branch / build command / deploy target take effect immediately; env config is now also loaded by default when --env is omitted. The spec-deploy skill records the "read before execute" discipline.
+- **Remote package backup switch**: ssh deploy tars the remote dir before SCP overwrite; docker remote deploy tags the old image before pull (zero-cost tag); retention backup_keep (default 5) auto-prunes the oldest. Four control layers — config fields backup/backup_keep + global CLI --backup/--no-backup + per-platform exclusion --skip-backup-for h5-mobile,order-api + ask natural language ("deploy with backup" / "deploy without backup" / "deploy to test, skip backup for h5-mobile" → per-platform exclusion). The plan panel shows backup status per platform. sftp unsupported for now (no remote shell).
+- **ask deploy routing fix**: "deploy to X environment" was misrouted to the run --preset deploy pipeline (and the intent cache could freeze the misjudgment); it now deterministically routes to the deploy command, and the word "test" inside "test environment" is no longer mistaken for a test action.
+- **pr --auto dead-flag fix**: the --auto flag passed by run pipeline pr steps was never registered in the CLI — it was silently swallowed and degraded to interactive waiting; it now expands to --force + --create-pr (non-interactive commit + PR creation).
+- **pipeline backup switch pass-through**: pipeline registers --backup / --no-backup / --skip-backup-for and passes them through to its internal deploy step (same semantics and priority as the deploy command).
+- **Examples fixed**: deploy-examples.yaml environment section updated to the new structure (env / defaults / platforms.{platform}.branch), with 4-level fallback, plan panel and backup field docs.
+
+## v8.3.347 (2026-10-28) — Project card injection on demand: fuzzy platform names → project info mapping
+
+When the user mentions a platform in natural language (platform name / business name / type word), the AI no longer needs the user to re-explain "what this project is, where the code lives":
+
+- **Three-tier matching, multi-platform hits in parallel**: platform name (word boundary + compound-name segmentation, "H5端" → h5-mobile) + business-name fuzzy hit + type word ("前端" → all frontend platforms). Mentioning N platforms in one sentence injects N mini cards; unmentioned projects get zero injection.
+- **Fuzzy layer**: normalization tolerance (case / spaces / hyphens) + Chinese sliding window — "预订" → booking service, "后台" → admin console; all 3 fields must appear in full to avoid generic words like "移动" / "程序" false-hitting.
+- **Confidence grading**: platform name / full list / type word = certain (injected directly); sliding-window partial mention = ⚠️ suspected marker + guided verification — guesses are never mixed with confirmed info.
+- **Four-layer hint system**: AGENTS.md "project quick reference" section (one-line resident pointer per platform) + ask hit injection + suspected marker + full cards persisted to .speccore/GLOBAL/PROJECTS.md (sourced from PROJECT.yaml platforms; AI reads on demand).
+- **Docs health check synced**: full doc sweep after the command-surface convergence — stale references in clarify/synthesize/status-panel, ghost slash commands (/spec-progress, /spec-task-new …), broken repo-name layout in workspace-organization, run split examples unified to split-units.
+
 ## v8.3.346 (2026-10-26) — Command surface convergence: help panel 51 → 22 core commands
 
 `speccore --help` used to list all 51 commands below the core box — "60+ commands" scared off new users. Now converged into three tiers:

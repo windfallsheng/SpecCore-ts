@@ -59,6 +59,10 @@ export interface DeployEnvConfig {
   pre_deploy?: string[];
   /** 部署后执行的命令 */
   post_deploy?: string[];
+  /** 部署前备份远端旧包（v8.3.348+，ssh / docker 类型用，默认 false） */
+  backup?: boolean;
+  /** 备份保留份数（v8.3.348+，默认 5，超出自动清理最旧备份） */
+  backup_keep?: number;
 }
 
 export interface PlatformConfig {

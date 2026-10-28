@@ -1,5 +1,20 @@
 # Changelog
 
+## v8.3.348 (2026-10-28) — 部署链路过程可视化：计划面板 + 自动分支解析 + 实时配置读取
+
+回答「部署哪个环境、哪些端，拉哪个分支、打什么包、部署到哪、结果如何」全程可见：
+
+- **部署计划面板**：deploy 执行前打印每个端的完整计划——目标分支（含来源）→ 构建命令 → 部署目标，dry-run / skip-build 状态一并标注。
+- **自动分支解析（四级回退）**：deploy 默认不再拿工作区当前代码构建，而是按「环境平台级 branch → 环境全局 branch → PROJECT.yaml default_branch → 子任务 git-config 源分支」解析目标分支并 checkout + pull；显式 --branch 优先。新增公共模块 src/core/deploy/branch-resolver.ts，pipeline 复用同一解析逻辑。
+- **git 操作透明化**：checkout / pull / merge 的实际输出直接透出（拉了什么、冲突原因），不再静默 pipe。
+- **汇总报告加分支列**：deploy 与 pipeline 的执行汇总都显示每个端实际使用的分支。
+- **每次发起实时读配置**：部署发起时当场重读 PROJECT.yaml 与 environments/{env}.yaml（全链路无缓存），用户临时改 branch / 打包命令 / 部署目标当次生效；不传 --env 时也默认加载 staging 环境配置（此前会跳过合并）；spec-deploy 技能同步写入「先 Read 再执行」纪律。
+- **远端旧包备份开关**：ssh 部署 SCP 覆盖前远端 tar 备份、docker 远程部署 pull 前旧镜像打 backup tag（tag 零成本），保留份数 backup_keep（默认 5）自动清理最旧备份；四层控制——配置字段 backup/backup_keep + CLI 全局 --backup/--no-backup + CLI 端级排除 --skip-backup-for h5-mobile,order-api + ask 自然语言（「部署并备份」/「不备份部署」/「部署到测试环境，h5-mobile 不备份」→ 端级排除），计划面板逐端显示备份状态。sftp 无远端 shell 权限暂不支持（待后续版本）。
+- **ask 部署句路由修正**：「部署到 X 环境」此前被误路由到 run --preset deploy 流水线（意图缓存还会固化误判），现确定性路由至 deploy 单命令；「测试环境」中的「测试」不再被误判为测试动作。
+- **pr --auto 死参数修复**：run 流水线 pr 步骤传的 --auto 此前未在 CLI 注册，参数被静默吞掉后退化成交互式等待；现展开为 --force + --create-pr（非交互自动提交并建 PR）。
+- **pipeline 备份开关透传**：pipeline 注册 --backup / --no-backup / --skip-backup-for 并透传给内部 deploy 步骤（与 deploy 单命令同语义、同优先级）。
+- **示例修正**：deploy-examples.yaml 环境配置段更新为新结构（env / defaults / platforms.{端}.branch），补四级回退、计划面板与 backup 字段说明。
+
 ## v8.3.347 (2026-10-28) — 项目名片按需注入：模糊端名 → 项目信息映射
 
 用户用自然语言提到某个端（端名/业务名/类型词），AI 不再需要用户反复说明「项目是什么、代码在哪」：

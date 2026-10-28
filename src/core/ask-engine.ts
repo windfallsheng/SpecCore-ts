@@ -300,6 +300,12 @@ export function classifyMode(input: string): AskMode {
   ];
   if (runPipelinePatterns.some(p => p.test(input))) return 'match';
 
+  // v8.3.348+: 部署确定性意图——「部署到 X 环境」句直接路由 guide 分支
+  // （handleGuide 生成 deploy 单命令，含备份词识别）。
+  // 排除 run 专属词（流水线/全流程/端到端），避免抢占 run 编排。
+  const deployDirect = /(?:部署|deploy|发布|上线)(?:到|至|:)?\s*(local|dev|develop|test|staging|production|prod|预发布|预发|线上|测试|开发|本地)/i;
+  if (deployDirect.test(input) && !/(?:流水线|全流程|端到端)/.test(input)) return 'guide';
+
   // 模式4: 复杂编排 — 包含多个动作词 + 时序/数量词
   // v8.3.189+: 补充「分析」「拆分」动作词和「并且」「以及」并列连接词，
   // 使「分析…拆分…」这类复合意图能进入 pipeline 编排（analyze-split-plan）
@@ -416,17 +422,31 @@ function handleGuide(input: string): AskResult | null {
   const platformMatch = input.match(/(?:平台|端|platform)\s*[:=]?\s*([a-zA-Z0-9\-_]+)/i);
   const parsedPlatform = platformMatch ? platformMatch[1] : '';
   const isAll = /所有端|全部平台|所有平台|--all|\ball\b/.test(input);
+  // v8.3.348+: 端级备份排除——「h5-mobile 不备份」「order-api、sr-web 免备份」→ --skip-backup-for h5-mobile,order-api
+  // 只匹配英文端名（PROJECT.yaml 端名规范为小写 slug），中文端名无法可靠映射时走全局开关/配置
+  const noBackupForMatch = input.match(/([a-z][a-z0-9\-]*(?:\s*[,，、和及]\s*[a-z][a-z0-9\-]*)*)\s*(?:不备份|不用备份|无需备份|免备份)/i);
+  const noBackupForArg = noBackupForMatch
+    ? `--skip-backup-for ${noBackupForMatch[1].split(/[,，、和及\s]+/).filter(Boolean).join(',')}`
+    : '';
+  // v8.3.348+: 全局备份词——先剔除端级排除片段，避免「h5-mobile 不备份」中的「不备份」
+  // 误判为全局不备份（那会关掉所有端的备份）；剔除后「备份/不备份」才代表全局开关
+  const backupScopeInput = noBackupForMatch ? input.replace(noBackupForMatch[0], '') : input;
+  const backupArg = /(?:不|不要|无需|免)备份/.test(backupScopeInput) ? '--no-backup' : /备份/.test(backupScopeInput) ? '--backup' : '';
 
   // 匹配工作流
   let matchedWorkflow: PipelineStep[] | null = null;
   let workflowName = '';
 
   // v8.3.83+: 组合意图 — 部署 + 测试/验证
-  if (/(?:部署|deploy|发布|上线).*(?:测试|test|冒烟|smoke|验证|verify)/i.test(input) ||
-      /(?:测试|test|冒烟|smoke|验证|verify).*(?:部署|deploy|发布|上线)/i.test(input)) {
+  // v8.3.348+: 排除「测试环境」中的「测试」——环境名不算测试动作，否则
+  // 「部署到测试环境并备份」会被误判为部署+冒烟 pipeline
+  const deployWithVerify = /(?:部署|deploy|发布|上线).*(?:冒烟|smoke|验证|verify)/i.test(input) ||
+    /(?:冒烟|smoke|验证|verify).*(?:部署|deploy|发布|上线)/i.test(input) ||
+    (/部署|deploy|发布|上线/i.test(input) && /(?:测试|test)(?!\s*环境)/i.test(input));
+  if (deployWithVerify) {
     const env = parsedEnv || 'staging';
     const platformArg = isAll || !parsedPlatform ? '--all' : `--platform ${parsedPlatform}`;
-    const deployArgs = `--env ${env} ${platformArg}`;
+    const deployArgs = `--env ${env} ${platformArg} ${backupArg} ${noBackupForArg}`.trim();
     return {
       mode: 'pipeline',
       summary: `部署并验证（${env} 环境）`,
@@ -489,7 +509,10 @@ function handleGuide(input: string): AskResult | null {
       commands: ['review'],
       autoExec: { command: 'review', args: args.trim(), confirm: true },
     };
-  } else if (/测试|test|写.*用例|补充.*测试|冒烟|smoke|验证|verify/i.test(input)) {
+  } else if (/测试|test|写.*用例|补充.*测试|冒烟|smoke|验证|verify/i.test(input) &&
+      // v8.3.348+: 部署句已在 427/549 行处理，「测试环境」中的「测试」不是测试动作
+      !/(?:部署|deploy|发布|上线)/i.test(input) &&
+      !/(?:测试|test)\s*环境/.test(input)) {
     const env = parsedEnv || 'staging';
     // v8.3.102+: 修复参数映射，与 verify.ts 实际支持的参数对齐
     // verify.ts 支持：--type compile|lint|test|all（代码验证）
@@ -537,7 +560,7 @@ function handleGuide(input: string): AskResult | null {
   } else if (/部署|deploy|发布|上线/i.test(input)) {
     const env = parsedEnv || 'staging';
     const platformArg = isAll || !parsedPlatform ? '--all' : `--platform ${parsedPlatform}`;
-    const args = `--env ${env} ${platformArg}`;
+    const args = `--env ${env} ${platformArg} ${backupArg} ${noBackupForArg}`.trim();
     return {
       mode: 'match',
       summary: `部署到 ${env} 环境`,

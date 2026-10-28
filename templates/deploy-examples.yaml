@@ -30,6 +30,11 @@
 #   image        → 镜像名（docker 类型）
 #   tag          → 镜像标签（docker 类型）
 #   pm2_config   → PM2 配置文件（pm2 类型，默认 ecosystem.config.js）
+#   backup       → 部署前备份远端旧包（v8.3.348+，ssh/docker 类型，默认 false）
+#   backup_keep  → 备份保留份数（v8.3.348+，默认 5，超出自动清理最旧备份）
+#
+# 备份开关优先级（高→低）：CLI --skip-backup-for 端级排除 > CLI --backup/--no-backup 全局 > 配置 backup 字段
+# 例：speccore deploy --env test --all --backup --skip-backup-for h5-mobile,order-api
 # ═══════════════════════════════════════════════════════════
 
 # ─────────────────────────────────────────
@@ -65,6 +70,9 @@ ssh_key_example:
   remote_dir: /var/www/html/h5
   # script: 部署后命令（重载 Nginx）
   script: sudo nginx -s reload
+  # backup: 部署前备份远端旧包（v8.3.348+，默认 false；开启后保留最近 backup_keep 份）
+  backup: true
+  backup_keep: 5
   # pre_deploy: 部署前钩子
   pre_deploy:
     - echo "开始部署到 staging..."
@@ -181,6 +189,8 @@ docker_frontend_remote:
   tag: staging
   host: deployer@staging-server.example.com     # 远程服务器（v8.3.96+）
   key: ~/.ssh/id_rsa
+  # backup: true   # v8.3.348+: 部署前把旧镜像打 backup tag（tag 零成本，保留 backup_keep 份）
+  # backup_keep: 5
   # script 自定义远程命令（可选，以下为默认值示例）
   # script: "docker pull registry.example.com/my-project/admin-web:staging && docker stop admin-web 2>/dev/null; docker rm admin-web 2>/dev/null; docker run -d --name admin-web --restart always -p 80:80 registry.example.com/my-project/admin-web:staging"
 
@@ -437,16 +447,47 @@ platforms:
 # ═══════════════════════════════════════════════════════════
 #
 # 环境配置会与 PROJECT.yaml 的 deploy 段合并，优先级：环境配置 > PROJECT.yaml
+# 部署发起时（v8.3.348+）每次实时读取本文件，改完立即生效，无需重启任何进程。
 #
+# 目标分支四级回退（v8.3.348+，deploy / pipeline 共用）：
+#   1. platforms.{端}.branch   ← 本文件按端指定的分支（优先级最高）
+#   2. branch                  ← 本文件环境全局分支
+#   3. PROJECT.yaml 的 default_branch
+#   4. 子任务 .meta/git-config 的「源分支」
+#
+# deploy 执行前会打印「部署计划」面板：端 → 分支（含来源）→ 构建命令 → 部署目标，
+# 执行中 git checkout/pull 输出透明，结束后汇总报告含各端实际分支。
 
-branch: develop                          # pipeline 命令的目标分支
-build_cmd: npm run build:staging         # 覆盖 PROJECT.yaml 的构建命令
+env: staging
 
-deploy:
-  type: ssh
-  host: deployer@staging-server.example.com:22
-  key: ~/.ssh/id_rsa
-  remote_dir: /var/www/html/sr-web-operation
+# 环境全局分支：该环境所有端默认切到此分支（按端覆盖见 platforms）
+branch: staging
+
+# 全局默认构建命令（按端覆盖见 platforms）
+defaults:
+  build_cmd: npm run build:staging
+
+# 按端覆盖配置
+platforms:
+  # 前端：仅此端切 release 分支（覆盖全局 branch，四级回退第 1 级）
+  sr-web-operation:
+    branch: release/web-2026
+    build_cmd: npm run build:staging
+    deploy:
+      type: ssh
+      host: deployer@staging-server.example.com:22
+      key: ~/.ssh/id_rsa
+      remote_dir: /var/www/html/sr-web-operation
+
+  # 后端：不写 branch 时回退到本文件全局 branch（第 2 级）
+  api-service:
+    build_cmd: npm run build
+    deploy:
+      type: pm2
+      pm2_config: ecosystem.config.js
+      host: deployer@staging-server.example.com
+      key: ~/.ssh/id_rsa
+      remote_dir: /opt/services/api-service
 
 # ═══════════════════════════════════════════════════════════
 # 常用脚本示例（实体文件见 templates/deploy-scripts/）

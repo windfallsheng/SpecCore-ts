@@ -24,8 +24,7 @@ import { buildCommand } from './build';
 import { deployCommand } from './deploy';
 import type { PlatformConfig } from '../core/unified-config';
 import { runPipelineTest, formatPipelineTestReport } from '../core/pipeline-test';
-import { loadSubtaskGitConfig } from '../core/git-integration';
-import { existsSync, readdirSync, statSync, readFileSync } from 'fs-extra';
+import { resolvePlatformBranch } from '../core/deploy/branch-resolver';
 import { join, isAbsolute } from 'path';
 import { findProjectRoot } from '../utils/task-utils';
 
@@ -38,6 +37,10 @@ export interface PipelineOptions {
   dryRun?: boolean;
   smoke?: 'on' | 'off'; // v8.3.217+: --smoke / --skip-smoke 单次强制/跳过冒烟
   scope?: 'full' | 'module'; // v8.3.217+: --scope 单次指定冒烟范围
+  /** v8.3.348+: 透传 deploy 的备份开关（与 speccore deploy 同语义） */
+  backup?: boolean;
+  /** v8.3.348+: 透传 deploy 的端级排除（--skip-backup-for） */
+  skipBackupFor?: string;
 }
 
 interface PipelineResult {
@@ -52,19 +55,26 @@ interface PipelineResult {
   };
   /** 测试详情报告（供 AI 自动修复使用） */
   testReport?: string;
+  /** 实际使用的目标分支（v8.3.348+：汇总报告展示） */
+  branch?: string;
   message?: string;
 }
 
+/**
+ * 执行 git 命令，输出透明化（v8.3.348+）：
+ * checkout / pull / merge 的实际反馈直接透出（拉取了哪些提交、冲突原因等），
+ * 用户能看到「拉了什么分支代码、结果怎么样」，不再只看到一行意图日志。
+ */
 function execGit(cwd: string, cmd: string, dryRun: boolean): boolean {
   if (dryRun) {
     logger.info(`  [DRY-RUN] ${cmd}`);
     return true;
   }
   try {
-    execSync(cmd, { stdio: 'pipe', cwd });
+    execSync(cmd, { stdio: 'inherit', cwd });
     return true;
-  } catch (e: any) {
-    logger.error(`  ❌ git 失败: ${e.message || e}`);
+  } catch {
+    logger.error(`  ❌ git 命令失败: ${cmd}`);
     return false;
   }
 }
@@ -89,7 +99,6 @@ function isSpeccoreOwnRepo(cwd: string): boolean {
   }
 }
 
-/** v8.3.86+: 从子任务 git-config 中读取对应平台的源分支 */
 /** v8.3.102+: 解析平台 code_path（支持相对路径基于项目根目录） */
 function resolvePlatformPath(platform?: PlatformConfig): string {
   const projectRoot = findProjectRoot() || process.cwd();
@@ -97,45 +106,6 @@ function resolvePlatformPath(platform?: PlatformConfig): string {
     return isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path);
   }
   return process.cwd();
-}
-
-function findSubtaskBranchForPlatform(iteration: string, platformName: string): string | null {
-  try {
-    const projectRoot = findProjectRoot() || process.cwd();
-    const tasksDir = join(projectRoot, `Iteration-${iteration}`, '030-tasks');
-    if (!existsSync(tasksDir)) return null;
-
-    for (const taskType of readdirSync(tasksDir)) {
-      const taskTypeDir = join(tasksDir, taskType);
-      if (!statSync(taskTypeDir).isDirectory()) continue;
-
-      for (const taskId of readdirSync(taskTypeDir)) {
-        const platformDir = join(taskTypeDir, taskId, platformName);
-        if (!existsSync(platformDir)) continue;
-
-        for (const subtask of readdirSync(platformDir)) {
-          const subtaskDir = join(platformDir, subtask);
-          if (!statSync(subtaskDir).isDirectory()) continue;
-          const cfg = loadSubtaskGitConfig(subtaskDir);
-          if (cfg.defaultBranch) return cfg.defaultBranch;
-        }
-      }
-    }
-  } catch {}
-  return null;
-}
-
-/** 读取当前活跃迭代名 */
-function getCurrentIteration(): string | null {
-  try {
-    const projectRoot = findProjectRoot() || process.cwd();
-    const ctxPath = join(projectRoot, '.speccore', 'local', 'context.json');
-    if (!existsSync(ctxPath)) return null;
-    const ctx = JSON.parse(readFileSync(ctxPath, 'utf-8'));
-    return ctx.currentIteration || null;
-  } catch {
-    return null;
-  }
 }
 
 export async function pipelineCommand(options: PipelineOptions): Promise<void> {
@@ -225,23 +195,11 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
     logger.info('');
   }
 
-  // v8.3.86+: 收集各平台目标分支（四级回退）
+  // v8.3.86+: 收集各平台目标分支（四级回退，公共解析器，每次实时读磁盘）
   // 优先级：环境平台级 branch > 环境全局 branch > PROJECT.yaml default_branch > 子任务 git-config 源分支
-  const currentIteration = getCurrentIteration();
   const platformBranches = new Map<string, string>();
   for (const platform of targets) {
-    let platformBranch = envConfig?.platforms?.[platform.name]?.branch || globalBranch;
-    if (!platformBranch && platform.default_branch) {
-      platformBranch = platform.default_branch;
-      logger.info(`   [${platform.name}] 使用 PROJECT.yaml 默认分支: ${platformBranch}`);
-    }
-    if (!platformBranch && currentIteration) {
-      const subtaskBranch = findSubtaskBranchForPlatform(currentIteration, platform.name);
-      if (subtaskBranch) {
-        platformBranch = subtaskBranch;
-        logger.info(`   [${platform.name}] 使用子任务 git-config 源分支: ${platformBranch}`);
-      }
-    }
+    const platformBranch = resolvePlatformBranch(platform, envConfig);
     if (platformBranch) {
       platformBranches.set(platform.name, platformBranch);
     }
@@ -295,6 +253,7 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
       platform: platform.name,
       success: true,
       steps: { checkout: false, merge: false, build: false, test: false, deploy: false },
+      branch: platformBranch,
     };
 
     // Step 1: checkout to target branch
@@ -500,6 +459,9 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
           platform: platform.name,
           env,
           envFile: options.envFile,
+          // v8.3.348+: 透传备份开关（与 deploy 单命令同语义、同优先级）
+          backup: options.backup,
+          skipBackupFor: options.skipBackupFor,
         });
         result.steps.deploy = true;
       } catch {
@@ -525,9 +487,9 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
   const failCount = results.length - successCount;
 
   logger.info('');
-  logger.info('┌──────────────────────────────────────────┐');
-  logger.info('│           Pipeline 执行汇总              │');
-  logger.info('├──────────────────────────────────────────┤');
+  logger.info('┌────────────────────────────────────────────────────────┐');
+  logger.info('│                  Pipeline 执行汇总                      │');
+  logger.info('├────────────────────────────────────────────────────────┤');
   for (const r of results) {
     const icon = r.success ? '✅' : '❌';
     const steps = [
@@ -537,11 +499,13 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
       r.steps.test ? 'T' : 't',
       r.steps.deploy ? 'D' : 'd',
     ].join('');
-    logger.info(`│ ${icon} ${r.platform.padEnd(12)} [${steps}] ${(r.message || '').padEnd(14)} │`);
+    const branch = (r.branch || '-').padEnd(14);
+    const msg = (r.message || '').padEnd(12);
+    logger.info(`│ ${icon} ${r.platform.padEnd(16)} [${steps}] ${branch} ${msg} │`);
   }
-  logger.info('├──────────────────────────────────────────┤');
-  logger.info(`│ 成功: ${String(successCount).padEnd(3)}  失败: ${String(failCount).padEnd(3)}  总计: ${String(results.length).padEnd(3)} │`);
-  logger.info('└──────────────────────────────────────────┘');
+  logger.info('├────────────────────────────────────────────────────────┤');
+  logger.info(`│ 成功: ${String(successCount).padEnd(3)}  失败: ${String(failCount).padEnd(3)}  总计: ${String(results.length).padEnd(3)}                              │`);
+  logger.info('└────────────────────────────────────────────────────────┘');
 
   // 分支状态提示
   if (!dryRun) {

@@ -29,6 +29,7 @@ export interface DeployOptions {
   env: string;           // 环境，如 staging, production
   dryRun?: boolean;      // 仅预览，不实际执行
   skipBuild?: boolean;   // 跳过构建
+  backup?: boolean;      // v8.3.348+: 部署前备份远端旧包（覆盖配置 backup 字段）
 }
 
 export interface DeployResult {
@@ -39,6 +40,7 @@ export interface DeployResult {
   duration: number;
   message: string;
   skipped?: boolean;  // v8.3.97+: 未配置时跳过，非失败
+  branch?: string;    // v8.3.348+: 实际使用的目标分支（由调用方赋值，汇总报告展示）
 }
 
 /**
@@ -107,7 +109,9 @@ export async function deployPlatform(
       logger.info(`  [DRY-RUN] 将执行 ${deployConfig.type} 部署`);
       await previewDeploy(platform, env, deployConfig);
     } else {
-      await executeDeploy(platform, env, deployConfig, options.skipBuild);
+      // 备份开关优先级：CLI 参数（--backup/--no-backup）> 部署配置 backup 字段 > 默认关闭
+      const backupEnabled = options.backup ?? deployConfig.backup ?? false;
+      await executeDeploy(platform, env, deployConfig, options.skipBuild, backupEnabled);
     }
 
     // 3. 后置命令
@@ -151,7 +155,8 @@ async function executeDeploy(
   platform: PlatformConfig,
   env: string,
   config: DeployEnvConfig,
-  skipBuild: boolean = false
+  skipBuild: boolean = false,
+  backup: boolean = false
 ): Promise<void> {
   const projectRoot = findProjectRoot() || process.cwd();
   const cwd = platform.code_path
@@ -160,7 +165,7 @@ async function executeDeploy(
 
   switch (config.type) {
     case 'docker':
-      await deployDocker(platform, env, config, cwd, skipBuild);
+      await deployDocker(platform, env, config, cwd, skipBuild, backup);
       break;
     case 'static':
       await deployStatic(platform, env, config, cwd, skipBuild);
@@ -175,7 +180,7 @@ async function executeDeploy(
       await deployK8s(platform, env, config, cwd);
       break;
     case 'ssh':
-      await deploySsh(platform, env, config, cwd, skipBuild);
+      await deploySsh(platform, env, config, cwd, skipBuild, backup);
       break;
     case 'helm':
       await deployHelm(platform, env, config, cwd);
@@ -216,6 +221,9 @@ async function previewDeploy(
   if (config.provider) logger.info(`  提供商: ${config.provider}`);
   if (config.pre_deploy) logger.info(`  前置: ${config.pre_deploy.join(', ')}`);
   if (config.post_deploy) logger.info(`  后置: ${config.post_deploy.join(', ')}`);
+  if (config.backup && (config.type === 'ssh' || config.type === 'docker')) {
+    logger.info(`  备份: 开启（保留最近 ${config.backup_keep ?? 5} 份）`);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -228,7 +236,8 @@ async function deployDocker(
   env: string,
   config: DeployEnvConfig,
   cwd: string,
-  skipBuild: boolean = false
+  skipBuild: boolean = false,
+  backup: boolean = false
 ): Promise<void> {
   const imageName = config.image || platform.name;
   const tag = config.tag || env;
@@ -255,16 +264,18 @@ async function deployDocker(
 
   // 4. 远程服务器部署
   if (config.host) {
-    await deployDockerRemote(config, cwd, fullImage, imageName);
+    await deployDockerRemote(config, cwd, fullImage, imageName, backup, tag);
   }
 }
 
-/** Docker 远程部署：SSH 执行 pull && run */
+/** Docker 远程部署：SSH 执行 pull && run（备份在 pull 之前：pull 会覆盖同名 tag） */
 async function deployDockerRemote(
   config: DeployEnvConfig,
   cwd: string,
   fullImage: string,
-  imageName: string
+  imageName: string,
+  backup: boolean = false,
+  tag: string = 'latest'
 ): Promise<void> {
   if (!config.registry) {
     logger.warn(
@@ -300,6 +311,21 @@ async function deployDockerRemote(
     `docker run -d --name ${imageName} --restart always ${fullImage}`;
 
   const remoteCmd = config.script || defaultRemoteCmd;
+
+  // 3.5 部署前备份远端旧镜像 tag（v8.3.348+）：tag 零成本（镜像层共享），
+  // 必须在 pull 之前执行——pull 会把同名 tag 指向新镜像，旧镜像靠备份 tag 保命。
+  if (backup) {
+    const keep = config.backup_keep ?? 5;
+    const backupCmd =
+      `(docker inspect '${fullImage}' >/dev/null 2>&1 && docker tag '${fullImage}' '${fullImage}.bak-$(date +%Y%m%d-%H%M%S)' || true) && ` +
+      `(docker images '${imageName}' --format '{{.Tag}}' | grep -F '${tag}.bak-' | sort | head -n -${keep} | xargs -r -I{} docker rmi '${imageName}:{}' || true)`;
+    logger.info(`  💾 备份远端旧镜像 tag（保留最近 ${keep} 份）`);
+    if (sshpass) {
+      runFile('sshpass', ['-p', sshpass, 'ssh', ...keyArgs, host, backupCmd], cwd);
+    } else {
+      runFile('ssh', [...keyArgs, host, backupCmd], cwd);
+    }
+  }
 
   logger.info(`  🔄 远程 Docker 部署: ${host}`);
   if (sshpass) {
@@ -405,7 +431,8 @@ async function deploySsh(
   env: string,
   config: DeployEnvConfig,
   cwd: string,
-  skipBuild: boolean
+  skipBuild: boolean,
+  backup: boolean = false
 ): Promise<void> {
   if (!config.host) {
     throw new Error('ssh 类型部署必须配置 host 字段（格式: user@host:port）');
@@ -443,6 +470,22 @@ async function deploySsh(
   if (!skipBuild && config.build_cmd) {
     logger.info(`  🔨 构建: ${config.build_cmd}`);
     execSync(config.build_cmd, { stdio: 'inherit', cwd });
+  }
+
+  // 1.5 部署前备份远端旧包（v8.3.348+）：SCP 覆盖前远端 tar 打包 + 清理超出保留份数的旧备份
+  if (backup) {
+    const keep = config.backup_keep ?? 5;
+    const ts = 'bak-$(date +%Y%m%d-%H%M%S)';
+    const backupCmd =
+      `if [ -d '${remoteDir}' ]; then ` +
+      `tar -czf '${remoteDir}.${ts}.tar.gz' -C "$(dirname '${remoteDir}')" "$(basename '${remoteDir}')" && ` +
+      `ls -1t '${remoteDir}'.bak-*.tar.gz 2>/dev/null | tail -n +${keep + 1} | xargs rm -f; fi`;
+    logger.info(`  💾 备份远端旧包: ${remoteDir}（保留最近 ${keep} 份）`);
+    if (sshpass) {
+      runFile('sshpass', ['-p', sshpass, 'ssh', ...keyArgs, ...portArgs, `${user}@${hostname}`, backupCmd], cwd);
+    } else {
+      runFile('ssh', [...keyArgs, ...portArgs, `${user}@${hostname}`, backupCmd], cwd);
+    }
   }
 
   // 2. SCP 上传（v8.3.341+: 通配符改用 glob 展开，不再依赖 shell）
