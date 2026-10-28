@@ -90,10 +90,10 @@ Teaches WorkBuddy Speccore commands and best practices:
 | CLI Command | AI Slash Command | Purpose |
 | :--- | :--- | :--- |
 | `speccore init` | `/spec-init` | Initialize project |
-| `speccore task new` | `/spec-task-new` | Create multi-platform task |
+| `speccore task new` | `/spec-task-create` | Create multi-platform task |
 | `speccore iteration create` | `/spec-iteration-create` | Create iteration |
 | `speccore execute` | `/spec-execute` | Execute development |
-| `speccore status-panel` | `/spec-progress` | View progress |
+| `speccore status` | `/spec-dashboard` | View progress |
 | `speccore validate` | `/spec-validate` | Compliance check |
 
 ---

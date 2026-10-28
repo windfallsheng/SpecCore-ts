@@ -22,10 +22,10 @@ Same command, different syntax depending on context. Full classification by cate
 | Done | — | `@spec-ask "archive Task-001"` | 🔒 AI |
 | Status | `speccore dashboard` | `/spec-dashboard` | ✅ CLI |
 | Change | — | `@spec-ask "change desc for Task-001"` | 🔒 AI |
-| Bugfix | `speccore task new -n "name" --type=bugfix` | `/spec-bugfix` | ✅ CLI |
+| Bugfix | `speccore task new -n "name" --type=bugfix` | `/spec-task-create` | ✅ CLI |
 | Analyze | — | `@spec-ask "analyze Q1"` | 🔒 AI |
 | Plan | — | `@spec-ask "plan Q1"` | 🔒 AI |
-| Task new | `speccore task new -n name` | `/spec-task-new` | ✅ CLI |
+| Task new | `speccore task new -n name` | `/spec-task-create` | ✅ CLI |
 | Validate | `speccore validate -i Q1` | `/spec-validate Q1` | ✅ CLI |
 | Smart entry | — | `@spec-ask "query"` | 🔒 AI |
 | Dev | — | `@spec-ask "全自动执行"` | 🔒 AI |

@@ -12,8 +12,8 @@ speccore iteration create --name=<n>  # 创建迭代
 speccore task new --platforms=<端名1>,<端名2>  # 创建多端任务
 speccore run                          # 智能续跑（v8.3.290+）：检测断点，从第一个未完成阶段继续
 speccore run develop                  # preset 直呼
-speccore run split to execute         # 阶段范围（自然语言式）
-speccore run split..execute           # 阶段范围（紧凑式）
+speccore run split-units to execute         # 阶段范围（自然语言式）
+speccore run split-units..execute           # 阶段范围（紧凑式）
 speccore run "做用户积分功能"         # 一句话需求
 speccore validate                     # 合规检查
 speccore dashboard                    # 查看进度

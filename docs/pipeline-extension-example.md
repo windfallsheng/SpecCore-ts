@@ -2,7 +2,7 @@
 
 ## 概述
 
-SpecCore CLI 的 Pipeline Engine 现在支持多个命令的 Pipeline 模式，包括 `analyze`、`split`、`execute` 和 `dev` 命令。
+SpecCore CLI 的 Pipeline Engine 现在支持多个命令的 Pipeline 模式，包括 `analyze`、`taskify`、`execute` 和 `run` 命令。
 
 ## 支持的命令
 
@@ -16,7 +16,7 @@ speccore analyze --prompt --pipeline -I <iteration>
 speccore analyze --prompt --pipeline --resume -I <iteration>
 ```
 
-### 2. split 命令
+### 2. taskify 命令
 
 ```bash
 # 启动任务拆分 Pipeline

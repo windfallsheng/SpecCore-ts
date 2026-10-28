@@ -12,8 +12,8 @@ speccore iteration create --name=<n>  # Create iteration
 speccore task new --platforms=<p1>,<p2>  # Create multi-platform task
 speccore run                          # Smart resume (v8.3.290+): detect breakpoint, continue from first unfinished phase
 speccore run develop                  # preset by name
-speccore run split to execute         # phase range (natural language)
-speccore run split..execute           # phase range (compact)
+speccore run split-units to execute        # phase range (natural language)
+speccore run split-units..execute          # phase range (compact)
 speccore run "build a points feature" # one-liner requirement
 speccore validate                     # Compliance check
 speccore dashboard                    # View progress

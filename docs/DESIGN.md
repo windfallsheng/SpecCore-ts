@@ -28,11 +28,11 @@ workspace/
 │   │   └── {project}/            ← 工程级需求/元数据
 │   ├── REQUIREMENTS/             ← 跨工程需求合并视图
 │   ├── BASELINES/                ← 基线快照
-│   ├── synthesis/                ← [synthesize --full 生成] 跨端综合文档
+│   ├── synthesis/                ← [analyze --full 生成] 跨端综合文档
 │   │   ├── CROSS_PLATFORM.md    ← 跨端业务关系 + 接口映射
 │   │   ├── ARCHITECTURE.md      ← 全量架构文档
 │   │   └── TECH_FULL.md         ← 全量技术方案
-│   └── {端名}/                  ← [synthesize --full 生成] 各端分析文档（新路径）
+│   └── {端名}/                  ← [analyze --full 生成] 各端分析文档（新路径）
 │       └── {platform}/           ← 端名来自 CONSTITUTION（如 admin-web/h5-mobile/booking-service）
 │
 ├── project-a/                     ← 独立工程 A
@@ -1893,7 +1893,7 @@ init → doc2spec → analyze → split → plan → execute → pr → done →
 
 ### 多端全量分析与合成（全自动三阶段）
 
-> 当 CONSTITUTION.md 配置了多个工程/多端时，`synthesize --full` 自动执行三阶段流程。
+> 当 CONSTITUTION.md 配置了多个工程/多端时，`analyze --full` 自动执行三阶段流程。
 > 整个过程全部自动完成，无需人工干预。
 
 ```
@@ -1945,23 +1945,20 @@ Phase 3: 按功能单元合成需求文档（functional-unit synthesis）
 ### 2.3 App 端
 ```
 
-**命令入口：**
+**命令入口（v8.3.346+ 由 `analyze --full` 承载，原 synthesize 命令）：**
 ```bash
 # 全自动三阶段（推荐）
-speccore synthesize --full -I <迭代名>
+speccore analyze --full -I <迭代名>
 
 # 单阶段手动执行
-speccore synthesize --phase 1 -I <迭代名>   # 只跑逐端分析
-speccore synthesize --phase 2 -I <迭代名>   # 只跑跨端综合
-speccore synthesize --phase 3 -I <迭代名>   # 只跑需求合成
-
-# 原有模式（向后兼容）
-speccore synthesize -I <迭代名>             # 只做需求合成（无全量分析）
+speccore analyze -I <迭代名> --phase 1   # 只跑逐端分析
+speccore analyze -I <迭代名> --phase 2   # 只跑跨端综合
+speccore analyze -I <迭代名> --phase 3   # 只跑需求合成
 ```
 
 **自动化流水线：**
 ```
-用户: speccore synthesize --full -I Q2
+用户: speccore analyze --full -I Q2
   → CLI Phase 1: 读取 CONSTITUTION 工程列表
     → 逐端输出 [SPECCORE_PROMPT] → AI 分析各端
     → CLI 收集各端结果 → .speccore/GLOBAL/{端名}/
@@ -2626,7 +2623,7 @@ program
 | `spec-dashboard` | `speccore dashboard` | `/dashboard 查看进度` |
 | `spec-doc2spec` | `speccore doc2spec` | `/doc2spec 导入需求文档` |
 | `spec-analyze` | `speccore analyze` | `/analyze 分析 Q1 迭代` |
-| `spec-split` | `speccore split` | `/split 拆分任务` |
+| `spec-taskify` | `speccore taskify` | `/taskify 拆分任务` |
 | `spec-plan` | `speccore plan` | `/plan 制定执行计划` |
 | `spec-execute` | `speccore execute` | `/execute 开发 Task-001` |
 | `spec-pr` | `speccore pr` | `/pr 提交代码` |
@@ -2762,7 +2759,7 @@ h1, h2 {
 | `speccore-setup-guide.html` | 项目配置引导页：6 步引导新用户完成初始化 | `speccore init` 后自动生成 |
 | `deploy/welcome.html` | 项目名片/欢迎页 | `speccore welcome` |
 | `deploy/index.html` | 全局看板（所有项目聚合） | `speccore dashboard --scope global` |
-| `deploy/status.html` | 迭代数据看板（当前迭代） | `speccore dashboard` / `speccore status-panel` |
+| `deploy/status.html` | 迭代数据看板（当前迭代） | `speccore dashboard` / `speccore status` |
 | `templates/html/speccore-*.html` | Ask 模式子页 + help/retro/demo 模板 | `speccore ask` 内部路由 / `speccore help` / `speccore retro` |
 
 
@@ -4160,7 +4157,7 @@ if (platforms.length >= 2) {
 - 全局分析的对象是**已有代码**（归纳性质）
 - 不先扫描各端，就不知道整体架构长什么样
 - 所以必须先分后总
-- **代码实现**：`synthesize --full` Phase 1→2→3 已完整实现
+- **代码实现**：`analyze --full` Phase 1→2→3 已完整实现
 
 #### 迭代层 — 先总后分（演绎法）
 

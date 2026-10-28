@@ -89,12 +89,12 @@ my-project/
 
 | CLI 命令 | 对应的 AI Slash Command | 说明 |
 | :--- | :--- | :--- |
-| `speccore init` | `speccore init` | 项目初始化 |
-| `speccore task new` | `speccore task-new` | 创建多平台 Task |
-| `speccore iteration create` | `speccore iteration-create` | 创建迭代 |
-| `speccore execute` | `speccore execute` | 执行开发 |
-| `speccore dashboard` | `speccore progress` | 查看进度 |
-| `speccore validate` | `speccore validate` | 合规检查 |
+| `speccore init` | `/spec-init` | 项目初始化 |
+| `speccore task new` | `/spec-task-create` | 创建多平台 Task |
+| `speccore iteration create` | `/spec-iteration-create` | 创建迭代 |
+| `speccore execute` | `/spec-execute` | 执行开发 |
+| `speccore dashboard` | `/spec-dashboard` | 查看进度 |
+| `speccore validate` | `/spec-validate` | 合规检查 |
 
 ---
 

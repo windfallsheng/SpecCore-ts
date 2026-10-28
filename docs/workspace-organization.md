@@ -39,15 +39,15 @@ workspace/
 │
 ├── my-backend/                    # 后端代码工程（独立 Git 仓库）
 │   ├── src/
-│   └── .codebuddy/commands → ..speccore project/.codebuddy/commands
+│   └── .codebuddy/commands → ../speccore-project/.codebuddy/commands
 │
 ├── my-frontend/                   # 前端代码工程（独立 Git 仓库）
 │   ├── src/
-│   └── .codebuddy/commands → ..speccore project/.codebuddy/commands
+│   └── .codebuddy/commands → ../speccore-project/.codebuddy/commands
 │
 └── my-miniapp/                    # 小程序工程（独立 Git 仓库）
     ├── src/
-    └── .codebuddy/commands → ..speccore project/.codebuddy/commands
+    └── .codebuddy/commands → ../speccore-project/.codebuddy/commands
 ```
 
 ---
@@ -88,7 +88,7 @@ git push
 
 ```bash
 # 1. 克隆 Spec 仓库
-git clone git@github.com:your-orgspeccore project.git
+git clone git@github.com:your-org/speccore-project.git
 
 # 2. 克隆自己负责的代码工程（平级目录）
 git clone git@github.com:your-org/my-backend.git
@@ -96,7 +96,7 @@ git clone git@github.com:your-org/my-frontend.git
 
 # 3. 在代码工程中配置 AI 命令（软链接）
 cd my-backend
-ln -s ..speccore project/.codebuddy/commands .codebuddy/commands
+ln -s ../speccore-project/.codebuddy/commands .codebuddy/commands
 ```
 
 ---
@@ -116,8 +116,8 @@ ln -s ..speccore project/.codebuddy/commands .codebuddy/commands
 
 | 布局 | 软链接命令 |
 | :--- | :--- |
-| 平级 | `ln -s ..speccore project/.codebuddy/commands .codebuddy/commands` |
-| 嵌套 | `ln -s ../..speccore project/.codebuddy/commands .codebuddy/commands` |
+| 平级 | `ln -s ../speccore-project/.codebuddy/commands .codebuddy/commands` |
+| 嵌套 | `ln -s ../../speccore-project/.codebuddy/commands .codebuddy/commands` |
 
 ---
 
@@ -138,7 +138,7 @@ ln -s ..speccore project/.codebuddy/commands .codebuddy/commands
 ```json
 // my-backend/.vscode/settings.json
 {
-  "speccore.commandsPath": "..speccore project/.codebuddy/commands"
+  "speccore.commandsPath": "../speccore-project/.codebuddy/commands"
 }
 ```
 

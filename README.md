@@ -43,8 +43,8 @@ speccore run                    # 无参 = 智能续跑（v8.3.290+）：检测�
 ```bash
 speccore run develop            # preset 直呼
 speccore run smoke              # 单阶段快捷：从验证跑到部署（别名: split/smoke/code/tasks/ship/…）
-speccore run split to execute   # 范围（自然语言式）
-speccore run split..execute     # 范围（紧凑式）
+speccore run split-units to execute   # 范围（自然语言式）
+speccore run split-units..execute     # 范围（紧凑式）
 speccore run "做用户积分功能"   # 一句话需求，从需求出发全流程
 speccore analyze -g             # 快捷糖：等价 speccore global analyze
 speccore unitize prd.md         # 文件位置参数：等价 unitize --file prd.md

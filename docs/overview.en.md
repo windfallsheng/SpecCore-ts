@@ -12,14 +12,10 @@ SpecCore is a **spec-driven development CLI tool**. Core idea: **Code by Spec, N
 ## Core pipeline 🔒 AI commands
 
 ```
-init → doc2spec → analyze(overview) → analyze(units) → split → plan → execute → pr → done
-✅CLI   🔒AI      🔒AI                🔒AI            🔒AI   🔒AI   🔒AI    🔒AI  🔒AI
-         ↑        ↑
-         │        └── analyze each functional unit (REQ/TECH/TEST)
-         └── generate iteration overview first (skeleton → complete)
+init → doc2spec → req-doc → unitize → analyze → taskify → plan → execute → verify → pipeline → pr → done → spec2doc
 ```
 
-**v8.3.177+ `analyze --scope=overview`**: before analyzing units one by one, the CLI scans `_matrix.md` metadata to generate an iteration-level overview (40-80 lines), giving the AI a global perspective and preventing it from getting lost in a sea of documents.
+**v8.3.346+ command surface convergence**: `speccore help` shows only the 22 core commands above (13 pipeline stages + iteration/task management + smart entries ask/run/next/dashboard/status/about/help); low-frequency/ops/internal commands stay off the panel — see `speccore help --all` for the full list.
 
 Each stage has a corresponding command, or you can use `@spec-ask "natural language"` in an AI IDE to advance automatically.
 

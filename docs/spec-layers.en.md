@@ -13,7 +13,7 @@ Layer 0 — Global knowledge base (analyze --full auto-gen + smart injection)
   🤖 GLOBAL/platforms/{platform}/ → Phase 1 per-platform analysis
   🤖 GLOBAL/synthesis/            → Phase 2 cross-platform synthesis
   🤖 GLOBAL/INDEX.md              → lightweight index after Phase 2
-  ✅ split/execute/analyze        → required-read injection + TOC, AI self-Read
+  ✅ taskify/execute/analyze        → required-read injection + TOC, AI self-Read
 
 Layer 1 — Global constraints (execute auto-parses)
   ✅ CONSTITUTION.md  spec-rule block → code conventions auto-applied
@@ -72,7 +72,7 @@ analyze --full Phase 2 done
 ├── writes GLOBAL/platforms/{platform}/
 ├── auto-generates GLOBAL/INDEX.md
 │
-├──→ split prompt injection:
+├──→ taskify prompt injection:
 │    ├── 📌 required: INDEX.md full text (≤1500 chars)
 │    └── 📂 optional: TOC (path + description + ## headings)
 │

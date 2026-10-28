@@ -31,7 +31,7 @@ speccore task new --name="User Register" --platforms=web,h5 --type=feature
 speccore task new --name="Password Reset" --platforms=web --type=feature
 
 # 4. Check progress
-speccore status-panel --detail
+speccore status
 ```
 
 ---
@@ -57,8 +57,8 @@ speccore execute --task=Task-001 --force
 speccore sync --dry-run       # Preview
 speccore sync                 # Write to TASK.md
 
-# 6. View trace chain
-speccore trace --task=Task-001
+# 6. Verify spec-code links
+speccore sync --detect
 
 # 7. Mark complete
 speccore update --task=Task-001 --status=completed
@@ -113,7 +113,7 @@ speccore update --task=Task-002 --assignee=Li
 speccore execute --task=Task-002 --force
 
 # 4. Team progress
-speccore status-panel --detail
+speccore status
 ```
 
 ---
@@ -170,7 +170,7 @@ jobs:
       - name: Check Health
         run: speccore dashboard --health
       - name: Progress Report
-        run: speccore status-panel --format=json > progress.json
+        run: speccore dashboard --export json > progress.json
 ```
 
 ```bash
@@ -186,7 +186,7 @@ speccore config install
 
 ```bash
 # 1. View organization-wide requirements
-speccore global-status
+speccore status --scope global
 
 # 2. Pull from global pool to create iteration
 speccore iteration-from-global --reqs=REQ-001,REQ-002,REQ-003 --name=2026-Q3-Sprint
@@ -195,7 +195,7 @@ speccore iteration-from-global --reqs=REQ-001,REQ-002,REQ-003 --name=2026-Q3-Spr
 speccore sync --global --iteration=2026-Q3-Sprint
 
 # 4. Track requirement change history
-speccore ops --req=REQ-001
+speccore change -r REQ-001
 
 # 5. Periodically rebuild index
 ```
@@ -215,7 +215,7 @@ cd old-speccore-project
 
 # 4. Verify
 speccore validate
-speccore global-status
+speccore status --scope global
 ```
 
 ---
@@ -224,7 +224,7 @@ speccore global-status
 
 ```bash
 # 1. Create research task
-speccore research --topic="Message queue comparison" --options="Kafka,RabbitMQ,Pulsar"
+speccore task new --name="Message queue comparison" --type=research
 
 # 2. Fill research doc (edit Task-xxx/backend/REQ.md + TECH.md)
 
@@ -242,14 +242,14 @@ speccore done --task=Task-005
 speccore dashboard --health
 
 # 2. Platform-specific progress
-speccore status-panel --platform=web --detail
-speccore status-panel --platform=h5 --detail
+speccore status --platform=web --detail
+speccore status --platform=h5 --detail
 
 # 3. Generate report
-speccore status-panel --export --format=html --output=report.html --team --risk
+speccore dashboard --export html
 
 # 4. Visual dashboard
-speccore status-panel
+speccore status
 # Or one command:
 speccore done --task=Task-001 --output=dashboard.html
 ```
@@ -293,23 +293,23 @@ mv .speccore/trash/2026-07-Test-TIMESTAMP 2026-07-Test
 
 ```bash
 # 1. View global requirement pool
-speccore global-status
+speccore status --scope global
 # → REQ-001  User Auth   Planned
 # → REQ-002  Messaging   Planned
 
 # 2. Pull requirements → create iteration
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-Q3-Sprint
 
-# 3. Preview split plan
+# 3. Preview taskify plan
 speccore iteration taskify
 # Strict: speccore iteration taskify --strict  (preview each section)
 # Outputs: IMPACT.md (risk + dependencies), .env.example --iteration=2026-Q3-Sprint --dry-run
 
-# 4. Execute split (auto-generates Task dirs + Spec stubs)
+# 4. Execute taskify (auto-generates Task dirs + Spec stubs)
 speccore iteration taskify --iteration=2026-Q3-Sprint
 
 # 5. Check progress
-speccore status-panel --iteration=2026-Q3-Sprint --detail
+speccore status --iteration=2026-Q3-Sprint --detail
 ```
 
 ### Simplified Flow (no global layer)
@@ -416,8 +416,8 @@ speccore config install
 # Created with web only, later need h5
 speccore task new --name="User Login" --platforms=web --type=feature
 
-# ❌ Don't delete and recreate — just add the platform
-speccore platform-add --name=h5 --tech="H5 Mobile"
+# ❌ Don't delete and recreate — add the platform in .speccore/PROJECT.yaml
+#    (platforms list), then re-run taskify for the module.
 # Then manually edit Task-001/_shared/TASK.md for h5 responsibilities
 ```
 
@@ -429,13 +429,13 @@ speccore task new --name="Admin Panel" --platforms=web,h5,miniapp --type=feature
 
 # Just run/filter by web — other platforms are skipped, no errors
 speccore execute --platform=web
-speccore status-panel --platform=web
+speccore status --platform=web
 ```
 
 ### Add new platform to project
 
 ```bash
-speccore platform-add --name=tablet --description="Tablet UI" --tech="React Native"
+# Add the platform in .speccore/PROJECT.yaml (platforms list)
 # Now task new can use tablet
 speccore task new --name="xxx" --platforms=web,tablet
 ```
@@ -489,9 +489,9 @@ speccore delete --task=Task-005   # Safe delete
 speccore context --task=Task-001
 
 # 2. Overall progress
-speccore status-panel --iteration=2026-07-Sprint --detail
+speccore status --iteration=2026-07-Sprint --detail
 
-speccore status-panel --export --format=html --output=status.html --team
+speccore dashboard --export html
 ```
 
 ### Git branch confusion
@@ -516,7 +516,7 @@ speccore sync --dry-run
 speccore sync
 
 # Verify trace chain
-speccore trace --task=Task-001
+speccore sync --detect
 ```
 
 ---
@@ -609,10 +609,10 @@ speccore doc2spec --files "backend.docx=backend-admin,web.md=web" --iter=Q3
 ## Scenario 24: Task Lifecycle
 
 ```bash
-speccore lifecycle                         # Show state machine
-speccore lifecycle --all                   # Kanban board
-speccore lifecycle --task=Task-001 --status=testing
-speccore lifecycle --task=Task-001 --check # Check TEST/REVIEW progress
+speccore status --lifecycle                  # Show task lifecycle board
+speccore dashboard                           # Kanban board
+speccore task new --name=Task-001-fix --type=bugfix  # Create fix task
+speccore status                              # Check TEST/REVIEW progress
 ```
 
 ## Scenario 25: Task Output Files
@@ -662,7 +662,7 @@ speccore sync --task=Task-002 --detect
 
 **Verify**:
 ```bash
-speccore status-panel              # Overall progress
+speccore status              # Overall progress
 speccore doctor --task=Task-001  # Health check
 ```
 
@@ -687,7 +687,7 @@ speccore sync --global --iteration=Q3 --direction=to_global
 # 5. Update context (mark as done)
 
 # 6. View final dashboard
-speccore status-panel
+speccore dashboard
 # Or one command:
 speccore done --task=Task-001
 ```

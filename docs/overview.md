@@ -12,14 +12,10 @@ SpecCore 是一个 **规范驱动开发 CLI 工具**。核心理念：**Code by 
 ## 核心流程 🔒 AI 命令
 
 ```
-init → doc2spec → analyze(overview) → analyze(功能单元) → split → plan → execute → pr → done
-✅CLI   🔒AI      🔒AI                  🔒AI              🔒AI   🔒AI   🔒AI    🔒AI  🔒AI
-         ↑        ↑
-         │        └── 逐个分析各功能单元（REQ/TECH/TEST）
-         └── 先生成迭代总览（骨架 → 完整）
+init → doc2spec → req-doc → unitize → analyze → taskify → plan → execute → verify → pipeline → pr → done → spec2doc
 ```
 
-**v8.3.177+ 新增 `analyze --scope=overview`**：在逐个分析功能单元之前，先通过 CLI 扫描 `_matrix.md` 元数据生成迭代级总览（40-80 行），让 AI 建立全局视角，避免在大量文档中迷失。
+**v8.3.346+ 命令面收敛**：`speccore help` 只展示以上 22 个核心命令（13 阶段流水线 + iteration/task 管理 + ask/run/next/dashboard/status/about/help 智能入口）；低频/运维/内部编排命令不占面板，完整清单见 `speccore help --all`。
 
 每个阶段都有对应命令，也可以使用 `@spec-ask "自然语言"` 在 AI IDE 中自动推进。
 

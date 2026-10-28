@@ -95,8 +95,8 @@ speccore run [--preset <name>] [--from <phase>] [--to <phase>] [--demand <text>]
 | 无参 | 智能续跑：检测 9 个里程碑断点，从第一个未完成阶段继续（全完成时指路收尾） | `speccore run` |
 | `<preset名>` | preset 直呼（优先于别名） | `speccore run develop` |
 | `<阶段/别名>` | 单阶段快捷：从该阶段续跑至部署验证 | `speccore run smoke` |
-| `<from> to <to>` | 阶段范围（自然语言式，首 token 不命中阶段则视为需求） | `speccore run split to execute` |
-| `<from>..<to>` | 阶段范围（紧凑式） | `speccore run split..execute` |
+| `<from> to <to>` | 阶段范围（自然语言式，首 token 不命中阶段则视为需求） | `speccore run split-units to execute` |
+| `<from>..<to>` | 阶段范围（紧凑式） | `speccore run split-units..execute` |
 | 其他多词 | 一句话需求（req-doc 阶段消费） | `speccore run "做用户积分功能"` |
 | `--demand <text>` | 逃生舱：显式声明是需求（需求文本恰为保留字时） | `speccore run --demand deploy` |
 
@@ -363,14 +363,16 @@ speccore review --doc <路径1>,<路径2>    # 评审指定文档（相对迭代
 
 **端名说明**：`--platform` 接受工程标识（CONSTITUTION.md 端列表中的端名），不再限制为 `backend/frontend`。
 
-### 📝 clarify — 需求澄清 🔒 AI 命令
+### 📝 clarify — 需求澄清（analyze 阶段） 🔒 AI 命令
+
+> 需求澄清不是独立命令，而是 `analyze` 的分析前阶段：`--clarify` 强制澄清、`--skip-clarify` 确定性关闭，默认 auto=按专业度智能短路。
 
 ```bash
-speccore clarify [--to <iteration>] [--prompt] [--apply <json|@file>] [--local] [--promote <entryId>]
+speccore analyze --clarify -I <迭代名>       # 强制需求澄清（无视专业度判定）
+speccore analyze --skip-clarify -I <迭代名>  # 跳过澄清
 ```
 
-**v6.77.0+ 新增命令。** 将口语化需求描述整理为 PRD 级专业文档。
-**v8.3.0+ 新增 `--local` 模式**：不绑定迭代，输出到临时工作区。
+**v6.77.0+ 新增阶段。** 将口语化需求描述整理为 PRD 级专业文档（v8.3.0+ 支持 `--local` 临时工作区模式）。
 
 **使用场景：**
 - 用户输入 "我要加个购物车功能" → 触发 clarify → 输出结构化需求文档
@@ -384,26 +386,18 @@ speccore clarify [--to <iteration>] [--prompt] [--apply <json|@file>] [--local] 
 - 缺少错误处理说明
 - 缺少数据模型
 
-**工作流程：**
+**工作流程（v8.3.346+ 并入 analyze 阶段）：**
 ```bash
-# 1. Prompt 模式：生成整理 Prompt
-speccore clarify --to Iteration-001 --prompt
+# 1. 强制澄清：analyze 先输出澄清 Prompt，AI 整理后 --apply 回写
+speccore analyze -I Iteration-001 --clarify --prompt
+speccore analyze -I Iteration-001 --clarify --apply '{...json...}'
 
-# 2. Apply 模式：应用 AI 整理结果
-speccore clarify --to Iteration-001 --apply '{...json...}'
-
-# 3. Windows 兼容：从文件读取
-speccore clarify --to Iteration-001 --apply @result.json
-
-# 4. v8.3.0+ 临时工作区模式（不绑定迭代）
-speccore clarify --from notes.md --local --prompt   # 生成 Prompt + 创建工作区条目
-speccore clarify --apply '<PRD>' --local             # 写入临时工作区
-speccore clarify --promote <entryId> --to <iteration> # 提升到迭代层
+# 2. 确定性关闭：需求已足够专业时跳过澄清
+speccore analyze -I Iteration-001 --skip-clarify
 ```
 
 输出位置：
 - 正常模式：`010-requirements/converted/clarified-{feature}.md`
-- `--local` 模式：`.speccore/local/workspace/clarify/{id}/PRD.md`
 
 ### 📦 taskify — 任务拆分 🔒 AI 命令（原 split，v8.3.231+ 只保留 taskify 一名）
 ```bash

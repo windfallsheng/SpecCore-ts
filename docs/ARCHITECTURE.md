@@ -157,7 +157,7 @@ Iteration-NNN-name/
 |:---|:---|:---|
 | 迭代级 `analyze`（无 `--task`） | `020-specs/` | 迭代全量分析，建立基线 |
 | 任务级 `analyze --task Task-001` | `Task-001/00-specs/` | 任务独立分析，**不覆盖迭代基线** |
-| `split` | `Task-NNN/00-specs/` | 从迭代需求切片，创建任务骨架 |
+| `taskify` | `Task-NNN/00-specs/` | 从迭代需求切片，创建任务骨架 |
 
 ---
 

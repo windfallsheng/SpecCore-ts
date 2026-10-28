@@ -756,7 +756,7 @@ speccore analyze --unit 功能单元名 -I Q1
 
 ```bash
 speccore pr --task=Task-001     # 自动 PR
-speccore arch-update --apis=/api/orders --tables=orders
+speccore global analyze --src backend/src  # 架构变更后重跑全局层分析，刷新技术文档
 ```
 
 ## 场景三十：技术选型参考 

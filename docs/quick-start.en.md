@@ -123,7 +123,7 @@ speccore ask "Create a login feature"       # → matches goal
 speccore ask "Start working"                # → matches execute
 speccore ask "How's the progress?"          # → matches progress
 speccore ask "Change login to use OTP"      # → matches change
-speccore ask "Global status"                # → matches global-status
+speccore ask "Global status"                # → matches status
 speccore ask "Analyze REQ-001 impact"       # → matches impact
 ```
 
@@ -134,7 +134,7 @@ speccore ask "Analyze REQ-001 impact"       # → matches impact
 ### Global Layer
 
 ```bash
-speccore global-status
+speccore status --scope global
 speccore iteration-from-global --reqs=REQ-001,REQ-002 --name=2026-07-UserSystem
 speccore sync --global --iteration=2026-07-UserSystem
 ```
@@ -145,8 +145,8 @@ speccore sync --global --iteration=2026-07-UserSystem
 # Create multi-platform task
 speccore task new --name UserLogin --platforms=web,h5,miniapp
 
-# Add new platform
-speccore platform-add --name=tablet --description="Tablet" --tech="React Native"
+# Add new platform: edit .speccore/PROJECT.yaml platforms list
+# (name/type per platform), then task new can use it
 
 # 🔒 AI: Filter by platform (use @spec-ask in AI IDE)
 @spec-ask "execute web platform tasks"
@@ -259,9 +259,8 @@ public class AuthController { ... }
 speccore sync --dry-run     # Preview ✅ CLI
 speccore sync               # Write ✅ CLI
 
-# View trace chain
-speccore trace --req=REQ-001
-speccore trace --full
+# Detect code-spec discrepancies (read-only)
+speccore sync --detect
 ```
 
 ---
