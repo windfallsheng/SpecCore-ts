@@ -17,6 +17,9 @@ const TYPE_KEYWORDS: Record<string, string[]> = {
   infra: ['基础设施', 'infra'],
 };
 
+/** 命中置信度：exact=端名/业务名全量/类型词/3字段完整；partial=滑窗 2 字部分提及（疑似） */
+export type MatchConfidence = 'exact' | 'partial';
+
 export interface ProjectCard {
   /** 端名/工程标识（如 booking-service） */
   name: string;
@@ -30,6 +33,8 @@ export interface ProjectCard {
   gitRepo?: string;
   /** 默认分支 */
   defaultBranch?: string;
+  /** 命中置信度（仅匹配结果携带；速查区/全量表不参与） */
+  confidence?: MatchConfidence;
 }
 
 function toCard(p: PlatformConfig): ProjectCard {
@@ -65,11 +70,46 @@ function nameHit(text: string, name: string): boolean {
   return false;
 }
 
+/** 归一化：小写 + 去空白/连字符/下划线（「h5 移动端」「H5-移动端」→「h5移动端」） */
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/[\s\-_]+/g, '');
+}
+
+/** 提取中文连续段（去英文/数字/符号后的中文字串列表） */
+function chineseSegments(text: string): string[] {
+  return text.match(/[\u4e00-\u9fa5]+/g) || [];
+}
+
 /**
- * 从用户自然语言中解析命中的端（可多端并行命中）。
- * - 端名包含（词边界）：「booking-service」「h5」
- * - 业务名包含（中文，长度 ≥2）：「预订服务」「H5移动端」
- * - 类型词：「前端」→ 全部 frontend 端；「后端」→ 全部 backend 端
+ * 业务名/描述模糊命中，返回置信度：
+ * - 'exact'：归一化全量包含（大小写/空格/连字符容差）或 3 字段完整出现；
+ * - 'partial'：≥4 字中文段滑窗——提到任意连续 2 字即视为「疑似提及」
+ *    （「预订」→「预订服务」、「后台」→「管理后台」）；
+ * - null：<3 字段不参与（防「移动」等泛词误命中）。
+ */
+function fuzzyLabelHit(text: string, label: string): MatchConfidence | null {
+  if (!label || label.length < 2) return null;
+  const nt = normalize(text);
+  const nl = normalize(label);
+  if (!nl) return null;
+  if (nt.includes(nl)) return 'exact';
+  for (const seg of chineseSegments(label)) {
+    if (seg.length === 3) {
+      if (nt.includes(seg)) return 'exact';
+    } else if (seg.length >= 4) {
+      for (let i = 0; i + 2 <= seg.length; i++) {
+        if (nt.includes(seg.slice(i, i + 2))) return 'partial';
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * 从用户自然语言中解析命中的端（可多端并行命中），携带置信度：
+ * - 端名包含（词边界 + 复合名分段）：「booking-service」「booking」「h5」→ exact
+ * - 业务名模糊命中：「预订服务」「移动端」→ exact；「预订」「后台」（滑窗 2 字）→ partial（疑似）
+ * - 类型词：「前端」→ 全部 frontend 端；「后端」→ 全部 backend 端 → exact
  * 返回保持 platforms 声明顺序；全无命中返回空数组。
  */
 export function matchProjectsFromText(text: string, platforms: PlatformConfig[]): ProjectCard[] {
@@ -78,21 +118,22 @@ export function matchProjectsFromText(text: string, platforms: PlatformConfig[])
   const hits: ProjectCard[] = [];
   for (const p of platforms) {
     const card = toCard(p);
-    let hit = false;
+    let conf: MatchConfidence | null = null;
     // 1. 端名（词边界，防短名误匹配）
-    if (nameHit(lower, p.name)) hit = true;
-    // 2. 业务名/项目名（中文 contains）
-    if (!hit) {
+    if (nameHit(lower, p.name)) conf = 'exact';
+    // 2. 业务名/项目名（模糊：归一化包含 + 中文滑窗部分提及）
+    if (!conf) {
       for (const label of [p.project_name, p.description]) {
-        if (label && label.length >= 2 && text.includes(label)) { hit = true; break; }
+        const c = label ? fuzzyLabelHit(text, label) : null;
+        if (c) { conf = c; break; }
       }
     }
     // 3. 类型词
-    if (!hit) {
+    if (!conf) {
       const aliases = TYPE_KEYWORDS[p.type] || [];
-      if (aliases.some(kw => text.includes(kw))) hit = true;
+      if (aliases.some(kw => text.includes(kw))) conf = 'exact';
     }
-    if (hit) hits.push(card);
+    if (conf) hits.push({ ...card, confidence: conf });
   }
   return hits;
 }
@@ -101,7 +142,8 @@ export function matchProjectsFromText(text: string, platforms: PlatformConfig[])
 export function formatCardLine(card: ProjectCard): string {
   const parts: string[] = [];
   const label = card.businessName ? `${card.businessName} · ` : '';
-  parts.push(`**${card.name}**（${label}${card.type}）`);
+  const partialTag = card.confidence === 'partial' ? ' · ⚠️疑似' : '';
+  parts.push(`**${card.name}**（${label}${card.type}${partialTag}）`);
   if (card.codePath) parts.push(`源码 \`${card.codePath}\``);
   const git = card.gitRepo ? (card.defaultBranch ? `${card.gitRepo}（${card.defaultBranch}）` : card.gitRepo) : '';
   if (git) parts.push(`Git \`${git}\``);
@@ -110,13 +152,22 @@ export function formatCardLine(card: ProjectCard): string {
 
 /**
  * 命中端名片的注入块（约 40 token/端）。未命中返回空串。
- * 用于 ask 意图块 / prompt 上下文——只注入被提到的那几端。
+ * 用于 ask 意图块 / prompt 上下文——只注入被提到的那几端；
+ * 滑窗「疑似」端做轻标注，引导 AI 按需核实 + 按需读全量表。
  */
 export function formatProjectCardInjection(hits: ProjectCard[]): string {
   if (hits.length === 0) return '';
   const lines = ['## 📇 项目信息（按需注入）', ''];
   for (const h of hits) lines.push(formatCardLine(h));
-  lines.push('', '> 以上为本次对话提到的端；其他端信息按需 Read `.speccore/GLOBAL/PROJECTS.md`');
+  const hasPartial = hits.some(h => h.confidence === 'partial');
+  if (hasPartial) {
+    lines.push('',
+      '> ⚠️ 带「疑似」标注的端为部分提及推断，请结合上下文核实；',
+      '> 各端完整配置（分支策略/部署/备注）按需 Read `.speccore/GLOBAL/PROJECTS.md`（数据源 `.speccore/PROJECT.yaml` platforms 段）');
+  } else {
+    lines.push('',
+      '> 以上为本次对话提到的端；完整配置（分支策略/部署/备注）按需 Read `.speccore/GLOBAL/PROJECTS.md`（数据源 `.speccore/PROJECT.yaml` platforms 段）');
+  }
   return lines.join('\n');
 }
 

@@ -50,9 +50,24 @@ describe('matchProjectsFromText — 三级匹配', () => {
     expect(matchProjectsFromText('H5 有 bug', PLATFORMS).map(h => h.name)).toEqual(['h5-mobile']);
   });
 
-  it('业务名中文命中：预订服务', () => {
+  it('业务名中文全量命中：预订服务', () => {
+    // 「预订」同时是 booking-service（预订服务）与 admin-web（预订管理后台）的滑窗子串
     const hits = matchProjectsFromText('帮我看看预订服务的代码', PLATFORMS);
-    expect(hits.map(h => h.name)).toEqual(['booking-service']);
+    expect(hits.map(h => h.name)).toEqual(['booking-service', 'admin-web']);
+  });
+
+  it('业务名模糊命中：部分说法（预订/后台/移动端）', () => {
+    expect(matchProjectsFromText('预订出问题了', PLATFORMS).map(h => h.name))
+      .toEqual(['booking-service', 'admin-web']);
+    expect(matchProjectsFromText('后台的权限要改', PLATFORMS).map(h => h.name)).toEqual(['admin-web']);
+    // 「移动端」命中 h5-mobile（H5移动端），不误中 app（移动App 的「移动」段 <3 字不参与）
+    expect(matchProjectsFromText('移动端样式乱了', PLATFORMS).map(h => h.name)).toEqual(['h5-mobile']);
+  });
+
+  it('归一化容差：大小写/空格/连字符不影响命中', () => {
+    expect(matchProjectsFromText('h5 移动端 有 bug', PLATFORMS).map(h => h.name)).toEqual(['h5-mobile']);
+    expect(matchProjectsFromText('H5-移动端 白屏', PLATFORMS).map(h => h.name)).toEqual(['h5-mobile']);
+    expect(matchProjectsFromText('BOOKING 接口报错', PLATFORMS).map(h => h.name)).toEqual(['booking-service']);
   });
 
   it('类型词「前端」→ 全部 frontend 端并行命中', () => {
@@ -67,7 +82,25 @@ describe('matchProjectsFromText — 三级匹配', () => {
 
   it('一句话多个端名并行命中，保持声明顺序', () => {
     const hits = matchProjectsFromText('预订服务和小程序的联调有问题', PLATFORMS);
-    expect(hits.map(h => h.name)).toEqual(['booking-service', 'miniapp']);
+    expect(hits.map(h => h.name)).toEqual(['booking-service', 'admin-web', 'miniapp']);
+  });
+
+  it('置信度分级：全量/端名/类型词 = exact，滑窗部分提及 = partial（疑似）', () => {
+    // 端名直接命中 → exact
+    expect(matchProjectsFromText('booking-service 报错', PLATFORMS)[0].confidence).toBe('exact');
+    // 业务名全量 → exact
+    expect(matchProjectsFromText('帮我看看预订服务的代码', PLATFORMS)[0].confidence).toBe('exact');
+    // 类型词 → exact
+    expect(matchProjectsFromText('后端接口要改', PLATFORMS)[0].confidence).toBe('exact');
+    // 滑窗 2 字部分提及 → partial
+    const partial = matchProjectsFromText('预订出问题了', PLATFORMS);
+    expect(partial.map(h => h.confidence)).toEqual(['partial', 'partial']);
+    // 「后台」→ 管理后台 滑窗 → partial
+    expect(matchProjectsFromText('后台的权限要改', PLATFORMS)[0].confidence).toBe('partial');
+  });
+
+  it('无关话题零命中：数据库连接超时', () => {
+    expect(matchProjectsFromText('数据库连接超时了', PLATFORMS)).toEqual([]);
   });
 
   it('未提到任何项目 → 零注入（空数组）', () => {
@@ -96,6 +129,15 @@ describe('名片格式化', () => {
     expect(block).toContain('booking-service');
     expect(block).toContain('miniapp');
     expect(block).toContain('.speccore/GLOBAL/PROJECTS.md');
+  });
+
+  it('疑似端带⚠️标注并引导核实；确定端无标注', () => {
+    const partial = formatProjectCardInjection(matchProjectsFromText('预订出问题了', PLATFORMS));
+    expect(partial).toContain('⚠️疑似');
+    expect(partial).toContain('请结合上下文核实');
+    const exact = formatProjectCardInjection(matchProjectsFromText('booking-service 报错', PLATFORMS));
+    expect(exact).not.toContain('⚠️疑似');
+    expect(exact).toContain('按需 Read `.speccore/GLOBAL/PROJECTS.md`');
   });
 
   it('formatProjectCardInjection 空命中返回空串', () => {
