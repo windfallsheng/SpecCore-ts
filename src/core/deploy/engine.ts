@@ -105,12 +105,12 @@ export async function deployPlatform(
     }
 
     // 2. 按类型执行
+    // 备份开关优先级：CLI 参数（--backup/--no-backup）> 部署配置 backup 字段 > 默认开启
+    const backupEnabled = options.backup ?? deployConfig.backup ?? true;
     if (options.dryRun) {
       logger.info(`  [DRY-RUN] 将执行 ${deployConfig.type} 部署`);
-      await previewDeploy(platform, env, deployConfig);
+      await previewDeploy(platform, env, deployConfig, backupEnabled);
     } else {
-      // 备份开关优先级：CLI 参数（--backup/--no-backup）> 部署配置 backup 字段 > 默认关闭
-      const backupEnabled = options.backup ?? deployConfig.backup ?? false;
       await executeDeploy(platform, env, deployConfig, options.skipBuild, backupEnabled);
     }
 
@@ -156,7 +156,7 @@ async function executeDeploy(
   env: string,
   config: DeployEnvConfig,
   skipBuild: boolean = false,
-  backup: boolean = false
+  backup: boolean = true
 ): Promise<void> {
   const projectRoot = findProjectRoot() || process.cwd();
   const cwd = platform.code_path
@@ -203,7 +203,8 @@ async function executeDeploy(
 async function previewDeploy(
   platform: PlatformConfig,
   env: string,
-  config: DeployEnvConfig
+  config: DeployEnvConfig,
+  backupEnabled: boolean
 ): Promise<void> {
   logger.info(`  端: ${platform.name}`);
   logger.info(`  环境: ${env}`);
@@ -221,8 +222,8 @@ async function previewDeploy(
   if (config.provider) logger.info(`  提供商: ${config.provider}`);
   if (config.pre_deploy) logger.info(`  前置: ${config.pre_deploy.join(', ')}`);
   if (config.post_deploy) logger.info(`  后置: ${config.post_deploy.join(', ')}`);
-  if (config.backup && (config.type === 'ssh' || config.type === 'docker')) {
-    logger.info(`  备份: 开启（保留最近 ${config.backup_keep ?? 5} 份）`);
+  if ((config.type === 'ssh' || config.type === 'docker')) {
+    logger.info(`  备份: ${backupEnabled ? `开启（保留最近 ${config.backup_keep ?? 5} 份）` : '关闭（--no-backup 或配置 backup: false）'}`);
   }
 }
 
@@ -237,7 +238,7 @@ async function deployDocker(
   config: DeployEnvConfig,
   cwd: string,
   skipBuild: boolean = false,
-  backup: boolean = false
+  backup: boolean = true
 ): Promise<void> {
   const imageName = config.image || platform.name;
   const tag = config.tag || env;
@@ -274,7 +275,7 @@ async function deployDockerRemote(
   cwd: string,
   fullImage: string,
   imageName: string,
-  backup: boolean = false,
+  backup: boolean = true,
   tag: string = 'latest'
 ): Promise<void> {
   if (!config.registry) {
@@ -317,7 +318,7 @@ async function deployDockerRemote(
   if (backup) {
     const keep = config.backup_keep ?? 5;
     const backupCmd =
-      `(docker inspect '${fullImage}' >/dev/null 2>&1 && docker tag '${fullImage}' '${fullImage}.bak-$(date +%Y%m%d-%H%M%S)' || true) && ` +
+      `(docker inspect '${fullImage}' >/dev/null 2>&1 && docker tag '${fullImage}' '${fullImage}.bak-$(date +%Y-%m-%d_%H-%M-%S)' || true) && ` +
       `(docker images '${imageName}' --format '{{.Tag}}' | grep -F '${tag}.bak-' | sort | head -n -${keep} | xargs -r -I{} docker rmi '${imageName}:{}' || true)`;
     logger.info(`  💾 备份远端旧镜像 tag（保留最近 ${keep} 份）`);
     if (sshpass) {
@@ -432,7 +433,7 @@ async function deploySsh(
   config: DeployEnvConfig,
   cwd: string,
   skipBuild: boolean,
-  backup: boolean = false
+  backup: boolean = true
 ): Promise<void> {
   if (!config.host) {
     throw new Error('ssh 类型部署必须配置 host 字段（格式: user@host:port）');
@@ -475,7 +476,7 @@ async function deploySsh(
   // 1.5 部署前备份远端旧包（v8.3.348+）：SCP 覆盖前远端 tar 打包 + 清理超出保留份数的旧备份
   if (backup) {
     const keep = config.backup_keep ?? 5;
-    const ts = 'bak-$(date +%Y%m%d-%H%M%S)';
+    const ts = 'bak-$(date +%Y-%m-%d_%H-%M-%S)';
     const backupCmd =
       `if [ -d '${remoteDir}' ]; then ` +
       `tar -czf '${remoteDir}.${ts}.tar.gz' -C "$(dirname '${remoteDir}')" "$(basename '${remoteDir}')" && ` +

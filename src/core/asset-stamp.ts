@@ -47,25 +47,28 @@ export function readAssetStamp(content: string): string | null {
  *   1. 内容完全相同 → skip（幂等，不产生备份噪音）
  *   2. 剥戳后与内置一致 → restamp（8.3.314 及以前生成的无戳同内容文件，
  *      直接补戳进入版本戳体系；内容零变化，无需备份）
- *   3. 有版本戳 → CLI 生成物：同版本 skip（用户改过也保留），旧戳 refresh
- *   4. 无戳 → 交给 isLegacy 特征判定：旧版特征命中 refresh，否则视为用户自定义 skip
+ *   3. 有版本戳 → CLI 生成物：同版本 skip（用户改过也保留），旧戳 overwrite
+ *      （v8.3.349+: 带戳即可确定是 CLI 生成物，直接覆盖不备份——备份只会
+ *      堆积时间戳文件；用户自定义应走 _TEMPLATE 或新文件而非改内置角色）
+ *   4. 无戳 → 交给 isLegacy 特征判定：旧版特征命中 refresh（特征检测有误判
+ *      可能，保留备份保底），否则视为用户自定义 skip
  *
  * @param isLegacy 旧版 CLI 生成物的特征判定（无戳时兜底），如旧版角色缺 systemPrompt
- * @returns 'refresh' 备份刷新 | 'restamp' 直接补戳 | 'skip' 保留现有
+ * @returns 'overwrite' 直接覆盖 | 'refresh' 备份刷新 | 'restamp' 直接补戳 | 'skip' 保留现有
  */
 export function decideStampedSync(
   existingContent: string,
   builtinContent: string,
   isLegacy: (existing: string) => boolean,
-): 'refresh' | 'restamp' | 'skip' {
+): 'overwrite' | 'refresh' | 'restamp' | 'skip' {
   if (existingContent === builtinContent) return 'skip';
   if (stripAssetStamp(builtinContent) === existingContent) return 'restamp';
   const existingStamp = readAssetStamp(existingContent);
   if (existingStamp) {
-    // 有版本戳 → 是 CLI 生成物：旧戳刷新，同版本跳过
-    return existingStamp === PKG_VERSION ? 'skip' : 'refresh';
+    // 有版本戳 → 是 CLI 生成物：旧戳直接覆盖（v8.3.349+ 不再备份），同版本跳过
+    return existingStamp === PKG_VERSION ? 'skip' : 'overwrite';
   }
-  // 无戳：旧版 CLI 生成（命中旧版特征）→ 刷新；否则视为用户自定义 → 保留
+  // 无戳：旧版 CLI 生成（命中旧版特征）→ 备份刷新；否则视为用户自定义 → 保留
   return isLegacy(existingContent) ? 'refresh' : 'skip';
 }
 

@@ -23,7 +23,7 @@ export interface DeployCliOptions {
   all?: boolean;
   envFile?: string;
   branch?: string;
-  /** v8.3.348+: 部署前备份远端旧包（--backup / --no-backup，不传时用配置 backup 字段） */
+  /** v8.3.348+: 部署前备份远端旧包（--backup / --no-backup，不传时用配置 backup 字段，默认开启） */
   backup?: boolean;
   /** v8.3.348+: 本次不备份的端名列表（逗号分隔，--skip-backup-for），优先级高于 --backup 与配置 backup 字段 */
   skipBackupFor?: string;
@@ -31,7 +31,7 @@ export interface DeployCliOptions {
 
 /**
  * 计算某端本次的最终备份开关（v8.3.348+）。
- * 优先级：--skip-backup-for 端级排除 > --backup/--no-backup 全局开关 > 配置 backup 字段 > 默认关闭。
+ * 优先级：--skip-backup-for 端级排除 > --backup/--no-backup 全局开关 > 配置 backup 字段 > 默认开启。
  * 注：commander 对 --no- 前缀有取反特殊语义，端级排除参数刻意命名 skip-backup-for 避开。
  */
 function resolveBackupFor(
@@ -44,7 +44,7 @@ function resolveBackupFor(
     .map((n) => n.trim())
     .filter(Boolean);
   if (excluded.includes(platformName)) return false;
-  return options.backup ?? deployCfg?.backup ?? false;
+  return options.backup ?? deployCfg?.backup ?? true;
 }
 
 /** 部署配置 → 人类可读描述（计划面板用） */
@@ -120,7 +120,7 @@ function printDeployPlan(
     // 备份状态（仅远程覆盖型部署类型展示；sftp 无远端 shell 权限暂不支持）
     if (deployCfg && (deployCfg.type === 'ssh' || deployCfg.type === 'docker')) {
       const backupOn = resolveBackupFor(p.name, deployCfg, options);
-      logger.info(`│      备份 : ${backupOn ? `开启（保留最近 ${deployCfg.backup_keep ?? 5} 份）` : '关闭（--backup 或配置 backup: true 开启）'}`);
+      logger.info(`│      备份 : ${backupOn ? `开启（保留最近 ${deployCfg.backup_keep ?? 5} 份）` : '关闭（--no-backup 或配置 backup: false）'}`);
     }
     logger.info(`│      部署 : ${describeDeploy(deployCfg)}${options.dryRun ? '（--dry-run 预演）' : ''}`);
   });

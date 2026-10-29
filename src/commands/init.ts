@@ -1499,8 +1499,12 @@ export async function initAgentsDir(projectRoot: string): Promise<void> {
       // 旧版特征 = 缺 systemPrompt frontmatter 且带「# 角色：」标题（新版无此标题）
       const decision = decideStampedSync(existing, agent.content, c => !/^---\s*[\s\S]*?systemPrompt:/m.test(c) && /#\s*角色[：:]\s*\(?/m.test(c));
       if (decision === 'refresh') {
+        // 无戳命中旧特征（归属不确定）→ 备份保底；带旧戳的 CLI 生成物走 overwrite 直接覆盖
         await safeWriteWithBackup(destPath, agent.content);
         logger.info(`   🔄 刷新旧版角色定义: ${agent.name}.md（原文件已备份）`);
+      } else if (decision === 'overwrite') {
+        await writeFile(destPath, agent.content);
+        logger.info(`   ⬇️  更新内置角色定义: ${agent.name}.md（直接覆盖）`);
       } else if (decision === 'restamp') {
         await writeFile(destPath, agent.content);
       }
@@ -1521,6 +1525,9 @@ export async function initAgentsDir(projectRoot: string): Promise<void> {
       if (decision === 'refresh') {
         await safeWriteWithBackup(registryPath, registryContent);
         logger.info('   🔄 刷新旧版 AGENTS 注册表: _INDEX.md（原文件已备份，自定义角色请从备份合并）');
+      } else if (decision === 'overwrite') {
+        await writeFile(registryPath, registryContent);
+        logger.info('   ⬇️  更新内置 AGENTS 注册表: _INDEX.md（直接覆盖）');
       } else if (decision === 'restamp') {
         await writeFile(registryPath, registryContent);
       }
@@ -1807,10 +1814,10 @@ speccore verify deploy                   # 测试阶段位置参数（dev/pr/dep
       await writeFile(destPath, stampedContent);
     } else {
       // v8.3.315+: 版本戳驱动同步（统一决策表 decideStampedSync）
-      //   有旧戳 → 旧版 CLI 生成 → 备份刷新（不再枚举旧特征，改模板即自动迁移）
+      //   有旧戳 → 旧版 CLI 生成 → 直接覆盖（v8.3.349+，不再备份）
       //   无戳 → 旧特征兜底：过时标记命中 / 缺新版关键内容（required）→ 备份刷新
       //   同版本戳或用户自定义 → 保留
-      // 覆盖一律 safeWriteWithBackup：旧版特征检测存在误判可能，备份保底可回滚
+      // 无戳命中旧特征才备份：特征检测存在误判可能，备份保底可回滚
       const existingContent = await readFile(destPath, 'utf-8');
       const decision = decideStampedSync(
         existingContent,
@@ -1820,6 +1827,9 @@ speccore verify deploy                   # 测试阶段位置参数（dev/pr/dep
       if (decision === 'refresh') {
         logger.info(`   🔄 检测到旧版内容 [${tpl.name}]，已备份并更新`);
         await safeWriteWithBackup(destPath, stampedContent);
+      } else if (decision === 'overwrite') {
+        await writeFile(destPath, stampedContent);
+        logger.info(`   ⬇️  更新内置模板 [${tpl.name}]（直接覆盖）`);
       } else if (decision === 'restamp') {
         await writeFile(destPath, stampedContent);
       }

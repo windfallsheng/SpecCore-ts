@@ -49,9 +49,9 @@ describe('asset-stamp — decideStampedSync 统一决策表', () => {
     expect(decideStampedSync('## 项目结构\n\n内容', builtin, isLegacy)).toBe('restamp');
   });
 
-  it('旧版本戳 → refresh（新版 CLI 内容迁移，不再依赖特征枚举）', () => {
+  it('旧版本戳 → overwrite（新版 CLI 内容直接覆盖，不备份——v8.3.349+）', () => {
     const oldStamped = '<!-- speccore-asset-version: 8.3.100 -->\n旧内容（无任何旧版特征词）';
-    expect(decideStampedSync(oldStamped, stampContent('新内容'), isLegacy)).toBe('refresh');
+    expect(decideStampedSync(oldStamped, stampContent('新内容'), isLegacy)).toBe('overwrite');
   });
 
   it('同版本戳但内容不同 → skip（用户改过当前版生成物，保留）', () => {

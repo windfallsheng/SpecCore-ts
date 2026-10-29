@@ -390,8 +390,8 @@ program
   .option('--smoke', '单次强制冒烟（覆盖 settings.smoke.points 为 on）')
   .option('--skip-smoke', '单次跳过冒烟（覆盖 settings.smoke.points 为 off）')
   .option('--scope <scope>', '单次指定冒烟范围：full=全量 / module=当前功能模块')
-  .option('--backup', '部署前备份远端旧包（透传 deploy，保留份数见配置 backup_keep，默认 5）')
-  .option('--no-backup', '部署前不备份远端旧包（透传 deploy，覆盖配置 backup: true）')
+  .option('--backup', '部署前备份远端旧包（透传 deploy，保留份数见配置 backup_keep，默认 5；不传时默认开启）')
+  .option('--no-backup', '部署前不备份远端旧包（透传 deploy，覆盖配置 backup: true 与默认开启）')
   .option('--skip-backup-for <platforms>', '本次不备份的端名列表（透传 deploy，逗号分隔）')
   .action((options: any) => {
     if (options.smoke) options.smoke = 'on';
@@ -420,8 +420,8 @@ program
   .option('--branch <branch>', '先 checkout 到指定分支再执行')
   .option('--dry-run', '仅预览，不实际执行')
   .option('--skip-build', '跳过构建阶段')
-  .option('--backup', '部署前备份远端旧包（保留份数见配置 backup_keep，默认 5）')
-  .option('--no-backup', '部署前不备份远端旧包（覆盖配置 backup: true）')
+  .option('--backup', '部署前备份远端旧包（保留份数见配置 backup_keep，默认 5；不传时默认开启）')
+  .option('--no-backup', '部署前不备份远端旧包（覆盖配置 backup: true 与默认开启）')
   .option('--skip-backup-for <platforms>', '本次不备份的端名列表（逗号分隔，如 h5-mobile,order-api）')
   .option('--all', '部署所有端')
   .action(deployCommand);

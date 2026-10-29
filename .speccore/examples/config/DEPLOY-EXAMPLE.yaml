@@ -30,10 +30,10 @@
 #   image        → 镜像名（docker 类型）
 #   tag          → 镜像标签（docker 类型）
 #   pm2_config   → PM2 配置文件（pm2 类型，默认 ecosystem.config.js）
-#   backup       → 部署前备份远端旧包（v8.3.348+，ssh/docker 类型，默认 false）
+#   backup       → 部署前备份远端旧包（v8.3.348+，ssh/docker 类型，默认 true 开启）
 #   backup_keep  → 备份保留份数（v8.3.348+，默认 5，超出自动清理最旧备份）
 #
-# 备份开关优先级（高→低）：CLI --skip-backup-for 端级排除 > CLI --backup/--no-backup 全局 > 配置 backup 字段
+# 备份开关优先级（高→低）：CLI --skip-backup-for 端级排除 > CLI --backup/--no-backup 全局 > 配置 backup 字段 > 默认开启
 # 例：speccore deploy --env test --all --backup --skip-backup-for h5-mobile,order-api
 # ═══════════════════════════════════════════════════════════
 
@@ -70,7 +70,7 @@ ssh_key_example:
   remote_dir: /var/www/html/h5
   # script: 部署后命令（重载 Nginx）
   script: sudo nginx -s reload
-  # backup: 部署前备份远端旧包（v8.3.348+，默认 false；开启后保留最近 backup_keep 份）
+  # backup: 部署前备份远端旧包（v8.3.348+，默认 true 开启；保留最近 backup_keep 份）
   backup: true
   backup_keep: 5
   # pre_deploy: 部署前钩子
@@ -189,7 +189,7 @@ docker_frontend_remote:
   tag: staging
   host: deployer@staging-server.example.com     # 远程服务器（v8.3.96+）
   key: ~/.ssh/id_rsa
-  # backup: true   # v8.3.348+: 部署前把旧镜像打 backup tag（tag 零成本，保留 backup_keep 份）
+  # backup: true   # v8.3.348+: 部署前把旧镜像打 backup tag（tag 零成本，保留 backup_keep 份；默认开启）
   # backup_keep: 5
   # script 自定义远程命令（可选，以下为默认值示例）
   # script: "docker pull registry.example.com/my-project/admin-web:staging && docker stop admin-web 2>/dev/null; docker rm admin-web 2>/dev/null; docker run -d --name admin-web --restart always -p 80:80 registry.example.com/my-project/admin-web:staging"
@@ -463,9 +463,8 @@ env: staging
 # 环境全局分支：该环境所有端默认切到此分支（按端覆盖见 platforms）
 branch: staging
 
-# 全局默认构建命令（按端覆盖见 platforms）
-defaults:
-  build_cmd: npm run build:staging
+# 构建命令各端各自配置（见 platforms.{端}.build_cmd，Java / Web / 移动端各异）；
+# 解析层支持 defaults.build_cmd 作为「端未写时的兜底」，仅全端同构项目适用。
 
 # 按端覆盖配置
 platforms:

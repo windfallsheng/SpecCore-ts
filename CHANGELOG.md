@@ -1,5 +1,20 @@
 # Changelog
 
+## v8.3.349 (2026-10-29) — 环境示例模板补齐 v8.3.348 新能力
+
+`update` 升级时生成的环境示例（`.speccore/environments/staging.yaml.example`）补上部署链路改造后的新内容：
+
+- **名实相符修复**：示例此前误用 test 模板（文件名 staging 内容却是 test），现取 staging 模板（env / branch 均为 staging）。
+- **备份开关示范**：ssh 与 docker 示例补 backup / backup_keep 字段（远端 tar 备份 / 镜像 backup tag，保留份数清理）。
+- **四级分支回退说明**：端级 branch 老注释升级为 v8.3.348 四级回退完整说明（端级 → 环境全局 → default_branch → 子任务 git-config），admin-web 实际写出端级 branch 覆盖示范（platforms.{端}.branch 覆盖全局 branch），h5 示范不写 branch 时回退全局。
+- **重启脚本文件化示范**：order-api 的 ssh 内联三行改为引用远端脚本（bash /opt/services/order-api/restart.sh），注释保留内联短命令等价写法。
+- **注释全面详实化**：各端示例（static/ssh/vercel/docker/pm2/k8s/script/helm/sftp/serverless）每个字段补作用与取值说明、部署前置条件与适用场景，tests 段 base_urls 键名修正为与 platforms 端名一致（admin → admin-web）。
+- **移除全局 defaults.build_cmd 示范**：各端构建命令本就各异（Java 的 mvnw、Web 的 npm），全局默认反而误导；改为各端各自配置 build_cmd，注释说明解析层兜底字段 defaults.build_cmd 仅全端同构项目适用。DEPLOY-EXAMPLE.yaml 与 deploy-examples.yaml 同步移除。
+- **部署类型十全覆盖**：补前端示例 3（web-ssr → Vercel，含 login/link 前置与 production→--prod 说明），补齐引擎最后一种未示范的部署类型；h5 static 补 target 三种格式说明（S3 / rsync / 本地目录），order-api 补 Tomcat war 部署变体，data-processor 补 Python gunicorn/supervisor 用法。
+- **备份默认值改为开启**：ssh/docker 部署默认备份旧包（保留 backup_keep 份，默认 5）；四级优先级不变（--skip-backup-for 排除 > --backup/--no-backup > 配置 backup 字段 > 默认开启），--no-backup 或 backup: false 可关闭；dry-run 预览与计划面板同步显示最终开关值。
+- **备份时间戳改易读格式**：备份名从 bak-20261029-143025 改为 bak-2026-10-29_14-30-25（tar 文件与 docker tag 同步），恢复时一眼可辨时间版本；示例注释补备份命名规则。
+- **内置资产旧戳文件直接覆盖**：升级时带旧版本戳的 CLI 生成物（AGENTS 角色/_INDEX 注册表/RULES inline 模板）不再重命名备份，直接覆盖写入新版内容，消除目录内时间戳备份文件堆积；仅无戳命中旧特征的「归属不确定」文件仍备份保底。
+
 ## v8.3.348 (2026-10-28) — 部署链路过程可视化：计划面板 + 自动分支解析 + 实时配置读取
 
 回答「部署哪个环境、哪些端，拉哪个分支、打什么包、部署到哪、结果如何」全程可见：

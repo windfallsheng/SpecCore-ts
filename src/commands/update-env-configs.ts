@@ -71,122 +71,166 @@ function generateEnvContent(t: EnvTemplate): string {
 
 env: ${t.name}
 
-# 该环境对应的 Git 目标分支
+# ─────────────────────────────────────────────────────────────
+# 该环境对应的 Git 目标分支（四级回退第 2 级）
+# 回退顺序（v8.3.348+，deploy / pipeline 共用）：
+#   ① platforms.{端}.branch      端级分支（本文件按端指定，优先级最高）
+#   ② 本 branch                  环境全局分支（所有端默认使用）
+#   ③ PROJECT.yaml default_branch  项目级兜底
+#   ④ 子任务 git-config 源分支     任务级兜底
+# 命令行显式 --branch 优先于以上全部。
 ${branchComment}
 ${t.branch ? `branch: ${t.branch}` : '# branch: (未配置，pipeline 不会执行 merge)'}
 
-# 全局默认值
-defaults:
-  build_cmd: ${t.buildCmd}
-
-# 按端覆盖配置
-# v8.3.82+: 每个端可单独配置 branch，覆盖全局 branch
-#   branch: main   # 该端使用独立分支，pipeline 时优先使用
+# ─────────────────────────────────────────────────────────────
+# 构建命令：各端各自配置 build_cmd（Java / Web / 移动端构建方式各异，
+# 不设全局默认）。解析层支持 defaults.build_cmd 作为「端未写时的兜底」，
+# 仅全端同构项目适用（如全是前端），异构项目不要设。
+# ─────────────────────────────────────────────────────────────
 platforms:
-  # 前端示例：H5 移动端 → S3/CDN
+  # ═══ 前端示例 1：H5 移动端 → S3/CDN（静态资源上传）═══
+  # 分支说明：本端不写 branch → 回退使用上方全局 branch（四级回退第 ② 级）
   h5:
-    build_cmd: ${t.buildCmd}
+    build_cmd: ${t.buildCmd}          # 本端构建命令（部署前在端源码目录执行）
     deploy:
-      type: static
-      output_dir: dist
-      target: s3://mybucket-${t.name}/h5/
+      type: static                    # 部署类型：静态资源上传
+      output_dir: dist                # 构建产物目录（相对端源码路径）
+      # 上传目标三种格式：s3://bucket/path（AWS S3）、rsync://user@host:/path 或
+      # user@host:/path（rsync 增量同步）、本地目录（直接复制，如挂载的 NFS）
+      target: s3://mybucket-${t.name}/h5/   # 上传目标：S3 路径 / rsync 地址 / 本地目录
 
-  # 前端示例：Admin 管理后台 → Nginx 服务器
+  # ═══ 前端示例 2：Admin 管理后台 → Nginx 服务器（SSH）═══
+  # 分支说明：示范端级分支覆盖——仅此端切 release 分支（四级回退第 ① 级，
+  # 覆盖上方全局 branch）；其他端不写 branch 则照用全局 branch。
   admin-web:
+    branch: release/admin-web-${t.name}   # 端级分支（覆盖全局 branch）
     build_cmd: ${t.buildCmd}
     deploy:
-      type: ssh
-      output_dir: dist
-      host: deploy@${t.name === 'production' ? 'prod' : t.name}-server.example.com:22
-      remote_dir: /usr/share/nginx/html/admin/
-      key: ~/.ssh/deploy_key
-      post_deploy:
+      type: ssh                       # 部署类型：SCP 上传产物 + SSH 执行远端命令
+      output_dir: dist                # 构建产物目录（被 SCP 上传的内容）
+      host: deploy@${t.name === 'production' ? 'prod' : t.name}-server.example.com:22  # 远程主机（user@host:port）
+      remote_dir: /usr/share/nginx/html/admin/  # 远程部署目录（nginx 站点根，须有写权限）
+      key: ~/.ssh/deploy_key          # SSH 私钥路径（与 password 二选一，推荐密钥认证）
+      # v8.3.348+ 备份开关：覆盖前远端 tar 备份旧包，backup_keep 份滚动清理；默认开启
+      # 备份命名：{远程目录}.bak-{时间戳}.tar.gz（如 /usr/share/nginx/html/admin.bak-2026-10-29_14-30-25.tar.gz），恢复时按时间选版本
+      backup: true                    # 是否备份（默认 true；--no-backup 或 backup: false 可关闭）
+      backup_keep: 5                  # 备份保留份数（默认 5，超出自动删除最旧）
+      post_deploy:                    # 部署后钩子（逐条执行，如 reload 服务）
         - ssh deploy@${t.name === 'production' ? 'prod' : t.name}-server.example.com "sudo nginx -s reload"
 
-  # 后端示例：Java Spring Boot → SSH + systemd（推荐）
+  # ═══ 前端示例 3：Next.js SSR / 静态站 → Vercel（托管平台）═══
+  # 前置：项目目录执行过 npx vercel login（首次会要求浏览器授权），
+  # 且项目已关联 Vercel（npx vercel link）或首次部署时交互确认。
+  # 部署方式：production 环境自动加 --prod 上正式环境，其余环境走 preview。
+  # 构建由 Vercel 云端完成（本地 build_cmd 仅作可选预检，引擎不执行）。
+  web-ssr:
+    # build_cmd: npm run build        # 可选：本地构建预检；正式构建由 Vercel 云端完成
+    deploy:
+      type: vercel                    # 部署类型：Vercel 托管（Next.js / Nuxt / 静态站等）
+
+  # ═══ 后端示例 1：Java Spring Boot → SSH + systemd（推荐）═══
   # 前置：服务器上配置好 /etc/systemd/system/order-api.service
+  # 变体：传统 Tomcat 部署同样走 type: ssh，产物换成 war，script 改为
+  #   cp app.war /opt/tomcat/webapps/ && systemctl restart tomcat 即可。
   order-api:
-    build_cmd: ./mvnw clean package -DskipTests -P${t.name === 'local' ? 'dev' : t.name}
+    build_cmd: ./mvnw clean package -DskipTests -P${t.name === 'local' ? 'dev' : t.name}  # 构建命令（maven 打包跳过测试）
     deploy:
       type: ssh
-      output_dir: target
+      output_dir: target                # 构建产物目录（jar 所在）
       host: deploy@${t.name === 'production' ? 'prod' : t.name}-server.example.com:22
-      remote_dir: /opt/services/order-api/
+      remote_dir: /opt/services/order-api/  # 远程部署目录
       key: ~/.ssh/deploy_key
-      script: |
-        sudo systemctl stop order-api
-        sudo cp /opt/services/order-api/*.jar /opt/services/order-api/app.jar
-        sudo systemctl start order-api
-      post_deploy:
+      # 远端重启命令：ssh 类型的 script 是「远端 shell 命令串」，不经本地解析；
+      # 长脚本建议放远端文件（如 /opt/services/order-api/restart.sh），此处引用；
+      # 两三行短命令可直接内联（等价写法见下方注释）。
+      script: bash /opt/services/order-api/restart.sh
+      # 内联短命令等价写法：
+      # script: |
+      #   sudo systemctl stop order-api
+      #   sudo cp /opt/services/order-api/*.jar /opt/services/order-api/app.jar
+      #   sudo systemctl start order-api
+      backup: true                      # v8.3.348+：覆盖前远端 tar 备份旧包（默认开启，backup: false 可关）
+      # 备份命名同 admin-web：{远程目录}.bak-{时间戳}.tar.gz
+      backup_keep: 5                    # 备份保留份数
+      post_deploy:                      # 部署后钩子：确认服务状态
         - ssh -i ~/.ssh/deploy_key deploy@${t.name === 'production' ? 'prod' : t.name}-server.example.com "sudo systemctl status order-api"
 
-  # 后端示例：Java API 服务 → Docker（容器化部署）
+  # ═══ 后端示例 2：Java API 服务 → Docker（容器化部署）═══
   order-api-docker:
     build_cmd: ./mvnw package -DskipTests -P${t.name === 'local' ? 'dev' : t.name}
     deploy:
-      type: docker
-      registry: registry.example.com/myapp-${t.name === 'production' ? 'prod' : t.name}
-      image: order-service
-      tag: ${t.name === 'production' ? 'prod' : t.name}
+      type: docker                      # 部署类型：构建镜像并推送到 registry
+      registry: registry.example.com/myapp-${t.name === 'production' ? 'prod' : t.name}  # 镜像仓库地址（远程部署必须配置）
+      image: order-service              # 镜像名
+      tag: ${t.name === 'production' ? 'prod' : t.name}  # 镜像标签（默认 latest）
+      backup: true                      # v8.3.348+：pull 前旧镜像打 backup tag（零成本，镜像层共享；默认开启）
+      # 备份 tag 命名：{原tag}.bak-{时间戳}（如 staging.bak-2026-10-29_14-30-25），docker images 可见
+      backup_keep: 5
 
-  # 后端示例：Node.js 服务 → PM2
+  # ═══ 后端示例 3：Node.js 服务 → PM2 ═══
   notification-service:
-    build_cmd: npm run build
+    build_cmd: npm run build            # 构建命令（产物交给 pm2 的 script 字段启动）
     deploy:
-      type: pm2
-      output_dir: .
-      pm2_config: .speccore/environments/scripts/ecosystem.config.js
-      # 如需远程部署，取消注释:
+      type: pm2                         # 部署类型：PM2 进程管理（本地 reload 或 ssh 远端 reload）
+      output_dir: .                     # 产物目录（整个工程目录交给 PM2 管理）
+      pm2_config: .speccore/environments/scripts/ecosystem.config.js  # PM2 配置（生成示例见 scripts/ 目录）
+      # 如需远程部署（ssh 到远端执行 pm2 reload），取消注释：
       # host: deploy@server.example.com
       # remote_dir: /opt/services/notification
 
-  # 后端示例：Go 网关 → K8s
+  # ═══ 后端示例 4：Go 网关 → K8s ═══
+  # 前置：本地 kubectl 已配置目标集群上下文
   gateway:
-    build_cmd: go build -o bin/gateway ./cmd/gateway
+    build_cmd: go build -o bin/gateway ./cmd/gateway  # 构建命令（镜像由清单内 image 字段决定）
     deploy:
-      type: k8s
-      target: ${t.name}
-      script: .speccore/environments/scripts/k8s-deployment.yaml
+      type: k8s                         # 部署类型：kubectl 应用清单（apply 后等待就绪）
+      target: ${t.name}                 # k8s namespace（清单文件内 metadata.namespace 可再覆盖）
+      script: .speccore/environments/scripts/k8s-deployment.yaml  # 清单文件路径（本地文件）
 
-  # 后端示例：Python 处理 → 脚本部署
+  # ═══ 后端示例 5：Python 处理 → 脚本部署 ═══
+  # type: script 的 script 字段支持「本地脚本文件路径」或内联命令——
+  # 文件存在则执行文件，不存在则当命令执行（v8.3.296+ 双基准解析）。
+  # Python 服务也可用 script 调 gunicorn / supervisor 等进程管理工具。
   data-processor:
     build_cmd: pip install -r requirements.txt -t dist/
     deploy:
-      type: script
-      script: .speccore/environments/scripts/deploy.sh
+      type: script                      # 部署类型：自定义脚本
+      script: .speccore/environments/scripts/deploy.sh  # 脚本路径（或内联命令）
 
-  # 后端示例：用户服务 → Helm
+  # ═══ 后端示例 6：用户服务 → Helm ═══
   user-service:
-    build_cmd: ./mvnw package -DskipTests -P${t.name}
+    build_cmd: ./mvnw package -DskipTests -P${t.name}  # 构建命令（镜像打包后由 Chart 引用）
     deploy:
-      type: helm
-      target: ${t.name}
-      script: ./helm/user-service
-      output_dir: .speccore/environments/scripts/values-${t.name}.yaml
+      type: helm                        # 部署类型：Helm Chart 安装（升级或首装）
+      target: ${t.name}                 # helm namespace（如未创建需先 kubectl create ns）
+      script: ./helm/user-service       # Chart 路径（本地目录或远程仓库引用）
+      output_dir: .speccore/environments/scripts/values-${t.name}.yaml  # values 文件（按环境区分）
 
-  # 后端示例：定时任务 → SFTP 到服务器
+  # ═══ 后端示例 7：定时任务 → SFTP 到服务器 ═══
+  # 适用场景：服务器只开放 SFTP、无 ssh shell 权限（如托管机）
   scheduler:
-    build_cmd: go build -o bin/scheduler ./cmd/scheduler
+    build_cmd: go build -o bin/scheduler ./cmd/scheduler  # 构建命令（产物为 bin/scheduler 可执行文件）
     deploy:
-      type: sftp
-      output_dir: bin
-      host: deploy@server.example.com
-      remote_dir: /opt/services/scheduler/
-      key: ~/.ssh/deploy_key
+      type: sftp                        # 部署类型：SFTP 上传（无远端 shell 权限场景）
+      output_dir: bin                   # 构建产物目录（整个目录被上传）
+      host: deploy@server.example.com   # 远程主机（user@host）
+      remote_dir: /opt/services/scheduler/  # 远程目录（必须配置）
+      key: ~/.ssh/deploy_key            # SSH 私钥（sftp 暂不支持备份开关 backup/backup_keep，默认开启不生效）
 
-  # 后端示例：WebSocket 服务 → 函数计算
+  # ═══ 后端示例 8：WebSocket 服务 → 函数计算 ═══
   ws-handler:
-    build_cmd: npm run build
+    build_cmd: npm run build            # 构建命令（产物打包为函数代码包）
     deploy:
-      type: serverless
-      provider: aliyun-fc
-      target: ws-handler-${t.name}
+      type: serverless                  # 部署类型：函数计算（阿里云 FC / AWS Lambda / 腾讯 SCF）
+      provider: aliyun-fc               # 提供商：aliyun-fc / aws-lambda / tencent-scf
+      target: ws-handler-${t.name}      # 函数名（按环境区分）
 
 # 测试相关配置（与 verify --config 联动）
+# 键名须与上方 platforms 的端名一致（示例：h5 / admin-web / order-api）
 tests:
   base_urls:
     h5: ${t.baseUrl}/h5
-    admin: ${t.baseUrl}/admin
+    admin-web: ${t.baseUrl}/admin
     order-api: ${t.baseUrl.replace('www.', 'api-').replace('https://', 'https://api-')}
 
   visual_model:
@@ -591,7 +635,9 @@ export async function initEnvironmentConfigs(projectRoot: string): Promise<strin
   } else {
     // 已有环境配置，仅更新示例文件 + 补全缺失的 Helm values
     const examplePath = join(envDir, 'staging.yaml.example');
-    const exampleContent = generateEnvContent(ENV_TEMPLATES[2]) + '\n# 本文件为示例，可复制为 staging.yaml 后修改使用\n';
+    // v8.3.348+: 示例取 staging 模板（ENV_TEMPLATES[3]）——此前误用 test 模板，
+    // 文件名 staging 内容却是 test，名实不符
+    const exampleContent = generateEnvContent(ENV_TEMPLATES[3]) + '\n# 本文件为示例，可复制为 staging.yaml 后修改使用\n';
     await writeFile(examplePath, exampleContent, 'utf-8');
     created.push('.speccore/environments/staging.yaml.example');
 

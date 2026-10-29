@@ -82,23 +82,22 @@ describe('init refresh — inline 版本戳驱动刷新（v8.3.315+）', () => {
   beforeEach(() => setup());
   afterEach(() => cleanup());
 
-  it('旧戳 inline 文件应备份并刷新（不再依赖旧特征枚举）', async () => {
+  it('旧戳 inline 文件应直接覆盖刷新（不再备份，v8.3.349+）', async () => {
     const dest = join(TEST_DIR, '.speccore', 'RULES', '01-PROJECT_STRUCTURE.inline.md');
-    // 旧戳 + 无任何过时标记词的内容 → 纯靠版本戳判定刷新
-    writeFileSync(dest, '<!-- speccore-asset-version: 8.3.300 -->\n## 项目结构\n\n旧版内容但无过时标记词');
-
+    // 旧戳 + 无任何过时标记词的内容 → 纯靠版本戳判定覆盖
+    writeFileSync(dest, '<!-- speccore-asset-version: 8.3.300 -->\n## 项目结 构\n\n旧版内容但无过时标记词');
+  
     await initRulesDir(TEST_DIR);
-
+  
     const updated = readFileSync(dest, 'utf-8');
     expect(updated).toContain('SOURCE.md');
     expect(updated).toContain('speccore-asset-version');
-
-    // 原文件已备份（时间戳重命名，safeWriteWithBackup 替换末尾 .md 后缀）
+  
+    // 带戳 = CLI 生成物：直接覆盖，不产生时间戳备份文件
     const backups = readdirSync(join(TEST_DIR, '.speccore', 'RULES')).filter(
       (f) => f.startsWith('01-PROJECT_STRUCTURE.inline-') && f.endsWith('.md')
     );
-    expect(backups.length).toBe(1);
-    expect(readFileSync(join(TEST_DIR, '.speccore', 'RULES', backups[0]), 'utf-8')).toContain('8.3.300');
+    expect(backups.length).toBe(0);
   });
 
   it('新版带戳 inline 文件不应被改写（幂等，无备份噪音）', async () => {
