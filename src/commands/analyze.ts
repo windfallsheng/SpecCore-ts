@@ -34,7 +34,7 @@ import { resolvePlatform } from '../core/platform-registry';
 import { warnIfIndexStale } from '../core/index-guard';
 import { loadConfigWithMeta } from '../core/unified-config';
 import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parsePlatformTypes, parsePlatformList, parseFeatureList } from '../core/spec-paths';
-import { computeAnalyzeManifest, computeFeatureBasedAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality, SKELETON_MARKER, PHASE1_INDEX_DOC_NAMES, PHASE1_DOC_NAMES, FEATURE_OVERVIEW_DOC_NAMES, resolveFeaturePlatformMap, pruneUninvolvedPlatformSkeletons } from '../core/spec-skeleton';
+import { computeAnalyzeManifest, computeFeatureBasedAnalyzeManifest, generateSkeleton, detectSkeletonProgress, buildSkeletonFileList, validateContentQuality, SKELETON_MARKER, PHASE1_INDEX_DOC_NAMES, PHASE1_DOC_NAMES, FEATURE_OVERVIEW_DOC_NAMES, resolveFeaturePlatformMap, pruneUninvolvedPlatformSkeletons, isSkeletonContent } from '../core/spec-skeleton';
 import { unifiedSearch, formatUnifiedContext, sliceCodeFile } from '../core/unified-retrieval';
 import { assembleUnitContext } from '../core/unit-context-assembler';
 // v8.3.225+: 调度循环状态机（方式 Y 宿主会话内闭环）
@@ -238,7 +238,7 @@ async function collectUnitClarifyDocs(specDir: string): Promise<string[]> {
       if (await pathExists(clarify)) {
         try {
           const content = await readFile(clarify, 'utf-8');
-          if (!/<!--\s*SPEC-SKELETON\s*-->/.test(content)) docs.push(clarify);
+          if (!isSkeletonContent(content)) docs.push(clarify);
         } catch { docs.push(clarify); }
       }
     }
@@ -1395,11 +1395,23 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
       // v8.3.267: 提前取真实功能单元名集合（只取一次），供幽灵路由判定
       const validFeatures = new Set(iterDir ? await parseFeatureList(iterDir) : []);
       for (const [filename, content] of clarifyBlocks) {
-        const { parseClarifiedRequirement, buildClarifiedHeader, stripLeadingFrontmatter } = await import('../core/requirement-clarifier');
-        const { content: cleaned } = parseClarifiedRequirement(content);
+        const { parseClarifiedRequirement, buildClarifiedHeader, stripLeadingFrontmatter, autoResolveOpenItems } = await import('../core/requirement-clarifier');
+        let { content: cleaned } = parseClarifiedRequirement(content);
         // v8.3.370: 剥离回传内容自带 frontmatter（剧本示例含 source/status），
         // 避免与 CLI 系统头拼接成双 frontmatter
-        const body = stripLeadingFrontmatter(cleaned);
+        const body0 = stripLeadingFrontmatter(cleaned);
+        // v8.3.374: auto 模式下自动解析 [OPEN] 待确认项并选择推荐方案
+        let body = body0;
+        if (options.auto) {
+          const resolved = autoResolveOpenItems(body0);
+          if (resolved.resolvedCount > 0) {
+            body = resolved.content;
+            logger.info(`   🤖 自动模式已解决 ${resolved.resolvedCount} 个 [OPEN] 待确认项`);
+            if (resolved.pendingCount > 0) {
+              logger.warn(`   ⚠️  ${resolved.pendingCount} 个 [OPEN] 项无推荐方案，保留待人工确认`);
+            }
+          }
+        }
         const header = buildClarifiedHeader(filename);
         const finalContent = header + body;
         // v8.3.373: 澄清产物按功能单元级一一对应落位——
@@ -1428,7 +1440,34 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         }
         await ensureDir(dirname(fp));
         await writeFile(fp, finalContent);
-        logger.info(`   ✅ 澄清产物已写入: ${relative(_projectRoot, fp)}`);
+        // v8.3.374: 澄清产物落盘后立即校验完整性——字数/章节覆盖/骨架残留/源文档比值
+        if (fp.includes('unit-') || fp.includes('global-clarified')) {
+          const { validateClarifyCompleteness } = await import('../core/requirement-clarifier');
+          // 尝试获取源文档字数（从 010-requirements/features/ 目录）
+          let sourceWordCount: number | undefined;
+          if (iterDir && seg && validFeatures.has(seg)) {
+            try {
+              const sourcePath = join(iterDir, '010-requirements', 'features', seg, 'SOURCE.md');
+              if (await pathExists(sourcePath)) {
+                const sourceContent = await readFile(sourcePath, 'utf-8');
+                sourceWordCount = sourceContent.trim().length;
+              }
+            } catch {}
+          }
+          const check = validateClarifyCompleteness(finalContent, sourceWordCount);
+          if (!check.pass) {
+            logger.warn(`   ⚠️  澄清产物完整性校验未通过: ${relative(_projectRoot, fp)}`);
+            if (check.suggestion) logger.warn(`      ${check.suggestion}`);
+            if (check.missingSections.length > 0) {
+              logger.warn(`      缺失章节: ${check.missingSections.join('、')}`);
+            }
+            logger.warn(`      字数: ${check.wordCount}（最低 300${sourceWordCount ? `，源文档 ${sourceWordCount} 字，比值 ${check.sourceRatio ?? '?'}` : ''}）`);
+          } else {
+            logger.info(`   ✅ 澄清产物完整性校验通过: ${check.wordCount} 字，章节覆盖 ${3 - check.missingSections.length}/3${sourceWordCount ? `，源文档比值 ${check.sourceRatio}` : ''}`);
+          }
+        } else {
+          logger.info(`   ✅ 澄清产物已写入: ${relative(_projectRoot, fp)}`);
+        }
       }
       // v8.3.370: 澄清产物落盘后立即刷新澄清报告——此前仅 JSON 分支收尾刷新，
       // 纯文本 [CLARIFY:] 回传路径不经过该分支，导致 CLARIFY_REPORT.md 断链
@@ -4877,13 +4916,13 @@ status: "clarified"
 # {功能名称}
 
 ## 背景与目标
-...
+...（完整保留源文档中的背景描述，不得删减）
 
 ## 用户故事
-...
+...（完整保留源文档中的用户故事/功能描述）
 
 ## 功能规格
-...
+...（专业化整理后的详细功能规格）
 
 ## 验收标准（AC）
 - [ ] ...
@@ -4893,6 +4932,19 @@ status: "clarified"
 
 ## 依赖与约束
 ...
+
+## 待确认项（如有）
+
+### [OPEN] 问题标题
+
+> **现状**：需求原文如何描述（或缺失了什么）
+> **影响**：不确认会导致什么后果
+
+| 方案 | 描述 | 评估 |
+|:---|:---|:---|
+| A（推荐 ⭐） | ... | 优点/缺点/适用场景 |
+| B | ... | ... |
+| C | ... | ... |
 \`\`\`
 `;
     prompt += `**Step 5**: 用 Read 工具验证文件已正确写入 \`{迭代}/020-specs/{feature-name}/overview/CLARIFY.md\`\n`;
@@ -4900,8 +4952,16 @@ status: "clarified"
     prompt += `### ⚠️ 重要提醒\n\n`;
     prompt += `- **如果输出中没有 [CLARIFY:xxx] 标记的澄清文档，--apply 阶段将拒绝写入所有分析结果**\n`;
     prompt += `- CLI 会在接收 --apply 时先解析 [CLARIFY:xxx] 标记，写入 020-specs/{feature}/overview/CLARIFY.md（模块）或 020-specs/overview/CLARIFY.md（全局），然后才处理 [DOC:xxx] 标记\n`;
-    prompt += `- 不要跳过此步骤，不要假设需求已经够清晰\n`;
-    prompt += `- 如果原始描述不完整，在澄清文档中标注「待补充」而不是自行编造\n\n`;
+    prompt += `- 不要跳过此步骤，不要假设需求已经够清晰\n\n`;
+    prompt += `### ⚠️ 黄金需求完整性要求（v8.3.374）\n\n`;
+    prompt += `- **必须包含源文档全部内容**：澄清产物 = 源文档完整内容 + 专业化整理 + 待确认项标注\n`;
+    prompt += `- 下游 analyze/taskify/execute 只读这份文档，不再回翻源文档\n`;
+    prompt += `- 字数不得少于源文档的 80%（允许精简表述，禁止删减内容）\n\n`;
+    prompt += `### ⚠️ [OPEN] 待确认项格式要求（v8.3.374）\n\n`;
+    prompt += `- 每个 [OPEN] 项必须包含：现状、影响、方案表（见模板「待确认项」章节）\n`;
+    prompt += `- 方案表中必须标注一个推荐项（带 ⭐ 标记）\n`;
+    prompt += `- 自动模式下 CLI 将自动选择推荐方案，替换 [OPEN] 为 [RESOLVED]\n`;
+    prompt += `- 用户可手动编辑文档，将 [OPEN] 改为 [RESOLVED: 方案X] 并注明理由\n\n`;
     prompt += `---\n\n`;
   }
 

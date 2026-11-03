@@ -46,9 +46,10 @@ describe('extractOverviewContext 单元级黄金需求（v8.3.373）', () => {
     await mkdir(join(iterDir, '020-specs', 'overview'), { recursive: true });
 
     // 无 requirements/ 目录、无 unit-*.md
+    // v8.3.374: 内容必须 >= 100 字才能通过 isSkeletonContent 检测
     await writeFile(
       join(iterDir, '020-specs', 'overview', 'REQUIREMENT.md'),
-      '# 需求规格\n\n## 预订模块\n\n系统提供预订功能，支持在线支付。\n\n## 支付模块\n\n独立支付网关。\n',
+      '# 需求规格\n\n## 预订模块\n\n系统提供预订功能，支持在线支付和到店支付。用户可以在预订后24小时内免费取消。预订流程包括选择房型、填写入住人信息、确认订单并支付。\n\n## 支付模块\n\n独立支付网关，支持微信支付、支付宝、银联等多种支付渠道。支付成功后生成支付凭证。\n',
     );
 
     // 使用中文单元名（与真实场景一致，关键词拆分后匹配文档标题）
@@ -66,19 +67,20 @@ describe('extractOverviewContext 单元级黄金需求（v8.3.373）', () => {
 
     await writeFile(
       join(iterDir, '020-specs', 'requirements', 'unit-支付.md'),
-      '# 支付单元精准需求\n\n- 支持微信和支付宝\n',
+      '# 支付单元精准需求\n\n- 支持微信和支付宝\n- 支付成功后生成电子凭证\n- 支持退款和部分退款\n',
     );
+    // v8.3.374: 内容必须 >= 100 字才能通过 isSkeletonContent 检测
     await writeFile(
       join(iterDir, '020-specs', 'overview', 'REQUIREMENT.md'),
-      '# 需求规格\n\n## 支付\n\n系统提供支付功能。\n',
+      '# 需求规格\n\n## 支付模块\n\n系统提供完整的支付功能，支持微信支付、支付宝、银联等多种支付渠道。用户支付成功后系统自动生成支付凭证，并支持全额退款和部分退款场景。支付流程包括选择支付方式、确认支付金额、完成支付操作。\n',
     );
 
-    // 中文单元名「支付」匹配 REQUIREMENT.md 的「## 支付」
+    // 中文单元名「支付」匹配 REQUIREMENT.md 的「## 支付模块」
     const ctx = await extractOverviewContext(iterDir, '支付', ['backend-service']);
 
     // 单元级精准注入
     expect(ctx).toContain('支持微信和支付宝');
-    // overview 关键词也注入
+    // overview 关键词也注入（v8.3.374: 因为 REQUIREMENT.md 不再是骨架）
     expect(ctx).toContain('REQUIREMENT.md');
     expect(ctx).toContain('支付功能');
   });

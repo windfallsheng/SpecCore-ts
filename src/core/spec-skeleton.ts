@@ -21,6 +21,20 @@ import { logger } from '../utils/logger';
 /** 骨架标记 — 用于检测文件是否仍为占位状态 */
 export const SKELETON_MARKER = '<!-- SPEC-SKELETON -->';
 
+/**
+ * v8.3.374: 公共骨架骟判定谓词——多消费点共享，避免各处内联重复判定。
+ * 判定条件：含 SPEC-SKELETON 标记 或 有效内容不足 minChars 字符（纯标题/空表格）。
+ * @param minChars 最小有效字数阈值，默认 100
+ * 适用：REQUIREMENT.md / CLARIFY.md / ANALYSIS.md / TECH.md 等所有 AI 填充文档。
+ */
+export function isSkeletonContent(content: string | undefined | null, minChars = 100): boolean {
+  if (!content) return true;
+  const trimmed = content.trim();
+  if (trimmed.length < minChars) return true;
+  if (trimmed.includes(SKELETON_MARKER)) return true;
+  return false;
+}
+
 /** 判断是否为后端平台（用于骨架模板差异化） */
 function isBackendPlatform(platform: string): boolean {
   return platform === 'backend' || platform.startsWith('后台') || platform.includes('服务') || /-(service|api|server|backend)$/i.test(platform);

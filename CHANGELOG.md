@@ -1,5 +1,15 @@
 # Changelog
 
+## v8.3.374 (2026-11-03) — 黄金需求自包含 + 澄清三段式 + 消费链认 CLARIFY.md
+
+- **公共骨架判定谓词 `isSkeletonContent`**：抽取自 spec-skeleton.ts，多消费点共享。`extractOverviewContext` / `taskify` / `analyze` 统一调用，避免各处内联重复判定。支持可选阈值参数（默认 100 字，可传 200）。
+- **消费链认 CLARIFY.md**：`extractOverviewContext` 发现 `overview/REQUIREMENT.md` 是骨架时，自动切读功能单元级 `CLARIFY.md`（`020-specs/{feature}/overview/CLARIFY.md`）→ 全局级 `CLARIFY.md`（`020-specs/overview/CLARIFY.md`）→ 原始需求切片。taskify prompt 文档清单动态提示真实主源优先级。
+- **澄清产物完整性校验升级**：`validateClarifyCompleteness` 新增源文档字数对比——黄金需求字数必须 ≥ 源文档 80%，不足则报警。analyze 落盘后立即校验并输出比值日志。
+- **待确认项三段式格式**：澄清 prompt 模板升级为「现状 / 影响 / 方案表」三段式，要求 AI 输出带推荐标记（⭐）的方案对比表。`autoResolveOpenItems` 自动选择推荐方案并保留决策记录。
+- **黄金需求自包含**：澄清 prompt 强制要求「输出必须包含源文档全部内容 + 专业化整理 + 待确认项标注」，下游 analyze/taskify/execute 只读这一份，不再回翻源文档。
+
+---
+
 ## v8.3.373 (2026-11-03) — 澄清产物按功能单元级一一对应落位 + 三级优先级读取 + 下游精准消费
 
 - **澄清产物落位对齐功能单元**：analyze 澄清回传内容不再按源文档名落位，改为按功能单元名一一对应——单元级写入 `020-specs/requirements/unit-{feature}.md`，全局级写入 `020-specs/requirements/global-clarified.md`，文档级 `{slug}-clarified.md` 保留为兑底。此前「一份源文档切多个功能单元」时澄清产物无法与单元对应，taskify 拿不到精准黄金需求。

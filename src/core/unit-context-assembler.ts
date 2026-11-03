@@ -17,6 +17,7 @@ import { findRelevantCode, formatSourceReadingList, SourceReadingMatch } from '.
 import { loadFreshKnowledgeGraph } from './knowledge-graph';
 import { unifiedSearch } from './unified-retrieval';
 import { GLOBAL_SPECS_DIR } from './spec-paths';
+import { isSkeletonContent } from './spec-skeleton';
 import { resolveUnitSourcePath } from './feature-source';
 import { processMarkdownContent } from './prompt-builder';
 import { loadVisionConfig } from './vision-engine';
@@ -703,26 +704,65 @@ export async function extractOverviewContext(
     } catch {}
   }
 
-  // 1. 从 overview/REQUIREMENT.md 提取相关章节
+  // 1. 从 overview/REQUIREMENT.md 提取相关章节（v8.3.374: 骨架检测 + CLARIFY.md 切读）
   const reqPath = join(overviewDir, 'REQUIREMENT.md');
+  let reqHasContent = false;
   if (await pathExists(reqPath)) {
     try {
       const content = await readFile(reqPath, 'utf-8');
-      const lines = content.split(/\r?\n/);
-      const relevant: string[] = [];
-      let inRelevantSection = false;
-      for (const line of lines) {
-        if (line.startsWith('## ') || line.startsWith('### ')) {
-          inRelevantSection = matchLine(line);
+      if (!isSkeletonContent(content)) {
+        reqHasContent = true;
+        const lines = content.split(/\r?\n/);
+        const relevant: string[] = [];
+        let inRelevantSection = false;
+        for (const line of lines) {
+          if (line.startsWith('## ') || line.startsWith('### ')) {
+            inRelevantSection = matchLine(line);
+          }
+          if (inRelevantSection || (line.startsWith('|') && matchLine(line))) {
+            relevant.push(line);
+          }
         }
-        if (inRelevantSection || (line.startsWith('|') && matchLine(line))) {
-          relevant.push(line);
+        if (relevant.length > 0) {
+          ctx.push(`### 📝 需求规格（REQUIREMENT.md 相关片段）\n\`\`\`\n${relevant.slice(0, 60).join('\n')}\n\`\`\``);
         }
-      }
-      if (relevant.length > 0) {
-        ctx.push(`### 📋 需求规格（REQUIREMENT.md 相关片段）\n\`\`\`\n${relevant.slice(0, 60).join('\n')}\n\`\`\``);
       }
     } catch {}
+  }
+
+  // v8.3.374: REQUIREMENT.md 是骨架或不存在时，切读功能单元级 CLARIFY.md（真实澄清产物）
+  if (!reqHasContent) {
+    // 查找匹配当前单元名的功能单元目录
+    try {
+      const specEntries = await readdir(specsBase, { withFileTypes: true });
+      for (const e of specEntries) {
+        if (!e.isDirectory() || e.name === 'overview' || e.name === 'requirements' || e.name === 'platforms') continue;
+        // 单元名匹配（精确或包含）
+        if (e.name !== unitName && !e.name.includes(unitName) && !unitName.includes(e.name)) continue;
+        const featureClarify = join(specsBase, e.name, 'overview', 'CLARIFY.md');
+        if (await pathExists(featureClarify)) {
+          try {
+            const cc = await readFile(featureClarify, 'utf-8');
+            if (!isSkeletonContent(cc)) {
+              ctx.push(`### 📝 需求澄清产物（${e.name}/overview/CLARIFY.md）\n\`\`\`\n${cc.slice(0, 8000)}\n\`\`\``);
+              break; // 找到一个有效的就停
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
+    // 全局 CLARIFY.md（跨单元共享的业务规则/约定）
+    // v8.3.374: 全量注入——全局澄清文档本身就是跨单元共享资产，关键词过滤会漏掉术语表等通用内容
+    const globalClarify = join(overviewDir, 'CLARIFY.md');
+    if (await pathExists(globalClarify)) {
+      try {
+        const gc = await readFile(globalClarify, 'utf-8');
+        if (!isSkeletonContent(gc)) {
+          ctx.push(`### 📝 全局澄清产物（overview/CLARIFY.md）\n\`\`\`\n${gc.slice(0, 8000)}\n\`\`\``);
+        }
+      } catch {}
+    }
   }
 
   // 2. 从 platforms/_shared/_MODULES.md 提取相关模块

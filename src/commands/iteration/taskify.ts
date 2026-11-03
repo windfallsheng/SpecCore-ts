@@ -15,7 +15,7 @@ import { warnIfIndexStale } from '../../core/index-guard';
 import { GLOBAL_SPECS_DIR, parsePlatformList, parseFeatureList } from '../../core/spec-paths';
 import { isTaskModuleDirName } from '../../core/task-paths';
 import { WILDCARD } from '../../core/unit-staffing';
-import { SKELETON_MARKER, buildQualityRubRIC } from '../../core/spec-skeleton';
+import { SKELETON_MARKER, buildQualityRubRIC, isSkeletonContent } from '../../core/spec-skeleton';
 import { buildAutoModeInstruction, writeQuestions, extractQuestionsFromText } from '../../core/questions';
 import { PipelineEngine } from '../../core/pipeline-engine';
 import { defaultAdapter, dispatchSubagent } from '../../core/agent-adapter';
@@ -323,7 +323,7 @@ async function preSplitGate(iterationDir: string): Promise<{
   let funcMapIsSkeleton = false;
   if (funcMapExists) {
     const content = await readFile(funcMapPath, 'utf-8');
-    funcMapIsSkeleton = content.includes('<!-- SPEC-SKELETON -->') || content.trim().length < 100;
+    funcMapIsSkeleton = isSkeletonContent(content);
   }
   items.push({
     path: funcMapPath,
@@ -341,7 +341,7 @@ async function preSplitGate(iterationDir: string): Promise<{
   let reqIsSkeleton = false;
   if (reqExists) {
     const content = await readFile(reqPath, 'utf-8');
-    reqIsSkeleton = content.includes('<!-- SPEC-SKELETON -->') || content.trim().length < 100;
+    reqIsSkeleton = isSkeletonContent(content);
   }
   items.push({
     path: reqPath,
@@ -362,7 +362,7 @@ async function preSplitGate(iterationDir: string): Promise<{
   let analysisGateIsSkeleton = false;
   if (analysisGateExists) {
     const ac = await readFile(analysisGatePath, 'utf-8');
-    analysisGateIsSkeleton = ac.includes('<!-- SPEC-SKELETON -->') || ac.trim().length < 100;
+    analysisGateIsSkeleton = isSkeletonContent(ac);
   }
   if (!analysisGateExists || analysisGateIsSkeleton) {
     try {
@@ -371,7 +371,7 @@ async function preSplitGate(iterationDir: string): Promise<{
         const fAnalysisPath = join(specDir, f, 'overview', 'ANALYSIS.md');
         if (!(await pathExists(fAnalysisPath))) continue;
         const c = await readFile(fAnalysisPath, 'utf-8');
-        if (!c.includes('<!-- SPEC-SKELETON -->') && c.trim().length >= 100) {
+        if (!isSkeletonContent(c)) {
           analysisGateExists = true;
           analysisGateIsSkeleton = false;
           break;
@@ -397,7 +397,7 @@ async function preSplitGate(iterationDir: string): Promise<{
     let featureReqIsSkeleton = false;
     if (featureReqExists) {
       const content = await readFile(featureReqPath, 'utf-8');
-      featureReqIsSkeleton = content.includes('<!-- SPEC-SKELETON -->') || content.trim().length < 100;
+      featureReqIsSkeleton = isSkeletonContent(content);
     }
     items.push({
       path: featureReqPath,
@@ -1439,20 +1439,20 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
       // 此前仅按空/骨架判断，旧聚合文档与新切分单元不同步时 taskify 用陈旧数据拆分，
       // 漏掉新单元（--modules 指定新单元也匹配不到任何 section，反而全量拆分）。
       let reqContent2IsStale = false;
-      if (reqContent2 && reqContent2.trim().length >= 200 && !reqContent2.includes('<!-- SPEC-SKELETON -->')) {
+      if (reqContent2 && !isSkeletonContent(reqContent2, 200)) {
         const featuresAll = await parseFeatureList(iterationDir);
         for (const feature of featuresAll) {
           if (!reqContent2.includes(feature)) { reqContent2IsStale = true; break; }
         }
       }
-      if (!reqContent2 || reqContent2.trim().length < 200 || reqContent2.includes('<!-- SPEC-SKELETON -->') || reqContent2IsStale) {
+      if (!reqContent2 || isSkeletonContent(reqContent2, 200) || reqContent2IsStale) {
         const featureReqParts: string[] = [];
         const features = await parseFeatureList(iterationDir);
         for (const feature of features) {
           const featureReqPath = join(specDir2, feature, 'overview', 'REQUIREMENT.md');
           if (await pathExists(featureReqPath)) {
             const content = await readFile(featureReqPath, 'utf-8');
-            if (content.trim().length > 100 && !content.includes('<!-- SPEC-SKELETON -->')) {
+            if (!isSkeletonContent(content)) {
               featureReqParts.push(`# ${feature}\n\n${content.trim()}`);
             }
           }
@@ -4129,7 +4129,23 @@ async function buildSplitPrompt(
   p += `1. \`CONSTITUTION.md\` — 技术宪法（端列表、命名规范、技术栈）\n`;
   p += `2. \`010-requirements/INDEX.md\` — 需求全貌索引\n`;
   p += `3. \`010-requirements/converted/*.md\` — 转换后的需求文档\n`;
-  p += `4. \`020-specs/overview/REQUIREMENT.md\` — 黄金需求文档（聚合版）\n`;
+  p += `4. \`020-specs/overview/REQUIREMENT.md\` — 黄金需求文档（聚合版，可能为骨架）\n`;
+  // v8.3.374: 检测 REQUIREMENT.md 是否骨架，动态提示真实主源
+  const overviewReqPath = join(iterationDir || '', '020-specs', 'overview', 'REQUIREMENT.md');
+  let overviewReqIsSkeleton = true;
+  try {
+    if (await pathExists(overviewReqPath)) {
+      const rc = await readFile(overviewReqPath, 'utf-8');
+      overviewReqIsSkeleton = isSkeletonContent(rc, 200);
+    }
+  } catch {}
+  if (overviewReqIsSkeleton) {
+    p += `   > ⚠️ 该文件当前为骨架，真实需求请读以下主源（按优先级）：\n`;
+    p += `   > 1. \`020-specs/requirements/unit-{功能单元}.md\` — 单元级黄金需求（澄清后的完整需求）\n`;
+    p += `   > 2. \`020-specs/{功能单元}/overview/CLARIFY.md\` — 功能单元澄清产物（真实内容）\n`;
+    p += `   > 3. \`020-specs/overview/CLARIFY.md\` — 全局澄清产物（跨单元业务规则）\n`;
+    p += `   > 4. \`010-requirements/features/{功能单元}/SOURCE.md\` — 原始需求切片（最终兜底）\n`;
+  }
   p += `5. \`020-specs/overview/TECH.md\` — 全局技术方案\n`;
   p += `6. \`020-specs/overview/ANALYSIS.md\` — 功能分析\n`;
   p += `7. \`020-specs/overview/FUNCTION_MAP.md\` — 功能单元与端的映射（参考，权威来源为 010-requirements/features/ 目录）\n`;
@@ -4161,7 +4177,9 @@ async function buildSplitPrompt(
   p += `> 📖 **读取策略**：\n`;
   p += `> - 先 Read 010-requirements/features/ 目录了解功能单元划分（权威来源），FUNCTION_MAP.md 作功能×端映射参考\n`;
   p += `> - 按功能单元逐个处理，每次只 Read 当前单元相关的文档\n`;
-  p += `> - reqContent 从 REQUIREMENT.md 和对应功能模块的需求文档提取\n`;
+  p += `> - reqContent 优先读 \`020-specs/{功能单元}/overview/CLARIFY.md\`（澄清后的真实需求），\n`;
+  p += `>   若不存在则读 \`020-specs/requirements/unit-{功能单元}.md\`（单元级黄金需求），\n`;
+  p += `>   最后兜底 \`010-requirements/features/{功能单元}/SOURCE.md\`（原始需求切片）\n`;
   p += `> - techContent 从 TECH.md 和对应功能模块的技术规格提取\n`;
   p += `> - devGuideContent 从 DEV_GUIDE.md 提取\n\n`;
 
@@ -4412,7 +4430,10 @@ async function buildSplitPrompt(
   p += `> **reqContent 质量要求（必填，禁止模板化）**：\n`;
   p += `>   - 必须是**具体的、可执行的需求描述**，不是"待补充"或"参考全局文档"\n`;
   p += `>   - 包含：业务规则（含边界条件）、数据模型（字段/类型/约束）、接口清单（方法/路径/参数/响应）\n`;
-  p += `>   - 从 020-specs/overview/REQUIREMENT.md 和 020-specs/{功能模块}/{对应端}/TECH.md 中提取本任务相关的具体内容\n`;
+  p += `>   - 优先从 020-specs/{功能模块}/overview/CLARIFY.md（澄清产物）提取，\n`;
+  p += `>     其次从 020-specs/requirements/unit-{功能模块}.md（黄金需求）、\n`;
+  p += `>     最后从 020-specs/overview/REQUIREMENT.md（聚合版，可能为骨架）提取\n`;
+  p += `>     配合 020-specs/{功能模块}/{对应端}/TECH.md 中的技术规格\n`;
   p += `>   - 直接写入 00-specs/REQ.md，执行时 AI 不再重新分析需求\n`;
   p += `> **techContent 质量要求（必填，禁止模板化）**：\n`;
   p += `>   - 必须是**具体的技术实现方案**，不是框架模板\n`;

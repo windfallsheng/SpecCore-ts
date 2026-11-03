@@ -2,6 +2,16 @@
 
 ---
 
+## v8.3.374 (2026-11-03) — Self-contained golden requirements + 3-part clarification format + consumption chain reads CLARIFY.md
+
+- **Shared skeleton predicate `isSkeletonContent`**: Extracted from spec-skeleton.ts, shared across multiple consumers. `extractOverviewContext` / `taskify` / `analyze` all call the unified function instead of inline duplicated checks. Supports optional threshold parameter (default 100 chars, can pass 200).
+- **Consumption chain reads CLARIFY.md**: When `extractOverviewContext` finds `overview/REQUIREMENT.md` is a skeleton, it automatically falls back to feature-level `CLARIFY.md` (`020-specs/{feature}/overview/CLARIFY.md`) → global-level `CLARIFY.md` (`020-specs/overview/CLARIFY.md`) → original source slice. taskify prompt document list dynamically hints at real primary source priority.
+- **Clarification completeness verification upgraded**: `validateClarifyCompleteness` adds source document word count comparison — golden requirement word count must be ≥ 80% of source document, otherwise warns. analyze validates immediately after drop and outputs ratio log.
+- **3-part clarification format for open items**: Clarification prompt template upgraded to "Status / Impact / Options table" 3-part format, requiring AI to output option comparison tables with recommendation markers (⭐). `autoResolveOpenItems` auto-selects recommended option and preserves decision record.
+- **Self-contained golden requirements**: Clarification prompt enforces "output must include all source document content + professional refinement + open item annotations". Downstream analyze/taskify/execute reads only this one document, never falls back to source documents.
+
+---
+
 ## v8.3.373 (2026-11-03) — Clarification outputs aligned to feature units + 3-tier priority reading + precise downstream consumption
 
 - **Clarification drop aligned to feature units**: analyze clarification responses now drop to `020-specs/requirements/unit-{feature}.md` (unit-level, one-to-one with feature units), `020-specs/requirements/global-clarified.md` (global-level), with `{slug}-clarified.md` retained as fallback (doc-level). Previously, when one source doc was split into multiple feature units, clarification outputs couldn't map back to individual units.

@@ -56,6 +56,192 @@ export function detectProfessionalLevel(content: string): 'high' | 'medium' | 'l
 }
 
 /**
+ * v8.3.374: 澄清产物完整性校验结果
+ */
+export interface ClarifyCompletenessResult {
+  /** 是否通过完整性校验 */
+  pass: boolean;
+  /** 缺失的必含章节 */
+  missingSections: string[];
+  /** 字数是否达标 */
+  wordCountOk: boolean;
+  /** 实际字数 */
+  wordCount: number;
+  /** 源文档字数（如有） */
+  sourceWordCount?: number;
+  /** 源文档字数比（产物字数 / 源文档字数） */
+  sourceRatio?: number;
+  /** 建议（不通过时给出修复建议） */
+  suggestion?: string;
+}
+
+/**
+ * v8.3.374: 澄清产物完整性校验——检查 unit-{feature}.md 是否是一份合格的黄金需求。
+ * 校验维度：
+ *   1. 字数 ≥ 300（排除「只写了标题没写内容」的假澄清）
+ *   2. 必含章节覆盖（背景/目标、功能规格/用户故事、验收标准 至少命中 2/3）
+ *   3. 不含 SPEC-SKELETON 标记（骨架不算澄清）
+ *   4. v8.3.374: 字数 ≥ 源文档字数 × 0.8（黄金需求必须包含源文档全部内容）
+ * @param sourceWordCount 可选，源文档字数。传入后会做比值校验。
+ */
+export function validateClarifyCompleteness(content: string, sourceWordCount?: number): ClarifyCompletenessResult {
+  const result: ClarifyCompletenessResult = {
+    pass: true,
+    missingSections: [],
+    wordCountOk: true,
+    wordCount: content?.trim().length ?? 0,
+    sourceWordCount,
+  };
+
+  if (!content || content.trim().length < 50) {
+    result.pass = false;
+    result.wordCountOk = false;
+    result.missingSections = ['背景/目标', '功能规格/用户故事', '验收标准'];
+    result.suggestion = '澄清产物内容过少（< 50 字），疑似未填写。请重新执行澄清，输出完整需求文档。';
+    return result;
+  }
+
+  // 骨架检测
+  if (content.includes('<!-- SPEC-SKELETON -->')) {
+    result.pass = false;
+    result.suggestion = '澄清产物仍含 SPEC-SKELETON 标记，说明 AI 未覆盖骨架。请重新执行澄清。';
+    return result;
+  }
+
+  // 字数检测（黄金需求至少 300 字才有实质内容）
+  if (result.wordCount < 300) {
+    result.wordCountOk = false;
+    result.pass = false;
+    result.suggestion = `澄清产物仅 ${result.wordCount} 字，不足 300 字。请补充功能规格、验收标准、业务规则等章节。`;
+  }
+
+  // v8.3.374: 源文档字数比检测（黄金需求必须包含源文档全部内容）
+  if (sourceWordCount && sourceWordCount > 0) {
+    const ratio = result.wordCount / sourceWordCount;
+    result.sourceRatio = Math.round(ratio * 100) / 100;
+    if (ratio < 0.8) {
+      result.pass = false;
+      result.wordCountOk = false;
+      result.suggestion = `澄清产物字数（${result.wordCount}）不足源文档（${sourceWordCount}）的 80%（实际 ${Math.round(ratio * 100)}%）。黄金需求必须包含源文档全部内容，请补充缺失内容。`;
+    }
+  }
+
+  // 必含章节覆盖检测（三选二）
+  const requiredSections = [
+    { name: '背景/目标', patterns: [/背景|目标|愿景|目的|why|background|objective/i, /##.*(?:背景|目标|愿景)/] },
+    { name: '功能规格/用户故事', patterns: [/功能规格|功能清单|用户故事|feature|specification|user story/i, /##.*(?:功能|用户|场景|模块)/] },
+    { name: '验收标准', patterns: [/验收标准|验收条件|AC[:：]|acceptance criteria|测试标准/i, /##.*(?:验收|AC)/] },
+  ];
+
+  for (const section of requiredSections) {
+    const hit = section.patterns.some(p => p.test(content));
+    if (!hit) {
+      result.missingSections.push(section.name);
+    }
+  }
+
+  // 三选二：缺失 ≥ 2 个必含章节则不通过
+  if (result.missingSections.length >= 2) {
+    result.pass = false;
+    result.suggestion = `澄清产物缺失必含章节：${result.missingSections.join('、')}。请补充后重新落盘。`;
+  }
+
+  return result;
+}
+
+/**
+ * v8.3.374: [OPEN] 项解析结果
+ */
+export interface OpenItem {
+  /** 原始问题描述 */
+  question: string;
+  /** 可选方案列表 */
+  options: string[];
+  /** 推荐方案索引（-1 表示无推荐） */
+  recommendedIndex: number;
+  /** 在原文中的起始位置 */
+  startIndex: number;
+  /** 在原文中的结束位置 */
+  endIndex: number;
+}
+
+/**
+ * v8.3.374: 解析文档中的 [OPEN] 待确认项。
+ * 匹配格式：
+ *   - [OPEN] 问题描述？
+ *     - 方案 A: ...
+ *     - 方案 B: ...（推荐）
+ *     - 方案 C: ...
+ */
+export function parseOpenItems(content: string): OpenItem[] {
+  const items: OpenItem[] = [];
+  const openRegex = /^- \[OPEN\]\s+(.+)$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = openRegex.exec(content)) !== null) {
+    const question = match[1].trim();
+    const startIndex = match.index;
+    // v8.3.374: 逐行扫描选项（以 "  - " 或 "\t- " 开头），遇到非选项行即停
+    const afterOpen = content.slice(match.index + match[0].length + 1); // +1 skip newline
+    const lines = afterOpen.split('\n');
+    const options: string[] = [];
+    let recommendedIndex = -1;
+    let consumedChars = 0;
+    for (const line of lines) {
+      if (/^(?:\s{2,}|\t)-\s+/.test(line)) {
+        const optText = line.replace(/^\s*-\s+/, '').trim();
+        options.push(optText);
+        if (/推荐|recommended|\u2b50|\u2705/i.test(optText)) {
+          recommendedIndex = options.length - 1;
+        }
+        consumedChars += line.length + 1; // +1 for newline
+      } else {
+        break; // 空行或非缩进行 → 停止扫描
+      }
+    }
+    const endIndex = startIndex + match[0].length + consumedChars;
+    items.push({ question, options, recommendedIndex, startIndex, endIndex });
+  }
+  return items;
+}
+
+/**
+ * v8.3.374: 自动模式——将 [OPEN] 项替换为 [RESOLVED: 推荐方案]。
+ * 规则：
+ *   - 有推荐项 → 自动选择推荐项，替换为 [RESOLVED: 方案X]
+ *   - 无推荐项 → 保留 [OPEN] 不替换（等待人工确认）
+ * 返回 { content: 替换后内容, resolvedCount: 已解决数, pendingCount: 待人工确认数 }
+ */
+export function autoResolveOpenItems(content: string): {
+  content: string;
+  resolvedCount: number;
+  pendingCount: number;
+} {
+  const items = parseOpenItems(content);
+  if (items.length === 0) return { content, resolvedCount: 0, pendingCount: 0 };
+
+  let result = content;
+  let resolvedCount = 0;
+  let pendingCount = 0;
+
+  // 从后向前替换，避免索引偏移
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (item.recommendedIndex >= 0) {
+      // 有推荐项：替换为 [RESOLVED] + 决策记录
+      const chosenOption = item.options[item.recommendedIndex].replace(/（推荐\s*⭐?\s*）|\(recommended\)/i, '').trim();
+      const resolvedText = `- [RESOLVED: ${chosenOption}] ${item.question}\n  > 自动决策理由：该方案在澄清阶段被标记为推荐项，自动模式已采纳。`;
+      result = result.slice(0, item.startIndex) + resolvedText + result.slice(item.endIndex);
+      resolvedCount++;
+    } else {
+      // 无推荐项：保留 [OPEN] 但标记为待人工确认
+      pendingCount++;
+    }
+  }
+
+  return { content: result, resolvedCount, pendingCount };
+}
+
+/**
  * 构建需求专业化 Prompt
  * 让 AI 以专业产品经理角色整理 PRD
  */
