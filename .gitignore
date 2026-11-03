@@ -83,3 +83,16 @@ outputs/speccore-dashboard.html
 # SpecCore generated iterations
 .speccore/ITERATIONS/
 outputs/*.md
+
+# 测试迭代目录（测试时生成，勿提交）
+Iteration-002-test-feature-module/
+Iteration-003-test-doc-trim/
+
+# 验证/冒烟测试产物
+reports/
+.patch-tmp/
+outputs/verify-*.png
+outputs/step*.png
+outputs/cu-*.png
+outputs/graph-*.png
+outputs/fonts/
