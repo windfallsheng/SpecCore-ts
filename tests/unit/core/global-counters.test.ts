@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, mkdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { nextTaskId, nextPlanId, nextIterationId } from '../../../src/core/global-counters';
@@ -55,5 +55,37 @@ describe('nextPlanId / nextIterationId slug', () => {
     const { id } = await nextIterationId('会议室预订');
     expect(id).toMatch(/^Iteration-\d{3}-hui-yi-shi-yu-ding$/);
     expect(id).not.toContain('iter-');
+  });
+});
+
+describe('nextIterationId 用户指定数字名（v8.3.372）', () => {
+  it('纯数字名以用户为准作序号 + topic 英译 slug', async () => {
+    const { id, num } = await nextIterationId('261115', 'payment');
+    expect(id).toBe('Iteration-261115-payment');
+    expect(num).toBe(261115);
+  });
+
+  it('中文 topic 拼音兜底（逐字连字符）', async () => {
+    const { id } = await nextIterationId('261115', '支付');
+    expect(id).toBe('Iteration-261115-zhi-fu');
+  });
+
+  it('数字名不推进全局计数器（自动编号与用户命名各走各的）', async () => {
+    const a = await nextIterationId('先普通创建');
+    const custom = await nextIterationId('261115', 'payment');
+    expect(custom.id).toBe('Iteration-261115-payment');
+    const b = await nextIterationId('再普通创建');
+    const numA = parseInt(a.id.match(/^Iteration-(\d+)/)![1], 10);
+    const numB = parseInt(b.id.match(/^Iteration-(\d+)/)![1], 10);
+    // 261115 不插队：计数器只走自己的一格（a → b）
+    expect(numB).toBe(numA + 1);
+  });
+
+  it('与已有目录重名时拼内容 hash 兜底（同输入幂等）', async () => {
+    await mkdir(join(tmpDir, 'Iteration-261116-payment'), { recursive: true });
+    const r1 = await nextIterationId('261116', 'payment');
+    expect(r1.id).toMatch(/^Iteration-261116-payment-[0-9a-f]{6}$/);
+    const r2 = await nextIterationId('261116', 'payment');
+    expect(r2.id).toBe(r1.id);
   });
 });

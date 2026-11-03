@@ -1,5 +1,14 @@
 # Changelog
 
+## v8.3.372 (2026-11-03) — 迭代命名以用户为准：指名提取 + 数字名序号 + 死分支复活
+
+- **「名字/名为 X」准确提取（用户明确意图优先）**：「创建一个迭代名字 261115，主要功能是支付」旧逻辑被 `创建(.+)迭代` 贪婪捕获成 name="一个"，用户指定的名字蒸发。新增指名提取（「名字/名为/编号 X」）与主题提取（「主要功能是/主题 X」→ `--topic`），限定 iteration_create 意图防误伤；虚词碎片（「一个/个/新」）不再配当迭代名。
+- **纯数字名以用户为准作迭代序号**：`nextIterationId` 支持用户指定数字（如 261115）→ `Iteration-261115-{slug}`，不再被全局计数器覆盖；与已有目录重名时拼内容 md5 hash 兜底（同输入同 hash，幂等）。自定义序号不推进计数器：scanMaxIds 扫目录取最大值，自动编号自然对齐防撞。
+- **中文主题英译分层**：CLI 拼音兜底（「支付」→ zhi-fu），spec-iteration-create 剧本新增英译规则（宿主 AI 执行前把中文 `--topic` 英译成 payment）。
+- **ask 死分支复活 + 死参数清除**：ask 引擎 `best.command === 'iteration-create'`（连字符）与 mapping.id 的空格版 'iteration create' 永远对不上——死分支，name/topic 拼装实际走 else 分支且多拼死参数 `--iteration`（iteration create 未注册）导致命令 fail(1)。修复：分支判断对齐空格版 + iteration_create 句中的「迭代」是命令宾语不再提取为 params.iteration。
+
+---
+
 ## v8.3.371 (2026-11-03) — 盘点器最后三处瑕疵收口：实体/术语信噪比、知识图谱实体数、澄清阶段文案
 
 - **DATA_MODEL / GLOSSARY 信噪比过滤**：旧启发式把 `generateGraphReport`（函数）当 Entity、把 `core`/`commands`/`index.ts`（目录/文件名）当术语。修复：路径正则收紧词边界（旧 `/po|vo/` 无边界把 report/components 全放进来）；新增 `isBusinessEntitySymbol`（排除小写函数、全大写常量、Config/Options/Report 元类型、动词前缀）与 `isGlossaryCandidate`（排除文件名/路径片段/小写变量/XxxOptions 选项接口），只留 PascalCase 领域名词。实盘：DATA_MODEL 收敛为 16 个真 Schema 实体、GLOSSARY 收敛为 18 个真领域名词。

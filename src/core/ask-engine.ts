@@ -912,9 +912,15 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   if (best.command === 'task-create') {
     const name = params.name || params.desc || input.slice(0, 30);
     fullCommand = `speccore task new -n "${name}"`;
-  } else if (best.command === 'iteration-create') {
+  } else if (best.command === 'iteration create') {
+    // v8.3.372: 此前判断写的是 'iteration-create'（连字符）而 mapping.id 是空格版
+    // 'iteration create'，永远不命中——死分支，name/topic 拼装实际走 else 分支且
+    // 多拼死参数 --iteration（iteration create 未注册）导致命令 fail(1)
     const name = params.name || input.slice(0, 20);
     fullCommand = `speccore iteration create -n "${name}"`;
+    // v8.3.372: 「主要功能是 X」提取的 topic 透传给 CLI（--topic 拼 slug，
+    // 中文主题 CLI 拼音兜底，宿主 AI 英译见 spec-iteration-create 剧本）
+    if (params.topic) fullCommand += ` --topic "${params.topic}"`;
   } else if (best.command === 'global') {
     // v8.3.255+: global 命令族 — 反推词→from-source，否则→analyze
     // 注：extractParams 中 fromCode 与 withCode 互斥（反推优先级高于扫描）

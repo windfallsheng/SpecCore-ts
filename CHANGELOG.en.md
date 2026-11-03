@@ -2,6 +2,15 @@
 
 ---
 
+## v8.3.372 (2026-11-03) — User-specified iteration naming: explicit name extraction, numeric-ID sequencing, dead branch revival
+
+- **Accurate "名字/名为 X" extraction (user intent wins)**: "创建一个迭代名字 261115，主要功能是支付" used to be greedily captured by `创建(.+)迭代` as name="一个", losing the user-specified name entirely. Added explicit-name extraction (名字/名为/编号 X) and topic extraction (主要功能是/主题 X → `--topic`), scoped to the iteration_create intent; filler words (一个/个/新) no longer qualify as iteration names.
+- **Pure numeric names become the iteration sequence**: `nextIterationId` honors user-specified numbers (e.g. 261115) → `Iteration-261115-{slug}`, no longer overridden by the global counter; on collision with an existing directory a content-based md5 hash is appended (same input, same hash — idempotent). Custom IDs do not advance the counter: scanMaxIds reads the max from the directory, so auto-numbering aligns naturally.
+- **Chinese topic translation layered**: CLI falls back to pinyin (「支付」→ zhi-fu); the spec-iteration-create skill script now instructs the host AI to translate a Chinese `--topic` to English (payment) before executing.
+- **ask dead branch revived + dead option removed**: the `best.command === 'iteration-create'` (hyphenated) check never matched mapping.id's spaced version 'iteration create' — a dead branch; name/topic assembly actually fell through to the else branch, which also appended the dead `--iteration` option (not registered by iteration create) causing fail(1). Fixed: branch check aligned to the spaced version; in iteration_create sentences "迭代" is the command object and is no longer extracted as params.iteration.
+
+---
+
 ## v8.3.371 (2026-11-03) — Final polish of the inventory tool: entity/term signal-to-noise, knowledge-graph entity count, clarify-stage wording
 
 - **DATA_MODEL / GLOSSARY signal-to-noise filtering**: the old heuristics listed `generateGraphReport` (a function) as an Entity and `core`/`commands`/`index.ts` (dir/file names) as glossary terms. Fixed: path regex tightened with word boundaries (the old `/po|vo/` matched re**po**rt/com**po**nents); added `isBusinessEntitySymbol` (excludes lowercase functions, ALL-CAPS constants, Config/Options/Report meta-types, verb prefixes) and `isGlossaryCandidate` (excludes file names/path fragments/lowercase variables/XxxOptions option interfaces), keeping only PascalCase domain nouns. On-disk: DATA_MODEL converges to 16 real Schema entities, GLOSSARY to 18 real domain terms.

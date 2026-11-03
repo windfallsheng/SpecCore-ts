@@ -20,3 +20,8 @@ disable-model-invocation: false
 - `[SPECCORE_CONTINUE: <path>]` → 优先在同一会话继续下一批（按标记中的命令执行）；上下文紧张时开新对话，先读取 <path> 恢复上下文
 - `[SPECCORE_INTENT]` / `[SPECCORE_RESULT]` → 原样转达用户
 - 其他 `[SPECCORE_*]` 标记 → 参照 speccore-router 的 SKILL.md 处理
+
+## 主题词英译（v8.3.372）
+- ask 输出的执行命令中含 `--topic "中文主题"` 时，执行前把中文主题英译（如「支付」→ `payment`）；
+- 无法确定译名时保留原样执行（CLI 自带拼音兜底，如「支付」→ `zhi-fu`）；
+- 若 ask 未提取出主题而用户原话明显带主题（「主要做 X」），执行后主动补充 `--topic` 重跑。

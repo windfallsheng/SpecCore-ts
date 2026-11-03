@@ -240,3 +240,41 @@ describe('按标准文档转换的 normalize 参数提取（v8.3.337+）', () =>
     expect(best.extractedParams?.normalize).toBeUndefined();
   });
 });
+
+describe('iteration create 指名与主题提取（v8.3.372）', () => {
+  beforeEach(() => {
+    state.activeIteration = '';
+  });
+
+  it('「名字 261115 + 主要功能是支付」→ 名字与主题双双提取（用户原话回归）', async () => {
+    const results = await recognizeIntent('创建一个迭代名字 261115，主要功能是支付');
+    const best = results[0];
+    expect(best.intent).toBe('iteration_create');
+    expect(best.extractedParams?.name).toBe('261115');
+    expect(best.extractedParams?.topic).toBe('支付');
+  });
+
+  it('「名字为 X」变体', async () => {
+    const results = await recognizeIntent('创建一个名字为 Q3 的迭代');
+    const best = results.find(r => r.intent === 'iteration_create');
+    expect(best?.extractedParams?.name).toBe('Q3');
+  });
+
+  it('「主题词是 X」变体（主题词优先于主题截断）', async () => {
+    const results = await recognizeIntent('新建一个迭代，主题词是会议系统');
+    const best = results.find(r => r.intent === 'iteration_create');
+    expect(best?.extractedParams?.topic).toBe('会议系统');
+  });
+
+  it('无名字输入不捕获虚词「一个」', async () => {
+    const results = await recognizeIntent('创建一个迭代');
+    const best = results.find(r => r.intent === 'iteration_create');
+    expect(best?.extractedParams?.name).toBeUndefined();
+  });
+
+  it('传统「创建Q2迭代」仍捕获 Q2（指名提取不破坏既有 pattern）', async () => {
+    const results = await recognizeIntent('创建Q2迭代');
+    const best = results.find(r => r.intent === 'iteration_create');
+    expect(best?.extractedParams?.name).toBe('Q2');
+  });
+});

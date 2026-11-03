@@ -928,6 +928,22 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     params.desc = descMatch[1].trim();
   }
 
+  // v8.3.372: 「名字/名为 X」明确指名（用户明确意图优先）——先于 pattern 捕获，
+  // 旧逻辑「创建一个迭代名字 261115」被 `创建(.+)迭代` 捕获成 name="一个"，
+  // 用户指定的 261115 蒸发。限定 iteration_create 防误伤（task 指名后续可扩展）
+  if (mapping.intent === 'iteration_create') {
+    const namedMatch = input.match(/名字\s*(?:[是为]|编号(?:为|是))?\s*([^\s，,。;；、]+)/)
+      || input.match(/名为\s*([^\s，,。;；、]+)/);
+    if (namedMatch) {
+      params.name = namedMatch[1].trim();
+    }
+    // 「主要功能是 X」「主题 X」→ topic（透传 CLI --topic 拼 slug；主题词需排「主题」前防截断）
+    const topicMatch = input.match(/(?:主要功能|功能|主题词|主题)\s*(?:[是为])?\s*([^\s，,。;；、]+)/);
+    if (topicMatch) {
+      params.topic = topicMatch[1].trim();
+    }
+  }
+
   // 从模式中提取参数
   for (const pattern of mapping.patterns) {
     try {
@@ -946,8 +962,16 @@ function extractParams(input: string, mapping: CommandMapping): Record<string, s
     }
   }
 
+  // v8.3.372: 虚词碎片清理——「创建一个迭代」这类无名字输入被 pattern 捕获成
+  // 「一个」，不配当迭代名；清空后 ask 引擎走整句截断兜底（比建出 Iteration-xxx-yi-ge 好）
+  if (mapping.intent === 'iteration_create' && /^(一个|个|新|新的|个新|一个新)$/.test(params.name || '')) {
+    delete params.name;
+  }
+
   // 检测是否指定了迭代（排除「本迭代/当前迭代」——映射到上下文当前迭代，不需显式 --iter）
-  if (!/本迭代|当前迭代|该迭代/.test(input)) {
+  // v8.3.372: iteration_create 句中的「迭代」是命令宾语（要创建的东西），不是目标迭代名，
+  // 不提取 params.iteration——否则「创建一个迭代名字 261115」会拼出死参数 --iteration "名字"
+  if (mapping.intent !== 'iteration_create' && !/本迭代|当前迭代|该迭代/.test(input)) {
     const iterMatch = input.match(/迭代[：:]*\s*(\S+)/);
     if (iterMatch) {
       params.iteration = iterMatch[1];

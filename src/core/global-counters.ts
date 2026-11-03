@@ -5,6 +5,7 @@
  */
 import { readFile, writeFile, pathExists, readdir, ensureDir } from 'fs-extra';
 import { join, dirname } from 'path';
+import { createHash } from 'crypto';
 import { getProjectRoot } from '../utils/task-utils';
 import { pinyin } from 'pinyin-pro';
 
@@ -121,10 +122,23 @@ export function toSlug(name: string): string {
 
 export async function nextIterationId(name: string, topic?: string): Promise<{ id: string; num: number }> {
   const c = await getCounters();
+  const slug = toSlug(topic || name);
+  // v8.3.372: 用户明确指定纯数字名（如 261115）→ 以用户为准作迭代序号，
+  // 不再被全局计数器覆盖；与已有目录重名时拼内容 hash 兜底（同输入同 hash，幂等）。
+  // 自定义序号不推进计数器：scanMaxIds 会扫描目录取最大编号，下次自动编号自然对齐防撞。
+  const raw = (name || '').trim();
+  if (/^\d+$/.test(raw)) {
+    const base = `Iteration-${raw}-${slug}`;
+    let id = base;
+    if (await pathExists(id)) {
+      const hash = createHash('md5').update(`${raw}:${slug}`).digest('hex').slice(0, 6);
+      id = `${base}-${hash}`;
+    }
+    return { id, num: parseInt(raw, 10) };
+  }
   c.iterations++;
   await save(c);
   const padded = String(c.iterations).padStart(3, '0');
-  const slug = toSlug(topic || name);
   return { id: `Iteration-${padded}-${slug}`, num: c.iterations };
 }
 
