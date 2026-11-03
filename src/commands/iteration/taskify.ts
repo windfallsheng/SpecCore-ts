@@ -1,4 +1,4 @@
-import { ensureDir, writeFile, pathExists, readFile, readdir, remove, rename } from 'fs-extra';
+import { ensureDir, writeFile, pathExists, readFile, readdir, remove, rename, stat } from 'fs-extra';
 import { join, isAbsolute, basename, relative } from 'path';
 import { logger, Spinner } from '../../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../../core/context';
@@ -1444,21 +1444,61 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
         for (const feature of featuresAll) {
           if (!reqContent2.includes(feature)) { reqContent2IsStale = true; break; }
         }
+        // v8.3.377: 黄金需求 mtime 比聚合版新 → 聚合版落后，强制重新聚合。
+        // 单元名检测只能发现「新增/删除」漂移，发现不了「同单元内容更新」漂移。
+        if (!reqContent2IsStale) {
+          try {
+            const goldenDir = join(specDir2, 'requirements');
+            const reqStat = await stat(reqPath2);
+            if (await pathExists(goldenDir)) {
+              for (const gf of await readdir(goldenDir)) {
+                if (!gf.startsWith('unit-') || !gf.endsWith('.md')) continue;
+                const gs = await stat(join(goldenDir, gf));
+                if (gs.mtimeMs > reqStat.mtimeMs) { reqContent2IsStale = true; break; }
+              }
+            }
+          } catch { /* stat 失败不阻塞 */ }
+        }
       }
       if (!reqContent2 || isSkeletonContent(reqContent2, 200) || reqContent2IsStale) {
         const featureReqParts: string[] = [];
         const features = await parseFeatureList(iterationDir);
+        // v8.3.377: 聚合来源三级优先——黄金需求 unit-{feature}.md → 模块 CLARIFY.md → 模块 REQUIREMENT.md。
+        // 黄金需求是澄清后的最新精准需求，聚合版必须以其为准，否则下游拿到旧内容。
         for (const feature of features) {
-          const featureReqPath = join(specDir2, feature, 'overview', 'REQUIREMENT.md');
-          if (await pathExists(featureReqPath)) {
-            const content = await readFile(featureReqPath, 'utf-8');
-            if (!isSkeletonContent(content)) {
-              featureReqParts.push(`# ${feature}\n\n${content.trim()}`);
+          let picked: string | undefined;
+          const goldenPath = join(specDir2, 'requirements', `unit-${feature}.md`);
+          if (await pathExists(goldenPath)) {
+            try {
+              const gc = await readFile(goldenPath, 'utf-8');
+              if (!isSkeletonContent(gc)) picked = gc.trim();
+            } catch { /* 读取失败降级下一级 */ }
+          }
+          if (picked === undefined) {
+            const clarifyPath = join(specDir2, feature, 'overview', 'CLARIFY.md');
+            if (await pathExists(clarifyPath)) {
+              try {
+                const cc = await readFile(clarifyPath, 'utf-8');
+                if (!isSkeletonContent(cc)) picked = cc.trim();
+              } catch { /* 读取失败降级下一级 */ }
             }
+          }
+          if (picked === undefined) {
+            const featureReqPath = join(specDir2, feature, 'overview', 'REQUIREMENT.md');
+            if (await pathExists(featureReqPath)) {
+              try {
+                const rc = await readFile(featureReqPath, 'utf-8');
+                if (!isSkeletonContent(rc)) picked = rc.trim();
+              } catch { /* 读取失败跳过该单元 */ }
+            }
+          }
+          if (picked !== undefined) {
+            featureReqParts.push(`# ${feature}\n\n${picked}`);
           }
         }
         if (featureReqParts.length > 0) {
-          reqContent2 = featureReqParts.join('\n\n---\n\n');
+          // v8.3.377: 聚合产物头部打标记——下游可识别这是内存聚合版及聚合时间
+          reqContent2 = `<!-- SPECCORE_AGGREGATED: ${featureReqParts.length} units @ ${new Date().toISOString().slice(0, 16)} -->\n\n` + featureReqParts.join('\n\n---\n\n');
           reqContent2Aggregated = true;
         }
       }

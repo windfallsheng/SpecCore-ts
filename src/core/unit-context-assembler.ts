@@ -696,18 +696,24 @@ export async function extractOverviewContext(
   // v8.3.373: 0. 优先读单元级黄金需求（unit-{unitName}.md）——与功能单元一一对应的精准澄清产物
   const goldenReqDir = join(specsBase, 'requirements');
   const unitGoldenPath = join(goldenReqDir, `unit-${unitName}.md`);
+  let unitGoldenLoaded = false;
   if (await pathExists(unitGoldenPath)) {
     try {
       const content = await readFile(unitGoldenPath, 'utf-8');
-      // 全文注入（单元级文档本身就是精准需求，不需要关键词过滤）
-      ctx.push(`### 📋 需求规格（unit-${unitName}.md 单元级黄金需求）\n\`\`\`\n${content.slice(0, 8000)}\n\`\`\``);
+      if (!isSkeletonContent(content)) {
+        unitGoldenLoaded = true;
+        // 全文注入（单元级文档本身就是精准需求，不需要关键词过滤）
+        ctx.push(`### 📋 需求规格（unit-${unitName}.md 单元级黄金需求）\n\`\`\`\n${content.slice(0, 8000)}\n\`\`\``);
+      }
     } catch {}
   }
 
   // 1. 从 overview/REQUIREMENT.md 提取相关章节（v8.3.374: 骨架检测 + CLARIFY.md 切读）
+  // v8.3.377: 已命中单元级黄金需求时跳过聚合版——聚合版由 taskify 从多来源聚合，
+  //   可能落后于黄金需求（同步漂移），再注入聚合片段会新旧混杂误导下游。
   const reqPath = join(overviewDir, 'REQUIREMENT.md');
   let reqHasContent = false;
-  if (await pathExists(reqPath)) {
+  if (!unitGoldenLoaded && await pathExists(reqPath)) {
     try {
       const content = await readFile(reqPath, 'utf-8');
       if (!isSkeletonContent(content)) {
@@ -731,7 +737,8 @@ export async function extractOverviewContext(
   }
 
   // v8.3.374: REQUIREMENT.md 是骨架或不存在时，切读功能单元级 CLARIFY.md（真实澄清产物）
-  if (!reqHasContent) {
+  // v8.3.377: 已命中黄金需求时同样跳过——黄金需求本身就是澄清后的自包含文档
+  if (!reqHasContent && !unitGoldenLoaded) {
     // 查找匹配当前单元名的功能单元目录
     try {
       const specEntries = await readdir(specsBase, { withFileTypes: true });

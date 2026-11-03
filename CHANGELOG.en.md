@@ -2,6 +2,16 @@
 
 ---
 
+## v8.3.377 (2026-11-03) — Aggregate sync drift eliminated + clarification coverage audit + [OPEN] 3-part format closed loop
+
+- **Aggregate sync drift eliminated (3-tier priority + mtime staleness detection)**: taskify aggregation sources upgraded to 3-tier priority — golden requirement `unit-{feature}.md` → module `CLARIFY.md` → module `REQUIREMENT.md`, so the aggregate is built from the latest clarified requirements; added mtime staleness detection (golden requirement newer than aggregate forces re-aggregation), covering the blind spot where unit-name detection cannot see same-unit content updates; aggregate output carries a `SPECCORE_AGGREGATED` marker header.
+- **Consumer-side sync protection**: `extractOverviewContext` skips aggregate snippets and CLARIFY.md fallback when a unit-level golden requirement is loaded, preventing old/new content mixing; golden requirement in skeleton state degrades gracefully.
+- **Clarification coverage audit (fallback visibility)**: after clarification routing, analyze prints "N units / M golden / K CLARIFY.md / L uncovered" stats, lists uncovered units and suggests the fill-in command — fallback usage is no longer a black box.
+- **[OPEN] 3-part format closed loop**: clarification prompt template aligned with parser (`### [OPEN]` heading + leading status/impact blockquote + indented option list), fixing the format break where the template used `###` headings but the parser only recognized `-` lists, making autoResolveOpenItems ineffective on real output; `parseOpenItems` now supports both old and new formats.
+- **CLARIFY_REPORT aggregates [OPEN] blocks**: `writeClarifyReport` adds an "[OPEN] pending items" section (question + recommended option + source), with auto-resolved counts included — pending items finally have a report outlet.
+
+---
+
 ## v8.3.376 (2026-11-03) — No word-count ratio check for requirement clarification (growing from little is the essence)
 
 - **Clarification completeness check relaxed**: Requirement content may be written freely by users with varying length, all treated as valid. As long as clarification produces structured content (having clarification items means it is enriched), the "word count ≥ 80% of source" ratio check is removed — avoiding false alarms that misreport normal requirement enrichment as "content loss".

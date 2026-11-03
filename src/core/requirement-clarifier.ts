@@ -168,15 +168,18 @@ export interface OpenItem {
 
 /**
  * v8.3.374: 解析文档中的 [OPEN] 待确认项。
+ * v8.3.377: 同时支持两种标题格式——`### [OPEN] 问题` 与 `- [OPEN] 问题`，
+ *   与澄清 prompt 模板的三段式格式对齐（此前模板用 `###` 标题而解析器只认 `-`，
+ *   导致 autoResolveOpenItems 对真实产出完全无效）。
  * 匹配格式：
- *   - [OPEN] 问题描述？
+ *   ### [OPEN] 问题描述？
  *     - 方案 A: ...
- *     - 方案 B: ...（推荐）
+ *     - 方案 B: ...（推荐 ⭐）
  *     - 方案 C: ...
  */
 export function parseOpenItems(content: string): OpenItem[] {
   const items: OpenItem[] = [];
-  const openRegex = /^- \[OPEN\]\s+(.+)$/gm;
+  const openRegex = /^(?:#{1,4}\s+|-\s*)\[OPEN\]\s+(.+)$/gm;
   let match: RegExpExecArray | null;
   while ((match = openRegex.exec(content)) !== null) {
     const question = match[1].trim();
@@ -845,10 +848,13 @@ export async function writeClarifyReport(iterDir: string): Promise<string> {
 
   // v8.3.285+: 聚合两级 CLARIFY.md 的待确认/已确认事项——
   // 此前报告只是产物清单，待确认项散落在各 CLARIFY.md 里，无汇总窗口
+  // v8.3.377: 同步聚合 [OPEN] 三段式块（含推荐方案标注），自动模式未解决的待决项在此有出口
   const pendingItems: { file: string; text: string }[] = [];
+  const openBlocks: { file: string; question: string; recommended: string }[] = [];
   let confirmedCount = 0;
+  let autoResolvedCount = 0;
   for (const c of clarified) {
-    if (!c.endsWith('CLARIFY.md')) continue;
+    if (!c.endsWith('CLARIFY.md') && !c.includes('/requirements/')) continue;
     try {
       const content = await readFile(join(iterDir, c), 'utf-8');
       for (const line of content.split('\n')) {
@@ -859,6 +865,15 @@ export async function writeClarifyReport(iterDir: string): Promise<string> {
         }
         if (/^\s*-\s*\[[xX✓]\]/.test(line)) confirmedCount++;
       }
+      // [OPEN] 三段式块：问题 + 推荐方案（自动模式未解决则保留待人工）
+      for (const o of parseOpenItems(content)) {
+        openBlocks.push({
+          file: c,
+          question: o.question,
+          recommended: o.recommendedIndex >= 0 ? o.options[o.recommendedIndex].replace(/（推荐\s*⭐?\s*）|\(recommended\)/i, '').trim() : '（无推荐）',
+        });
+      }
+      autoResolvedCount += (content.match(/\[RESOLVED:/g) || []).length;
     } catch { /* 单个文件读取失败不阻塞报告生成 */ }
   }
 
@@ -870,8 +885,18 @@ export async function writeClarifyReport(iterDir: string): Promise<string> {
   md += `## 澄清结果总览\n\n`;
   md += `- 源文档: ${sources.length} 份\n`;
   md += `- 澄清产物: ${clarified.length} 份\n`;
-  md += `- 待确认事项: ${pendingItems.length} 条（已确认 ${confirmedCount} 条）\n`;
+  md += `- 待确认事项: ${pendingItems.length + openBlocks.length} 条（复选框 ${pendingItems.length} + [OPEN] 块 ${openBlocks.length}，已确认 ${confirmedCount} 条${autoResolvedCount > 0 ? `，自动模式已解决 ${autoResolvedCount} 条` : ''}）\n`;
   md += `- 状态: ${clarified.length > 0 ? '已澄清（见下方清单）' : '⚠️ 尚未澄清——源文档待专业化整理'}\n\n`;
+
+  if (openBlocks.length > 0) {
+    md += `## [OPEN] 待决项汇总（自动模式未解决，待人工确认）\n\n`;
+    md += `| # | 待决问题 | 推荐方案 | 来源 |\n`;
+    md += `| :--- | :--- | :--- | :--- |\n`;
+    openBlocks.forEach((o, i) => {
+      md += `| ${i + 1} | ${o.question.replace(/\|/g, '\\|')} | ${o.recommended.replace(/\|/g, '\\|')} | \`${o.file}\` |\n`;
+    });
+    md += `\n`;
+  }
 
   if (pendingItems.length > 0) {
     md += `## 待确认事项汇总\n\n`;

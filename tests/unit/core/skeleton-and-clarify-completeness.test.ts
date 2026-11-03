@@ -151,4 +151,51 @@ describe('parseOpenItems + autoResolveOpenItems（v8.3.374 待确认项结构化
     expect(result.resolvedCount).toBe(0);
     expect(result.pendingCount).toBe(0);
   });
+
+  // ── v8.3.377: `### [OPEN]` 三段式标题格式（与澄清 prompt 模板对齐）──
+  it('v8.3.377: 解析 `### [OPEN]` 三段式标题 + 缩进方案列表', () => {
+    const content = `## 待确认项
+
+> **现状**：需求原文未明确支付渠道。
+> **影响**：不确认会导致支付接口设计返工。
+
+### [OPEN] 支付方式选择？
+  - 方案 A: 仅支持微信支付（实现简单，覆盖面窄）
+  - 方案 B: 支持微信和支付宝（推荐 ⭐）
+  - 方案 C: 支持所有主流支付方式（接入成本高）
+
+> **现状**：退款时效未定义。
+
+### [OPEN] 退款策略？
+  - 方案 A: 全额退款
+  - 方案 B: 按比例退款
+`;
+    const items = parseOpenItems(content);
+    expect(items.length).toBe(2);
+    expect(items[0].question).toBe('支付方式选择？');
+    expect(items[0].options.length).toBe(3);
+    expect(items[0].recommendedIndex).toBe(1);
+    expect(items[1].question).toBe('退款策略？');
+    expect(items[1].recommendedIndex).toBe(-1);
+  });
+
+  it('v8.3.377: 三段式 autoResolve 选推荐项并保留决策记录', () => {
+    const content = `## 待确认项
+
+### [OPEN] 支付方式选择？
+  - 方案 A: 仅支持微信支付
+  - 方案 B: 支持微信和支付宝（推荐 ⭐）
+
+### [OPEN] 退款策略？
+  - 方案 A: 全额退款
+  - 方案 B: 按比例退款
+`;
+    const result = autoResolveOpenItems(content);
+    expect(result.resolvedCount).toBe(1);
+    expect(result.pendingCount).toBe(1);
+    expect(result.content).toContain('[RESOLVED:');
+    expect(result.content).toContain('支持微信和支付宝');
+    expect(result.content).not.toContain('[OPEN] 支付方式');
+    expect(result.content).toContain('[OPEN] 退款策略');
+  });
 });

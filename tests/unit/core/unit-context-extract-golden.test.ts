@@ -22,9 +22,10 @@ describe('extractOverviewContext 单元级黄金需求（v8.3.373）', () => {
     await mkdir(join(iterDir, '020-specs', 'requirements'), { recursive: true });
 
     // 单元级黄金需求（精准澄清产物）
+    // v8.3.377: 内容必须 >= 100 字才能通过 isSkeletonContent 检测
     await writeFile(
       join(iterDir, '020-specs', 'requirements', 'unit-booking-module.md'),
-      '# 预订模块澄清需求\n\n- 预订流程支持取消和修改\n- 取消需在入住前24小时\n',
+      '# 预订模块澄清需求\n\n## 背景与目标\n本模块实现酒店预订完整流程。\n\n## 功能规格\n- 预订流程支持取消和修改\n- 取消需在入住前24小时\n- 支持在线支付和到店支付两种方式\n- 预订成功自动生成确认凭证并推送通知\n\n## 验收标准\n- [ ] 用户可完成预订全流程\n',
     );
 
     // overview/REQUIREMENT.md（聚合版，内容更泛化）
@@ -60,14 +61,15 @@ describe('extractOverviewContext 单元级黄金需求（v8.3.373）', () => {
     expect(ctx).toContain('预订功能');
   });
 
-  it('unit-*.md 与 overview/REQUIREMENT.md 同时存在时两者都注入', async () => {
+  it('unit-*.md 与 overview/REQUIREMENT.md 同时存在时黄金需求优先，聚合版跳过（v8.3.377）', async () => {
     const iterDir = tmpDir;
     await mkdir(join(iterDir, '020-specs', 'overview'), { recursive: true });
     await mkdir(join(iterDir, '020-specs', 'requirements'), { recursive: true });
 
+    // v8.3.377: 内容必须 >= 100 字才能通过 isSkeletonContent 检测
     await writeFile(
       join(iterDir, '020-specs', 'requirements', 'unit-支付.md'),
-      '# 支付单元精准需求\n\n- 支持微信和支付宝\n- 支付成功后生成电子凭证\n- 支持退款和部分退款\n',
+      '# 支付单元精准需求\n\n## 背景与目标\n本模块实现独立支付网关。\n\n## 功能规格\n- 支持微信和支付宝\n- 支付成功后生成电子凭证\n- 支持全额退款和部分退款\n\n## 验收标准\n- [ ] 支付流程可用\n',
     );
     // v8.3.374: 内容必须 >= 100 字才能通过 isSkeletonContent 检测
     await writeFile(
@@ -78,11 +80,11 @@ describe('extractOverviewContext 单元级黄金需求（v8.3.373）', () => {
     // 中文单元名「支付」匹配 REQUIREMENT.md 的「## 支付模块」
     const ctx = await extractOverviewContext(iterDir, '支付', ['backend-service']);
 
-    // 单元级精准注入
+    // 单元级精准注入（优先级最高）
     expect(ctx).toContain('支持微信和支付宝');
-    // overview 关键词也注入（v8.3.374: 因为 REQUIREMENT.md 不再是骨架）
-    expect(ctx).toContain('REQUIREMENT.md');
-    expect(ctx).toContain('支付功能');
+    expect(ctx).toContain('单元级黄金需求');
+    // v8.3.377: 命中黄金需求时聚合版跳过——避免新旧混杂（同步漂移防护）
+    expect(ctx).not.toContain('REQUIREMENT.md 相关片段');
   });
 
   it('unit-*.md 不存在时函数不报错，仅返回语义关联结果', async () => {

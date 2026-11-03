@@ -1467,6 +1467,35 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         await writeClarifyReport(iterDir!);
         logger.info(`📋 澄清报告已同步: ${relative(process.cwd(), join(iterDir!, '010-requirements', 'CLARIFY_REPORT.md'))}`);
       } catch { /* 报告刷新失败不阻塞澄清写入 */ }
+      // v8.3.377: 澄清覆盖审计——兜底走了多少必须有可见性。
+      // 以落盘事实为准（本轮可能只回传部分单元），逐个单元查黄金需求/CLARIFY.md。
+      let coveredCount = 0;
+      let goldenCount = 0;
+      const uncoveredUnits: string[] = [];
+      for (const f of validFeatures) {
+        let covered = false;
+        const unitGolden = join(iterDir!, '020-specs', 'requirements', `unit-${f}.md`);
+        if (await pathExists(unitGolden)) {
+          try {
+            if (!isSkeletonContent(await readFile(unitGolden, 'utf-8'))) { covered = true; goldenCount++; }
+          } catch { /* 单文件失败不影响统计 */ }
+        }
+        if (!covered) {
+          const clarifyMd = join(iterDir!, '020-specs', f, 'overview', 'CLARIFY.md');
+          if (await pathExists(clarifyMd)) {
+            try {
+              if (!isSkeletonContent(await readFile(clarifyMd, 'utf-8'))) covered = true;
+            } catch { /* 单文件失败不影响统计 */ }
+          }
+        }
+        if (covered) coveredCount++;
+        else uncoveredUnits.push(f);
+      }
+      logger.info(`📊 澄清覆盖审计: ${coveredCount}/${validFeatures.size} 功能单元有澄清产物（黄金需求 ${goldenCount}，CLARIFY.md ${coveredCount - goldenCount}）`);
+      if (uncoveredUnits.length > 0) {
+        logger.warn(`   ⚠️  未覆盖单元 ${uncoveredUnits.length} 个（下游将走 SOURCE.md 原始切片兜底）: ${uncoveredUnits.join('、')}`);
+        logger.warn(`      建议: speccore analyze -I <迭代名> --clarify 补齐澄清`);
+      }
       logger.info('');
     }
 
@@ -4926,16 +4955,13 @@ status: "clarified"
 
 ## 待确认项（如有）
 
-### [OPEN] 问题标题
-
 > **现状**：需求原文如何描述（或缺失了什么）
 > **影响**：不确认会导致什么后果
 
-| 方案 | 描述 | 评估 |
-|:---|:---|:---|
-| A（推荐 ⭐） | ... | 优点/缺点/适用场景 |
-| B | ... | ... |
-| C | ... | ... |
+### [OPEN] 问题标题
+  - 方案 A: 描述（优点/缺点/适用场景）
+  - 方案 B: 描述（推荐 ⭐）
+  - 方案 C: 描述
 \`\`\`
 `;
     prompt += `**Step 5**: 用 Read 工具验证文件已正确写入 \`{迭代}/020-specs/{feature-name}/overview/CLARIFY.md\`\n`;
@@ -4949,8 +4975,8 @@ status: "clarified"
     prompt += `- 下游 analyze/taskify/execute 只读这份文档，不再回翻源文档\n`;
     prompt += `- 必须包含源文档的全部业务信息（允许专业化整理和表述优化，但禁止删减内容）\n\n`;
     prompt += `### ⚠️ [OPEN] 待确认项格式要求（v8.3.374）\n\n`;
-    prompt += `- 每个 [OPEN] 项必须包含：现状、影响、方案表（见模板「待确认项」章节）\n`;
-    prompt += `- 方案表中必须标注一个推荐项（带 ⭐ 标记）\n`;
+    prompt += `- 每个 [OPEN] 项用 \`### [OPEN] 标题\` 开头，前置现状/影响引用块，紧接缩进方案列表（见模板「待确认项」章节）\n`;
+    prompt += `- 方案列表中必须标注一个推荐项（行末带 ⭐ 标记）\n`;
     prompt += `- 自动模式下 CLI 将自动选择推荐方案，替换 [OPEN] 为 [RESOLVED]\n`;
     prompt += `- 用户可手动编辑文档，将 [OPEN] 改为 [RESOLVED: 方案X] 并注明理由\n\n`;
     prompt += `---\n\n`;
