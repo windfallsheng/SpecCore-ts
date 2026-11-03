@@ -1,5 +1,11 @@
 # Changelog
 
+## v8.3.375 (2026-11-03) — 骨架判定谓词多消费点统一（hasValidClarifiedDocs 共享 isSkeletonContent）
+
+- **`hasValidClarifiedDocs` 骨架判定统一**：`isRealClarify` 内部函数从内联正则 `/<!--\s*SPEC-SKELETON\s*-->/` 改为调用公共谓词 `isSkeletonContent`，与 `extractOverviewContext` / `taskify` / `analyze` 共享同一判定逻辑。修复「纯 prompt 模式重跑 analyze 时骨架 CLARIFY.md 被误计为已澄清」的遗留风险。
+
+---
+
 ## v8.3.374 (2026-11-03) — 黄金需求自包含 + 澄清三段式 + 消费链认 CLARIFY.md
 
 - **公共骨架判定谓词 `isSkeletonContent`**：抽取自 spec-skeleton.ts，多消费点共享。`extractOverviewContext` / `taskify` / `analyze` 统一调用，避免各处内联重复判定。支持可选阈值参数（默认 100 字，可传 200）。

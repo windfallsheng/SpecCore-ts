@@ -71,7 +71,8 @@ describe('hasValidClarifiedDocs', () => {
   it('真实单元级澄清（覆盖过半且新于源文档）→ true', async () => {
     writeSource();
     writeUnit('unit-a');
-    writeClarify('unit-a/overview/CLARIFY.md', '# 澄清记录\nG-Q001 | 问题 | 回答');
+    // v8.3.374: 内容必须 >= 100 字才能通过 isSkeletonContent 检测
+    writeClarify('unit-a/overview/CLARIFY.md', '# 澄清记录\n\n## 背景与目标\n本单元实现用户认证功能，支持手机号和邮箱两种登录方式。\n\n## 功能规格\nG-Q001 | 问题 | 回答\n\n## 验收标准\n- [ ] 用户可以通过手机号登录\n- [ ] 用户可以通过邮箱登录');
     expect(await hasValidClarifiedDocs(iterDir)).toBe(true);
   });
 
@@ -79,14 +80,16 @@ describe('hasValidClarifiedDocs', () => {
     writeSource();
     writeUnit('unit-a');
     writeUnit('unit-b');
-    writeClarify('unit-a/overview/CLARIFY.md', '# 澄清记录\nG-Q001 | 问题 | 回答');
+    // v8.3.374: 内容必须 >= 100 字才能通过 isSkeletonContent 检测
+    writeClarify('unit-a/overview/CLARIFY.md', '# 澄清记录\n\n## 背景与目标\n本单元实现用户认证功能，支持手机号和邮箱两种登录方式。\n\n## 功能规格\nG-Q001 | 问题 | 回答\n\n## 验收标准\n- [ ] 用户可以通过手机号登录\n- [ ] 用户可以通过邮箱登录');
     writeClarify('unit-b/overview/CLARIFY.md', `${SKELETON}\n# 单元澄清记录\n待填充`);
     expect(await hasValidClarifiedDocs(iterDir)).toBe(true);
   });
 
   it('真实澄清存在但内容陈旧于源文档 → false（mtime 防线仍生效）', async () => {
     writeUnit('unit-a');
-    writeClarify('unit-a/overview/CLARIFY.md', '# 澄清记录\nG-Q001 | 问题 | 回答');
+    // v8.3.374: 内容必须 >= 100 字才能通过 isSkeletonContent 检测
+    writeClarify('unit-a/overview/CLARIFY.md', '# 澄清记录\n\n## 背景与目标\n本单元实现用户认证功能，支持手机号和邮箱两种登录方式。\n\n## 功能规格\nG-Q001 | 问题 | 回答\n\n## 验收标准\n- [ ] 用户可以通过手机号登录\n- [ ] 用户可以通过邮箱登录');
     // 澄清产物 mtime 拨回更早，源文档 mtime 更新（需求更新后未重新澄清的场景）
     const old = new Date(Date.now() - 7200 * 1000);
     utimesSync(join(specsDir, 'unit-a', 'overview', 'CLARIFY.md'), old, old);

@@ -12,6 +12,7 @@ import { logger } from '../utils/logger';
 import { backupWithTimestamp } from '../utils/task-utils';
 import { assembleUnitContext } from './unit-context-assembler';
 import { resolveUnitSourcePath } from './feature-source';
+import { isSkeletonContent } from './spec-skeleton';
 
 /**
  * 检测文档专业度
@@ -955,7 +956,8 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
     try {
       if (!(await pathExists(fp))) return false;
       const content = await readFile(fp, 'utf-8');
-      return !/<!--\s*SPEC-SKELETON\s*-->/.test(content);
+      // v8.3.374: 统一使用公共骨架判定谓词（与 extractOverviewContext / taskify / analyze 共享）
+      return !isSkeletonContent(content);
     } catch { return false; }
   };
   const checkClarifyMtime = async (fp: string) => {

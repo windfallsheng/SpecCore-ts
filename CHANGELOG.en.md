@@ -2,6 +2,12 @@
 
 ---
 
+## v8.3.375 (2026-11-03) — Skeleton predicate unified across consumers (hasValidClarifiedDocs shares isSkeletonContent)
+
+- **`hasValidClarifiedDocs` skeleton detection unified**: `isRealClarify` internal function changed from inline regex `/<!--\s*SPEC-SKELETON\s*-->/` to shared predicate `isSkeletonContent`, aligning with `extractOverviewContext` / `taskify` / `analyze`. Fixes legacy risk where skeleton CLARIFY.md was miscounted as valid clarification in pure prompt mode re-runs.
+
+---
+
 ## v8.3.374 (2026-11-03) — Self-contained golden requirements + 3-part clarification format + consumption chain reads CLARIFY.md
 
 - **Shared skeleton predicate `isSkeletonContent`**: Extracted from spec-skeleton.ts, shared across multiple consumers. `extractOverviewContext` / `taskify` / `analyze` all call the unified function instead of inline duplicated checks. Supports optional threshold parameter (default 100 chars, can pass 200).
