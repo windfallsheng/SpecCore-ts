@@ -2,6 +2,15 @@
 
 ---
 
+## v8.3.373 (2026-11-03) — Clarification outputs aligned to feature units + 3-tier priority reading + precise downstream consumption
+
+- **Clarification drop aligned to feature units**: analyze clarification responses now drop to `020-specs/requirements/unit-{feature}.md` (unit-level, one-to-one with feature units), `020-specs/requirements/global-clarified.md` (global-level), with `{slug}-clarified.md` retained as fallback (doc-level). Previously, when one source doc was split into multiple feature units, clarification outputs couldn't map back to individual units.
+- **3-tier priority reading**: analyze reads clarification outputs with priority: unit-level > global-level > doc-level fallback. When unit-level coverage is sufficient, doc-level is skipped to avoid duplicate injection; when coverage < 50%, doc-level fallback activates. Legacy projects without split anchors maintain original full-read behavior.
+- **Downstream precise consumption**: `extractOverviewContext` adds step 0 — reads `unit-{unitName}.md` full-text injection first (unit-level precise), then falls back to overview/REQUIREMENT.md keyword matching. taskify prompt document list adds "Unit-level golden requirements" section, guiding AI to read raw clarification docs when overview aggregation lacks detail.
+- **collectUnitClarifyDocs restored**: fallback function accidentally deleted during previous rename is restored — when `020-specs/requirements/` is empty, falls back to reading `020-specs/{feature}/overview/CLARIFY.md` scripts, preventing legacy projects from losing clarification work.
+
+---
+
 ## v8.3.372 (2026-11-03) — User-specified iteration naming: explicit name extraction, numeric-ID sequencing, dead branch revival
 
 - **Accurate "名字/名为 X" extraction (user intent wins)**: "创建一个迭代名字 261115，主要功能是支付" used to be greedily captured by `创建(.+)迭代` as name="一个", losing the user-specified name entirely. Added explicit-name extraction (名字/名为/编号 X) and topic extraction (主要功能是/主题 X → `--topic`), scoped to the iteration_create intent; filler words (一个/个/新) no longer qualify as iteration names.

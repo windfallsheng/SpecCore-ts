@@ -4129,7 +4129,7 @@ async function buildSplitPrompt(
   p += `1. \`CONSTITUTION.md\` — 技术宪法（端列表、命名规范、技术栈）\n`;
   p += `2. \`010-requirements/INDEX.md\` — 需求全貌索引\n`;
   p += `3. \`010-requirements/converted/*.md\` — 转换后的需求文档\n`;
-  p += `4. \`020-specs/overview/REQUIREMENT.md\` — 黄金需求文档\n`;
+  p += `4. \`020-specs/overview/REQUIREMENT.md\` — 黄金需求文档（聚合版）\n`;
   p += `5. \`020-specs/overview/TECH.md\` — 全局技术方案\n`;
   p += `6. \`020-specs/overview/ANALYSIS.md\` — 功能分析\n`;
   p += `7. \`020-specs/overview/FUNCTION_MAP.md\` — 功能单元与端的映射（参考，权威来源为 010-requirements/features/ 目录）\n`;
@@ -4138,6 +4138,16 @@ async function buildSplitPrompt(
   }
   if (await pathExists(join(iterationDir || '', '020-specs', 'overview', 'DEV_GUIDE.md'))) {
     p += `9. \`020-specs/overview/DEV_GUIDE.md\` — 开发指南\n`;
+  }
+  // v8.3.373: 单元级黄金需求目录——澄清产物与功能单元一一对应，overview 聚合版细节不足时按需深入读取
+  const goldenReqDir = join(iterationDir || '', '020-specs', 'requirements');
+  if (await pathExists(goldenReqDir)) {
+    p += `\n### 单元级黄金需求（020-specs/requirements/）\n\n`;
+    p += `> 以下文档是澄清后的精准需求，与功能单元一一对应。overview/REQUIREMENT.md 是其聚合版，\n`;
+    p += `> 当聚合版细节不足时，按需 Read 对应单元的原始澄清文档：\n\n`;
+    p += `- \`unit-{功能单元}.md\` — 单元级澄清产物（与 010-requirements/features/ 一一对应，优先级最高）\n`;
+    p += `- \`global-clarified.md\` — 全局级澄清产物（跨单元共享的业务规则/约定）\n`;
+    p += `- \`*-clarified.md\` — 文档级澄清产物（兜底，当单元级未覆盖时参考）\n`;
   }
   p += `\n`;
 

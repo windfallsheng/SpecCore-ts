@@ -206,8 +206,27 @@ async function resolveClarifyMode(options: AnalyzeOptions): Promise<ClarifyMode>
 }
 
 /**
- * v8.3.224+: 收集新路径单元级澄清文档 020-specs/{feature}/overview/CLARIFY.md
- * （feature 名与 010-requirements/features/ 切分目录一一对应，是澄清产物收敛后的标准位置）
+ * v8.3.373: 收集单元级澄清产物（unit-*.md）——从 020-specs/requirements/ 目录读取
+ * 返回与功能单元一一对应的澄清产物路径列表
+ */
+async function collectUnitGoldenDocs(requirementsDir: string): Promise<string[]> {
+  const docs: string[] = [];
+  try {
+    const files = await readdir(requirementsDir);
+    for (const f of files) {
+      if (f.startsWith('unit-') && f.endsWith('.md') && !isTimestampBackup(f)) {
+        docs.push(join(requirementsDir, f));
+      }
+    }
+  } catch {}
+  return docs;
+}
+
+/**
+ * v8.3.224+: 收集新路径单元级澄清剧本 020-specs/{feature}/overview/CLARIFY.md
+ * （feature 名与 010-requirements/features/ 切分目录一一对应）
+ * v8.3.373: 保留为 fallback——当 020-specs/requirements/ 为空时，
+ * 回退读取 CLARIFY.md 剧本（澄清产物尚未收敛到黄金目录的兜底路径）
  */
 async function collectUnitClarifyDocs(specDir: string): Promise<string[]> {
   const docs: string[] = [];
@@ -216,14 +235,12 @@ async function collectUnitClarifyDocs(specDir: string): Promise<string[]> {
     for (const e of entries) {
       if (!e.isDirectory() || e.name === 'overview' || e.name === 'requirements') continue;
       const clarify = join(specDir, e.name, 'overview', 'CLARIFY.md');
-      if (!(await pathExists(clarify))) continue;
-      // v8.3.236+: 骨架 CLARIFY.md（内容未生成）不算已澄清产物——
-      // 修复「空骨架被附加进 requirements 导致专业度检测误判、澄清被跳过」
-      try {
-        const c = await readFile(clarify, 'utf-8');
-        if (/<!--\s*SPEC-SKELETON\s*-->/.test(c)) continue;
-      } catch { /* 读取失败按存在处理 */ }
-      docs.push(clarify);
+      if (await pathExists(clarify)) {
+        try {
+          const content = await readFile(clarify, 'utf-8');
+          if (!/<!--\s*SPEC-SKELETON\s*-->/.test(content)) docs.push(clarify);
+        } catch { docs.push(clarify); }
+      }
     }
   } catch {}
   return docs;
@@ -467,25 +484,27 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           else requirements.push(join(goldenReqDir, f));
         }
 
-        // 新路径两级澄清产物（{feature}/overview/CLARIFY.md）与切分目录一一对应，优先级最高
-        const clarifyUnitDocs = await collectUnitClarifyDocs(specDir);
+        // v8.3.373: 单元级澄清产物（unit-*.md）与切分目录一一对应，优先级最高
+        const unitGoldenDocs = await collectUnitGoldenDocs(goldenReqDir);
+        const globalClarified = join(goldenReqDir, 'global-clarified.md');
+        const hasGlobalClarified = await pathExists(globalClarified);
         const featureUnits = await parseFeatureList(iterDir);
 
-        if (featureUnits.length > 0 && (clarifyUnitDocs.length > 0 || unitLevel.length > 0)) {
-          // 有切分锚点：按单元优先读入一一对应的澄清文档，跳过冗余的文档级
-          const legacyUnitName = (f: string) => basename(f).replace(/^unit-/, '').replace(/\.md$/, '');
-          const newUnitNames = new Set(clarifyUnitDocs.map((p: string) => basename(dirname(dirname(p)))));
-          for (const p of clarifyUnitDocs) requirements.push(p);
-          for (const f of unitLevel) {
-            // 新路径已覆盖该单元时跳过旧路径，避免同一单元内容双份注入
-            if (!newUnitNames.has(legacyUnitName(f))) requirements.push(f);
-          }
-          const covered = featureUnits.filter((u: string) =>
-            newUnitNames.has(u) || unitLevel.some((f: string) => legacyUnitName(f) === u));
-          if (covered.length >= Math.ceil(featureUnits.length / 2)) {
-            logger.info(`   📝 单元级澄清覆盖 ${covered.length}/${featureUnits.length} 个功能单元，跳过文档级澄清避免重复注入`);
+        if (featureUnits.length > 0 && (unitGoldenDocs.length > 0 || hasGlobalClarified)) {
+          // v8.3.373: 三级优先级——单元级 > 全局级 > 文档级兜底
+          // 1. 单元级澄清产物（unit-{feature}.md）一一对应
+          for (const p of unitGoldenDocs) requirements.push(p);
+          // 2. 全局级澄清产物（global-clarified.md）
+          if (hasGlobalClarified) requirements.push(globalClarified);
+          // 3. 文档级兜底（*-clarified.md）——仅在单元级覆盖不足时读
+          const coveredUnits = new Set(unitGoldenDocs.map(p => basename(p).replace(/^unit-/, '').replace(/\.md$/, '')));
+          const uncoveredFeatures = featureUnits.filter(u => !coveredUnits.has(u));
+          if (uncoveredFeatures.length > featureUnits.length / 2) {
+            // 单元级覆盖不足一半，启用文档级兜底
+            for (const f of docLevel) requirements.push(f);
+            logger.info(`   📝 单元级澄清覆盖 ${coveredUnits.size}/${featureUnits.length}，启用文档级兜底`);
           } else {
-            requirements.push(...docLevel);
+            logger.info(`   📝 单元级澄清覆盖 ${coveredUnits.size}/${featureUnits.length} 个功能单元，跳过文档级避免重复注入`);
           }
         } else {
           // 无切分锚点（老项目）：维持原行为全量读入
@@ -1383,33 +1402,33 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         const body = stripLeadingFrontmatter(cleaned);
         const header = buildClarifiedHeader(filename);
         const finalContent = header + body;
-        // 解析写入路径：支持新格式（overview/、{feature}/overview/）和旧格式（requirements/）
+        // v8.3.373: 澄清产物按功能单元级一一对应落位——
+        // 回传内容落位到 020-specs/requirements/unit-{feature}.md（单元级黄金需求）
+        // 全局回传落位到 020-specs/requirements/global-clarified.md（全局级）
+        // 文档级 {源文档}-clarified.md 保留作为兜底（req-doc.ts 生成）
         let fp: string;
-        if (filename.includes('/') || filename.includes('\\')) {
-          // v8.3.267: 幽灵路由归一化——AI 常把「文档 slug」当 feature-name 生成
-          // [CLARIFY:overview/overview/CLARIFY.md]、[CLARIFY:admin-web/overview/CLARIFY.md]
-          // 等标记，原样落地会产出 overview/overview/、admin-web/ 等幽灵目录。
-          // 首段不是真实功能单元时：
-          //   「overview」→ 全局澄清 020-specs/overview/CLARIFY.md
-          //   其余文档 slug → 文档级黄金需求 020-specs/requirements/{slug}-clarified.md
-          const seg = filename.split(/[\\/]/)[0];
-          const isUnitOverview = /^[^\\/]+\/overview\/CLARIFY\.md$/i.test(filename);
-          if (isUnitOverview && seg === 'overview') {
-            fp = join(iterDir!, '020-specs', 'overview', 'CLARIFY.md');
-            logger.warn(`   ↪ ${filename} 首段「overview」为全局澄清，已归一化到 020-specs/overview/CLARIFY.md`);
-          } else if (isUnitOverview && !validFeatures.has(seg)) {
-            fp = join(iterDir!, '020-specs', 'requirements', `${seg}-clarified.md`);
-            logger.warn(`   ↪ ${filename} 首段「${seg}」非功能单元，已路由到 requirements/${seg}-clarified.md（文档级黄金需求）`);
-          } else {
-            fp = join(iterDir!, '020-specs', filename);
-          }
+        const seg = filename.split(/[\\/]/)[0];
+        const isUnitOverview = /^[^\\/]+\/overview\/CLARIFY\.md$/i.test(filename);
+        if (isUnitOverview && seg === 'overview') {
+          // 全局澄清 → 020-specs/requirements/global-clarified.md
+          fp = join(iterDir!, '020-specs', 'requirements', 'global-clarified.md');
+          logger.info(`   📋 全局澄清产物: ${relative(_projectRoot, fp)}`);
+        } else if (isUnitOverview && validFeatures.has(seg)) {
+          // 功能单元澄清 → 020-specs/requirements/unit-{feature}.md
+          fp = join(iterDir!, '020-specs', 'requirements', `unit-${seg}.md`);
+          logger.info(`   📋 单元级澄清产物: ${relative(_projectRoot, fp)}`);
+        } else if (isUnitOverview && !validFeatures.has(seg)) {
+          // 非功能单元（文档 slug）→ 文档级兜底 {slug}-clarified.md
+          fp = join(iterDir!, '020-specs', 'requirements', `${seg}-clarified.md`);
+          logger.warn(`   ↪ ${filename} 首段「${seg}」非功能单元，路由到文档级兜底: ${relative(_projectRoot, fp)}`);
         } else {
-          // 兼容旧格式：无路径前缀的文件名写入 requirements/
-          fp = join(iterDir!, '020-specs', 'requirements', filename);
+          // 旧格式兼容 → 直接落位到 020-specs/{filename}
+          fp = join(iterDir!, '020-specs', filename);
+          logger.warn(`   ↪ 旧格式澄清标记: ${filename} → ${relative(_projectRoot, fp)}`);
         }
         await ensureDir(dirname(fp));
         await writeFile(fp, finalContent);
-        logger.info(`   ✅ 澄清文档已写入: ${relative(_projectRoot, fp)}`);
+        logger.info(`   ✅ 澄清产物已写入: ${relative(_projectRoot, fp)}`);
       }
       // v8.3.370: 澄清产物落盘后立即刷新澄清报告——此前仅 JSON 分支收尾刷新，
       // 纯文本 [CLARIFY:] 回传路径不经过该分支，导致 CLARIFY_REPORT.md 断链

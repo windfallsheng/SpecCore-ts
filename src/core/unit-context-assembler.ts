@@ -692,6 +692,17 @@ export async function extractOverviewContext(
 
   const matchLine = (line: string) => allKeywords.some(k => line.includes(k));
 
+  // v8.3.373: 0. 优先读单元级黄金需求（unit-{unitName}.md）——与功能单元一一对应的精准澄清产物
+  const goldenReqDir = join(specsBase, 'requirements');
+  const unitGoldenPath = join(goldenReqDir, `unit-${unitName}.md`);
+  if (await pathExists(unitGoldenPath)) {
+    try {
+      const content = await readFile(unitGoldenPath, 'utf-8');
+      // 全文注入（单元级文档本身就是精准需求，不需要关键词过滤）
+      ctx.push(`### 📋 需求规格（unit-${unitName}.md 单元级黄金需求）\n\`\`\`\n${content.slice(0, 8000)}\n\`\`\``);
+    } catch {}
+  }
+
   // 1. 从 overview/REQUIREMENT.md 提取相关章节
   const reqPath = join(overviewDir, 'REQUIREMENT.md');
   if (await pathExists(reqPath)) {
