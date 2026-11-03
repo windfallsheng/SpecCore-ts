@@ -215,12 +215,14 @@ async function buildDataModelDoc(index: CodeIndex | null, now: string): Promise<
 
   // Entity/Model 类（从符号名启发式提取）
   if (index) {
+    // v8.3.371: 路径正则收紧词边界（旧 /po|vo/ 无边界，把 re-po-rt、com-po-nents 全放进来），
+    // 叠加符号形态过滤（排除函数/元类型），信噪比从「函数名当实体」收敛到真业务实体
     const entitySymbols = index.files
-      .filter(f => /entity|model|domain|po|vo|dto/i.test(f.path))
+      .filter(f => /(^|[/_.-])(entity|entities|model|models|domain|domains|pojo|po|vo|dto|schema)s?([/_.-]|$)/i.test(f.path))
       .flatMap(f => f.exports)
-      .filter(Boolean);
+      .filter(isBusinessEntitySymbol);
     if (entitySymbols.length > 0) {
-      lines.push('## Entity / Model 类', '', '> 从源码符号启发式提取（含 entity/model/domain 目录的类）', '');
+      lines.push('## Entity / Model 类', '', '> 从源码符号启发式提取（含 entity/model/domain 目录的类，已排除函数与配置/选项类元类型）', '');
       lines.push(dedupe(entitySymbols).slice(0, 50).map(s => '- `' + s + '`').join('\n'));
       lines.push('');
     }
@@ -240,11 +242,14 @@ function buildGlossaryDoc(index: CodeIndex | null, now: string): string {
   const candidates = new Set<string>();
   const stopWords = new Set(['controller', 'service', 'mapper', 'repository', 'manager', 'handler', 'util', 'utils', 'helper', 'config', 'entity', 'model', 'dto', 'vo', 'dao', 'impl', 'factory', 'builder', 'listener', 'filter', 'interceptor', 'aspect', 'component', 'view', 'page']);
   if (index) {
-    for (const m of index.modules) candidates.add(m.name);
+    // v8.3.371: 模块名经形态过滤（技术目录名 core/commands/utils 与文件名 index.ts 不配进术语表）
+    for (const m of index.modules) {
+      if (isGlossaryCandidate(m.name)) candidates.add(m.name);
+    }
     for (const f of index.files) {
       for (const sym of f.exports) {
         const base = sym.replace(/(Controller|Service|Mapper|Repository|Manager|Handler|Util|Utils|Impl|DTO|VO|DAO|Entity|Model|View|Component)$/i, '');
-        if (base && base.length >= 2 && !stopWords.has(base.toLowerCase())) {
+        if (base && base.length >= 2 && !stopWords.has(base.toLowerCase()) && isGlossaryCandidate(base)) {
           candidates.add(base);
         }
       }
@@ -259,6 +264,37 @@ function buildGlossaryDoc(index: CodeIndex | null, now: string): string {
   lines.push('');
   lines.push('## 术语定义（宿主 AI 补充）', '', '> ⚠️ 每个术语的准确定义、别名、业务含义由宿主 AI 完成。', '', '| 术语 | 定义 | 别名 |', '| :--- | :--- | :--- |', '| _AI 填写_ | _AI 填写_ | _AI 填写_ |');
   return lines.join('\n');
+}
+
+/**
+ * v8.3.371: 业务实体符号判定——排除函数形态与元类型，保留 PascalCase 领域名词。
+ * 解决旧启发式把 generateGraphReport（函数）、ReportOptions（选项类型）当实体的信噪比问题。
+ */
+export function isBusinessEntitySymbol(sym: string): boolean {
+  if (!sym || sym.length < 2) return false;
+  if (!/^[A-Z]/.test(sym)) return false; // 小写开头（generateGraphReport 等函数/变量）
+  if (sym === sym.toUpperCase()) return false; // 全大写常量（UNITS_CACHE_DIR）
+  const metaSuffix = /(Config|Options|Option|Result|Report|Response|Request|Status|Info|Type|Types|Enum|Error|Exception|Props|State|Context|Item|Items|Entry|Input|Output)$/;
+  if (metaSuffix.test(sym)) return false; // 元类型（VisualModelConfig/ReportOptions/TaskReport）
+  const verbPrefix = /^(Get|Set|Is|Has|Build|Create|Find|Load|Parse|Generate|Format|Convert|Merge|Apply|Emit|Write|Read|Scan|Collect|Resolve|Handle|Compute|Refresh|Check|Validate|Update|Delete|Remove|Extract|Render|Transform|Fetch|Query|Run|Start|Stop|Init|Setup)/;
+  if (verbPrefix.test(sym)) return false; // 动词开头（BuildGraphReport 等工具函数）
+  return true;
+}
+
+/**
+ * v8.3.371: 术语候选形态过滤——技术目录名/文件名/小写变量/全大写常量不配进术语表，
+ * 只留 PascalCase 领域名词（IterationUnit、UnitAnalysis）。
+ * XxxOptions/XxxConfig 等选项接口是 CLI 实现细节，同元类型排除。
+ */
+export function isGlossaryCandidate(term: string): boolean {
+  if (!term || term.length < 2) return false;
+  if (term.includes('.')) return false; // 文件名（index.ts/cli.ts）
+  if (term.includes('/') || term.includes('\\')) return false; // 路径片段
+  if (!/^[A-Z]/.test(term)) return false; // 小写开头（core/completionCommand）
+  if (term === term.toUpperCase()) return false; // 全大写常量（SVG_ONBOARD）
+  const metaSuffix = /(Config|Options|Option|Result|Report|Response|Request|Status|Info|Type|Types|Enum|Error|Exception|Props|State|Context|Item|Items|Entry|Input|Output)$/;
+  if (metaSuffix.test(term)) return false; // 选项接口（ArchiveOptions/ConfigOptions）
+  return true;
 }
 
 function buildPlatformOverviewDoc(ep: EndpointInfo, index: CodeIndex, now: string): string {

@@ -2,6 +2,12 @@
 
 ---
 
+## v8.3.371 (2026-11-03) — Final polish of the inventory tool: entity/term signal-to-noise, knowledge-graph entity count, clarify-stage wording
+
+- **DATA_MODEL / GLOSSARY signal-to-noise filtering**: the old heuristics listed `generateGraphReport` (a function) as an Entity and `core`/`commands`/`index.ts` (dir/file names) as glossary terms. Fixed: path regex tightened with word boundaries (the old `/po|vo/` matched re**po**rt/com**po**nents); added `isBusinessEntitySymbol` (excludes lowercase functions, ALL-CAPS constants, Config/Options/Report meta-types, verb prefixes) and `isGlossaryCandidate` (excludes file names/path fragments/lowercase variables/XxxOptions option interfaces), keeping only PascalCase domain nouns. On-disk: DATA_MODEL converges to 16 real Schema entities, GLOSSARY to 18 real domain terms.
+- **Knowledge-graph "undefined entities" fix**: `entities` is a `Record<string, GraphEntity>` (object), so the old `graph.entities.length` yielded undefined. Changed to `Object.keys(graph.entities).length`; on-disk it now shows the real count (162).
+- **Clarify-stage wording split**: when features is empty the old "no requirement documents detected" misled users into thinking the import failed. Fixed: probe converted/sources for requirement docs; when present show "detected N requirement documents not yet unitized", keep the old wording only when truly none exist.
+
 ## v8.3.370 (2026-11-03) — Clarify-chain walkthrough fixes: double-frontmatter stripping + CLARIFY_REPORT breakage fix
 
 A real end-to-end walkthrough of the clarify chain (doc2spec → --clarify → [CLARIFY:] apply-back) surfaced and fixed two broken links:

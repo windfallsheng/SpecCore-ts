@@ -1,5 +1,11 @@
 # Changelog
 
+## v8.3.371 (2026-11-03) — 盘点器最后三处瑕疵收口：实体/术语信噪比、知识图谱实体数、澄清阶段文案
+
+- **DATA_MODEL / GLOSSARY 信噪比过滤**：旧启发式把 `generateGraphReport`（函数）当 Entity、把 `core`/`commands`/`index.ts`（目录/文件名）当术语。修复：路径正则收紧词边界（旧 `/po|vo/` 无边界把 report/components 全放进来）；新增 `isBusinessEntitySymbol`（排除小写函数、全大写常量、Config/Options/Report 元类型、动词前缀）与 `isGlossaryCandidate`（排除文件名/路径片段/小写变量/XxxOptions 选项接口），只留 PascalCase 领域名词。实盘：DATA_MODEL 收敛为 16 个真 Schema 实体、GLOSSARY 收敛为 18 个真领域名词。
+- **知识图谱「undefined 个实体」修复**：`entities` 是 `Record<string, GraphEntity>`（对象），旧代码 `graph.entities.length` 取不到对象长度 → 显示 undefined。改为 `Object.keys(graph.entities).length`，实盘显示真实实体数（162）。
+- **澄清阶段文案区分**：features 为空时旧文案「未检测到需求文档」误导用户以为导入失败。修复：探测 converted/sources 中的需求文档数，有文档时提示「已检测到 N 份需求文档但尚未切分功能单元（unitize）」，无文档才显示原文案。
+
 ## v8.3.370 (2026-11-03) — 澄清链走查修复：双 frontmatter 剥离 + CLARIFY_REPORT 断链修复
 
 真实走查澄清链（doc2spec → --clarify → [CLARIFY:] 回传）发现并修复两个断链：

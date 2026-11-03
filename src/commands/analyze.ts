@@ -807,7 +807,22 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
           } catch { /* 只读检测，失败不影响主流程 */ }
         } else {
           manifest = computeFeatureBasedAnalyzeManifest([], platforms, phase, iterName);
-          logger.info(`📂 未检测到需求文档，仅创建全局 overview/`);
+          // v8.3.371: 区分「有需求文档但未切分」与「无需求文档」——
+          // clarify/unitize 前 features 为空是正常态，旧文案「未检测到需求文档」误导用户以为导入失败
+          let reqDocCount = 0;
+          try {
+            for (const sub of ['converted', 'sources']) {
+              const d = join(iterDirForSkeleton, '010-requirements', sub);
+              if (await pathExists(d)) {
+                reqDocCount += (await readdir(d)).filter((f: string) => f.endsWith('.md')).length;
+              }
+            }
+          } catch { /* 只读探测失败按 0 处理 */ }
+          if (reqDocCount > 0) {
+            logger.info(`📂 已检测到 ${reqDocCount} 份需求文档但尚未切分功能单元（unitize），仅创建全局 overview/；切分后重跑将按功能单元生成规格`);
+          } else {
+            logger.info(`📂 未检测到需求文档，仅创建全局 overview/`);
+          }
         }
         const skeletonResult = await generateSkeleton(specDir, manifest);
         // v8.3.278+: 清理「未涉及端」的旧空骨架目录（v8.3.277 及以前的全端笛卡尔积残留）

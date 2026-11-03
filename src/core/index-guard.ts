@@ -158,7 +158,9 @@ async function checkGraphLayer(cwd: string, iteration?: string): Promise<LayerSt
   try {
     const stale = await isGraphStale(cwd, iteration);
     const graph = await loadKnowledgeGraph(cwd);
-    const entityCount = graph ? graph.entities.length : 0;
+    // v8.3.371: entities 是 Record<string, GraphEntity>（对象），
+    // 旧代码 graph.entities.length 取不到对象长度 → 显示「undefined 个实体」
+    const entityCount = graph && graph.entities ? Object.keys(graph.entities).length : 0;
     return {
       name: '知识图谱',
       fresh: !stale,
