@@ -2,6 +2,14 @@
 
 ---
 
+## v8.3.376 (2026-11-03) — No word-count ratio check for requirement clarification (growing from little is the essence)
+
+- **Clarification completeness check relaxed**: Requirement content may be written freely by users with varying length, all treated as valid. As long as clarification produces structured content (having clarification items means it is enriched), the "word count ≥ 80% of source" ratio check is removed — avoiding false alarms that misreport normal requirement enrichment as "content loss".
+- **Ratio check kept as optional capability**: `validateClarifyCompleteness` retains the `sourceWordCount` parameter; ratio check runs only when callers pass it explicitly, for technical documents (TECH.md / ANALYSIS.md) to opt in as needed.
+- **Prompt template constraint relaxed accordingly**: Clarification prompt changed from "word count must be ≥ 80% of source" to "must include all business information from source (professional restructuring and wording optimization allowed, content deletion prohibited)".
+
+---
+
 ## v8.3.375 (2026-11-03) — Skeleton predicate unified across consumers (hasValidClarifiedDocs shares isSkeletonContent)
 
 - **`hasValidClarifiedDocs` skeleton detection unified**: `isRealClarify` internal function changed from inline regex `/<!--\s*SPEC-SKELETON\s*-->/` to shared predicate `isSkeletonContent`, aligning with `extractOverviewContext` / `taskify` / `analyze`. Fixes legacy risk where skeleton CLARIFY.md was miscounted as valid clarification in pure prompt mode re-runs.

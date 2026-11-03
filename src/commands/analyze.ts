@@ -1440,30 +1440,21 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
         }
         await ensureDir(dirname(fp));
         await writeFile(fp, finalContent);
-        // v8.3.374: 澄清产物落盘后立即校验完整性——字数/章节覆盖/骨架残留/源文档比值
+        // v8.3.374: 澄清产物落盘后立即校验完整性——字数/章节覆盖/骨架残留
+        // v8.3.375: 不做源文档字数比值校验——澄清的本质是「以少生多」，用户三句话灵感
+        //   澄清后变成结构化文档，字数膨胀是好事。比值校验留给技术文档场景。
         if (fp.includes('unit-') || fp.includes('global-clarified')) {
           const { validateClarifyCompleteness } = await import('../core/requirement-clarifier');
-          // 尝试获取源文档字数（从 010-requirements/features/ 目录）
-          let sourceWordCount: number | undefined;
-          if (iterDir && seg && validFeatures.has(seg)) {
-            try {
-              const sourcePath = join(iterDir, '010-requirements', 'features', seg, 'SOURCE.md');
-              if (await pathExists(sourcePath)) {
-                const sourceContent = await readFile(sourcePath, 'utf-8');
-                sourceWordCount = sourceContent.trim().length;
-              }
-            } catch {}
-          }
-          const check = validateClarifyCompleteness(finalContent, sourceWordCount);
+          const check = validateClarifyCompleteness(finalContent);
           if (!check.pass) {
             logger.warn(`   ⚠️  澄清产物完整性校验未通过: ${relative(_projectRoot, fp)}`);
             if (check.suggestion) logger.warn(`      ${check.suggestion}`);
             if (check.missingSections.length > 0) {
               logger.warn(`      缺失章节: ${check.missingSections.join('、')}`);
             }
-            logger.warn(`      字数: ${check.wordCount}（最低 300${sourceWordCount ? `，源文档 ${sourceWordCount} 字，比值 ${check.sourceRatio ?? '?'}` : ''}）`);
+            logger.warn(`      字数: ${check.wordCount}（最低 300）`);
           } else {
-            logger.info(`   ✅ 澄清产物完整性校验通过: ${check.wordCount} 字，章节覆盖 ${3 - check.missingSections.length}/3${sourceWordCount ? `，源文档比值 ${check.sourceRatio}` : ''}`);
+            logger.info(`   ✅ 澄清产物完整性校验通过: ${check.wordCount} 字，章节覆盖 ${3 - check.missingSections.length}/3`);
           }
         } else {
           logger.info(`   ✅ 澄清产物已写入: ${relative(_projectRoot, fp)}`);
@@ -4956,7 +4947,7 @@ status: "clarified"
     prompt += `### ⚠️ 黄金需求完整性要求（v8.3.374）\n\n`;
     prompt += `- **必须包含源文档全部内容**：澄清产物 = 源文档完整内容 + 专业化整理 + 待确认项标注\n`;
     prompt += `- 下游 analyze/taskify/execute 只读这份文档，不再回翻源文档\n`;
-    prompt += `- 字数不得少于源文档的 80%（允许精简表述，禁止删减内容）\n\n`;
+    prompt += `- 必须包含源文档的全部业务信息（允许专业化整理和表述优化，但禁止删减内容）\n\n`;
     prompt += `### ⚠️ [OPEN] 待确认项格式要求（v8.3.374）\n\n`;
     prompt += `- 每个 [OPEN] 项必须包含：现状、影响、方案表（见模板「待确认项」章节）\n`;
     prompt += `- 方案表中必须标注一个推荐项（带 ⭐ 标记）\n`;

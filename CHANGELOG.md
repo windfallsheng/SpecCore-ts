@@ -1,5 +1,13 @@
 # Changelog
 
+## v8.3.376 (2026-11-03) — 需求澄清不做字数比值校验（以少生多是澄清本质）
+
+- **澄清产物完整性校验放宽**：需求内容可能由用户随意描述、长短不一，一律认定有效。只要澄清阶段产出结构化内容（有澄清项即算丰富），不再做「字数 ≥ 源文档 80%」的比值校验——避免把正常的需求丰富化误报为「丢失内容」。
+- **比值校验保留为可选能力**：`validateClarifyCompleteness` 的 `sourceWordCount` 参数保留，仅当调用方显式传入时才做比值校验，供技术性文档（TECH.md / ANALYSIS.md）场景按需启用。
+- **prompt 模板约束同步放宽**：澄清 prompt 中「字数不得少于源文档 80%」改为「必须包含源文档的全部业务信息（允许专业化整理和表述优化，但禁止删减内容）」。
+
+---
+
 ## v8.3.375 (2026-11-03) — 骨架判定谓词多消费点统一（hasValidClarifiedDocs 共享 isSkeletonContent）
 
 - **`hasValidClarifiedDocs` 骨架判定统一**：`isRealClarify` 内部函数从内联正则 `/<!--\s*SPEC-SKELETON\s*-->/` 改为调用公共谓词 `isSkeletonContent`，与 `extractOverviewContext` / `taskify` / `analyze` 共享同一判定逻辑。修复「纯 prompt 模式重跑 analyze 时骨架 CLARIFY.md 被误计为已澄清」的遗留风险。
