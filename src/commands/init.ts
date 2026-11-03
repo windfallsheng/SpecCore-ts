@@ -1105,7 +1105,7 @@ export const TOOL_COMMANDS: [string, string, string][] = [
   ['spec-run', '端到端流水线专属 Skill。在调用 speccore run 之前，执行参数提取（需求描述、迭代、起止阶段、演示模式），参数缺失时输出交互式提示。不影响 speccore run 的意图识别能力。', '直接执行: execute_command("speccore run \'用户的一句话需求\'")\n\n不要输出命令文本，不要分析意图，一切交给 speccore run。\n\n流水线会自动从澄清一路跑到部署，中间三个 review 闸口（Spec 定稿 / 代码 review / 部署前确认）会停下来等你确认，看到 [SPECCORE_GATE_X] 标记时停下 review 并询问用户。'],
 
   ['spec-deploy', '部署专属 Skill。覆盖 build / deploy / pipeline 命令的意图识别与参数提取。支持自然语言（"部署到测试环境"）和显式参数（--env test --all）。参数缺失时交互式提示，前置校验环境配置与平台有效性。不影响 speccore ask 的意图识别能力。', 'speccore pipeline --env ${1|local,dev,test,staging,production|} --all'],
-  ['spec-verify', '测试验证专属 Skill。覆盖 verify 命令的测试意图识别与参数提取。支持自然语言（"跑一下冒烟测试"）和显式参数（--config ./tests/smoke.yaml）。参数缺失时交互式提示，自动发现测试配置文件。不影响 speccore ask 的意图识别能力。', 'speccore verify --ui --stage ${1|dev,pr,deploy,release|}'],
+  ['spec-verify', '测试验证专属 Skill。覆盖 verify 命令的测试意图识别与参数提取。支持自然语言（"跑一下冒烟测试"）和显式参数（--config ./tests/smoke.yaml）。参数缺失时交互式提示，自动发现测试配置文件。AI 浏览器验证模式（v8.3.350+）：--ai 生成自然语言验证剧本（宿主 AI 视觉执行，无需 selector），--ai-report 生成 HTML 报告，--ai-judge 视觉判定兜底。不影响 speccore ask 的意图识别能力。', 'speccore verify --ui --stage ${1|dev,pr,deploy,release|} | speccore verify --ai --scope ${2|all,deployed,modules:单元名|}'],
 ];
 
 export async function createToolIntegrations(projectRoot: string, toolFilter?: string): Promise<void> {

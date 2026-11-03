@@ -99,15 +99,70 @@
     ]
   },
   {
+    "id": "from-source-reverse",
+    "name": "源码反推需求",
+    "category": "analysis",
+    "icon": "🔄",
+    "description": "从源码反推需求文档（两跳：实现事实 → 用户语言）",
+    "prompt": "从 {源码目录} 反推需求文档",
+    "command": "speccore global from-source --src {源码目录}",
+    "env": "ai",
+    "skill": "spec-from-source",
+    "params": [
+      {
+        "key": "源码目录",
+        "placeholder": "backend/src,admin-web/src",
+        "required": true
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "全局模式"
+    ],
+    "builtin": true,
+    "sort": 8,
+    "examples": [
+      "从 admin-web 的源码反推需求文档",
+      "根据代码生成需求"
+    ]
+  },
+  {
+    "id": "from-source-verify",
+    "name": "验证反推锚点",
+    "category": "analysis",
+    "icon": "⚓",
+    "description": "校验反推需求文档的溯源锚点，抓悬空锚点防幻觉",
+    "prompt": "验证一下反推的锚点",
+    "command": "speccore global from-source --src {源码目录} --verify",
+    "env": "ai",
+    "skill": "spec-from-source",
+    "params": [
+      {
+        "key": "源码目录",
+        "placeholder": "backend/src,admin-web/src",
+        "required": true
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "全局模式"
+    ],
+    "builtin": true,
+    "sort": 9,
+    "examples": [
+      "检查反推文档的锚点是否真实存在"
+    ]
+  },
+  {
     "id": "analyze-global",
     "name": "全局架构分析",
     "category": "analysis",
     "icon": "🌐",
     "description": "全局层分析，跨端梳理项目架构",
     "prompt": "全局分析这个项目，带上源码一起看",
-    "command": "speccore analyze --scope global --with-code",
+    "command": "speccore global analyze --layer 1",
     "env": "ai",
-    "skill": "spec-analyze",
+    "skill": "spec-from-source",
     "params": [],
     "tags": [
       "分析阶段",
@@ -127,9 +182,9 @@
     "icon": "🌐",
     "description": "全局层深度分析，跨端梳理架构并逐层深入",
     "prompt": "深度分析全局架构，带上源码一起看",
-    "command": "speccore analyze --scope global --depth deep --with-code",
+    "command": "speccore global analyze --depth deep",
     "env": "ai",
-    "skill": "spec-analyze",
+    "skill": "spec-from-source",
     "params": [],
     "tags": [
       "分析阶段",
@@ -205,9 +260,9 @@
     "icon": "🔬",
     "description": "对指定文档深度分析，字数/图表翻倍",
     "prompt": "深度分析 {文档名}，先出大纲确认后再逐节深入",
-    "command": "speccore analyze --scope global --deep {文档名} --iterative",
+    "command": "speccore global analyze --layer 4 --deep {文档名} --iterative",
     "env": "ai",
-    "skill": "spec-analyze",
+    "skill": "spec-from-source",
     "params": [
       {
         "key": "文档名",
@@ -346,6 +401,38 @@
     "examples": [
       "代码变更后规格需要同步更新",
       "新需求加入后补充分析"
+    ]
+  },
+  {
+    "id": "analyze-add-platform",
+    "name": "新增端分析",
+    "category": "analysis",
+    "icon": "🆕",
+    "description": "新接入端单独分析并更新全局文档",
+    "prompt": "新接入了 {端名} 这个端，分析一下",
+    "command": "speccore analyze -I {迭代名} --add-platform {端名}",
+    "env": "ai",
+    "skill": "spec-analyze",
+    "params": [
+      {
+        "key": "端名",
+        "placeholder": "admin-web",
+        "required": true
+      },
+      {
+        "key": "迭代名",
+        "placeholder": "Q2",
+        "required": false
+      }
+    ],
+    "tags": [
+      "分析阶段",
+      "全局模式"
+    ],
+    "builtin": true,
+    "sort": 19,
+    "examples": [
+      "新接入了 admin-web 这个端，分析一下这个端"
     ]
   },
   {

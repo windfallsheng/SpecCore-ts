@@ -12,7 +12,7 @@
 import { readFile, pathExists } from 'fs-extra';
 import { logger } from '../utils/logger';
 import * as yaml from 'js-yaml';
-import type { AuthConfig, AuthCredentials } from './ui-verify/types';
+import type { AuthConfig, AuthCredentials, VerifySpec } from './ui-verify/types';
 
 export interface TestConfigTarget {
   url?: string;
@@ -25,6 +25,8 @@ export interface TestCase {
   type: 'smoke' | 'visual' | 'api';
   routes?: string[];
   scenarios?: string[];
+  /** v8.3.353+: 精细场景（VERIFY_SPEC scenarios 结构），透传冒烟引擎完整执行 22 种动作 + 9 种断言 */
+  verify_scenarios?: VerifySpec['scenarios'];
   threshold?: 'strict' | 'normal' | 'loose';
   devices?: string[];
   browsers?: string[];
@@ -81,23 +83,17 @@ function convertVerifySpecToTestConfig(parsed: Record<string, unknown>): TestCon
 
   const scenarios = Array.isArray(parsed.scenarios) ? parsed.scenarios : [];
 
-  // 每个 scenario 转换为一个 smoke 测试用例
+  // 每个 scenario 转换为一个 smoke 测试用例（v8.3.353+: 精细场景完整透传，不再只提取 navigate）
   for (const sc of scenarios) {
     if (!sc || typeof sc !== 'object') continue;
-    const s = sc as any;
-    const routes: string[] = [];
-    if (Array.isArray(s.actions)) {
-      for (const action of s.actions) {
-        if (action && action.type === 'navigate' && typeof action.value === 'string') {
-          routes.push(action.value);
-          break;
-        }
-      }
-    }
+    const s = sc as Record<string, unknown>;
     const testCase: TestCase = {
       name: String(s.name || 'unnamed'),
       type: 'smoke',
-      routes: routes.length > 0 ? routes : ['/'],
+      // routes 保留用于 URL 解析兜底（取第一个 navigate 的 value）
+      routes: extractRoutesFromScenarios([s]),
+      // 精细场景完整透传：22 种动作 + 9 种断言不再被丢弃
+      verify_scenarios: [s as unknown] as VerifySpec['scenarios'],
     };
     config.tests.push(testCase);
   }
@@ -151,6 +147,16 @@ export async function loadTestConfig(filePath: string): Promise<TestConfig | nul
           };
           if (Array.isArray(t.routes)) testCase.routes = t.routes.map(String);
           if (Array.isArray(t.scenarios)) testCase.scenarios = t.scenarios.map(String);
+          // v8.3.353+: 精细场景透传（tests[].verify_scenarios 数组，或单场景直挂 actions/assertions）
+          if (Array.isArray(t.verify_scenarios)) {
+            testCase.verify_scenarios = t.verify_scenarios as VerifySpec['scenarios'];
+          } else if (Array.isArray(t.actions)) {
+            testCase.verify_scenarios = [{
+              name: String(t.name || 'scenario'),
+              actions: t.actions as VerifySpec['scenarios'][number]['actions'],
+              assertions: Array.isArray(t.assertions) ? t.assertions : [],
+            }];
+          }
           if (t.threshold) testCase.threshold = t.threshold as TestCase['threshold'];
           if (Array.isArray(t.devices)) testCase.devices = t.devices.map(String);
           if (Array.isArray(t.browsers)) testCase.browsers = t.browsers.map(String);
@@ -188,6 +194,20 @@ export function parseAuthConfig(raw: Record<string, unknown>): AuthConfig {
     if (c.password_env !== undefined) credentials.password_env = String(c.password_env);
   }
 
+  // v8.3.354+: 登录二次验证块（验证码输入框 + 码来源通道）
+  let verification: AuthConfig['verification'];
+  if (raw.verification && typeof raw.verification === 'object') {
+    const v = raw.verification as Record<string, unknown>;
+    verification = {
+      type: v.type !== undefined ? String(v.type) : undefined,
+      code_selector: v.code_selector !== undefined ? String(v.code_selector) : '',
+      code_submit_selector: v.code_submit_selector !== undefined ? String(v.code_submit_selector) : undefined,
+      code_env: v.code_env !== undefined ? String(v.code_env) : undefined,
+      fixed_code: v.fixed_code !== undefined ? String(v.fixed_code) : undefined,
+      code_timeout: v.code_timeout !== undefined ? Number(v.code_timeout) : undefined,
+    };
+  }
+
   return {
     login_url: raw.login_url !== undefined ? String(raw.login_url) : undefined,
     username_selector: raw.username_selector !== undefined ? String(raw.username_selector) : '',
@@ -197,6 +217,7 @@ export function parseAuthConfig(raw: Record<string, unknown>): AuthConfig {
     success_selector: raw.success_selector !== undefined ? String(raw.success_selector) : undefined,
     wait_after_login: raw.wait_after_login !== undefined ? Number(raw.wait_after_login) : undefined,
     credentials,
+    verification,
   };
 }
 
@@ -237,6 +258,10 @@ export interface AuthResolutionInfo {
   usernameSource: string;
   /** 密码来源说明 */
   passwordSource: string;
+  /** 验证码装配说明（v8.3.354+，如「验证码自环境变量 SIT_SMS_CODE 注入」；无验证码块时为空） */
+  verificationNote?: string;
+  /** 验证码是否已就绪（未配置验证码块时为 undefined；配置了但码源缺失时为 false） */
+  verificationReady?: boolean;
   /** 账号密码是否都已就绪（可执行登录） */
   ready: boolean;
   /** 需要用户注意/处理的项 */
@@ -291,11 +316,37 @@ export function describeAuthResolution(auth: AuthConfig, testAccountHint?: strin
     warnings.push('密码未配置（credentials.password / password_env）');
   }
 
+  // ── 验证码（v8.3.354+）──
+  let verificationReady = true;
+  let verificationNote = '';
+  if (auth.verification) {
+    const v = auth.verification;
+    if (!v.code_selector) {
+      verificationReady = false;
+      warnings.push('验证码块缺 code_selector（验证码输入框选择器），自动填码不可用');
+    } else if (v.code_env) {
+      const code = process.env[v.code_env];
+      if (!code) {
+        verificationReady = false;
+        warnings.push(`验证码环境变量 ${v.code_env} 未设置，请 export ${v.code_env}=<验证码>（或改配 fixed_code 固定码）`);
+      } else {
+        verificationNote = `验证码（${v.type || 'verification'}）自环境变量 ${v.code_env} 注入`;
+      }
+    } else if (v.fixed_code) {
+      verificationNote = `验证码（${v.type || 'verification'}）使用固定码`;
+    } else {
+      verificationReady = false;
+      warnings.push('验证码块未配置码来源（code_env / fixed_code 均缺失），自动填码不可用');
+    }
+  }
+
   return {
     username,
     password,
     usernameSource,
     passwordSource,
+    verificationNote: verificationNote || undefined,
+    verificationReady: auth.verification ? verificationReady : undefined,
     ready: !!username && !!password,
     warnings,
   };

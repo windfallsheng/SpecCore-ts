@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { readFile, pathExists } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { findProjectRoot, isNewerVersion } from '../utils/task-utils';
@@ -102,7 +102,7 @@ export async function aboutCommand(): Promise<void> {
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Speccore v${ver}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600');
+@font-face{font-family:"Orbitron";font-style:normal;font-weight:500 900;font-display:swap;src:url("fonts/Orbitron.woff2") format("woff2")}@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;src:url("fonts/JetBrainsMono.woff2") format("woff2")}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'JetBrains Mono',monospace;background:#0b1221;color:#bae6fd;padding:28px 20px}
 .scanlines{position:fixed;inset:0;pointer-events:none;z-index:999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.006) 2px,rgba(0,240,255,.006) 4px)}
@@ -186,6 +186,8 @@ ${milestonesHtml}
   const outPath = join(process.cwd(), 'outputs', 'speccore-about.html');
   await ensureDir(join(process.cwd(), 'outputs'));
   await writeFile(outPath, html);
+  const { ensureHtmlAssets } = await import('../core/page-bundle');
+  await ensureHtmlAssets(dirname(outPath));
 
   logger.success(`📖 ${outPath}`);
   logger.info(`   📄 file://${outPath}`);

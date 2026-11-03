@@ -7,6 +7,14 @@
  *   3. 知识图谱     (knowledge-graph.ts) → 实体关系链
  *
  * 设计目标：一次查询，返回最相关的混合上下文，AI 不需要知道数据来源
+ *
+ * ── 与相邻机制的边界（v8.3.366 文档化，详见 docs/knowledge-assets-architecture.md）──
+ * - 关键词提取唯一真源：code-scanner.extractKeywords（SEMANTIC_MAP + utils/synonyms 中英映射），
+ *   rag-engine 直接复用，不得再维护独立词表。
+ * - 代码检索唯一入口：code-scanner.findRelevantCode（KG 实体/语义标签/@spec 注释/符号索引多路融合），
+ *   本层的 3.2 节先调用它定位文件，再对命中文件做切片评分（切片是 findRelevantCode 的细粒度补充）。
+ * - 图谱双轨分工：knowledge-graph（spec 文档图，任务/文档/实体关系）与 code-graph（AST 源码图，
+ *   符号/依赖关系）互不替代；本层 graphContext 用前者，插件摘要用后者。
  */
 
 import { readFile, pathExists } from 'fs-extra';
@@ -128,6 +136,14 @@ export function sliceCodeFile(content: string, filePath: string): CodeSlice[] {
       let j = i + 1;
       const bodyLines: string[] = [];
       let braceDepth = 0;
+      // v8.3.365: 签名行的括号也计入深度——函数/类声明的 `{` 使 body 起点深度为 1，
+      // 此前从 0 起计，导致第一个空行或首个闭合块就误判「函数结束」，切片只剩函数头几行
+      // （连带影响 RAG 代码切片质量与源码反推的业务切片素材）
+      for (let ci = 0; ci < line.length; ci++) {
+        const ch = line[ci];
+        if (ch === '{' || ch === '(' || ch === '[') braceDepth++;
+        else if (ch === '}' || ch === ')' || ch === ']') braceDepth--;
+      }
       let inString = false;
       let stringChar = '';
 

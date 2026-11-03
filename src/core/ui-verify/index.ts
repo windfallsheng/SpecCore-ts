@@ -12,7 +12,7 @@ export { scanRoutes, detectFramework, flattenRoutes } from './route-scanner';
 export type { DiscoveredRoute, RouteScanResult, ScanRoutesOptions } from './route-scanner';
 export { scanPages } from './page-scanner';
 export type { PageEntry, PageScanResult } from './page-scanner';
-export { generateSpecFromRoutes, generateSpecFromPages, generateFlowScenariosFromSpec, generateSpecFromUiSpec, extractElementTestIds, writeVerifySpec } from './spec-generator';
+export { generateSpecFromRoutes, generateSpecFromPages, generateFlowScenariosFromSpec, generateSpecFromUiSpec, extractElementTestIds, extractTableOperationSteps, writeVerifySpec } from './spec-generator';
 export type { SpecGenerationOptions, ElementTestIdInfo } from './spec-generator';
 export { filterSpec, parseFilterArgs, logFilterSummary } from './module-filter';
 export type { FilterOptions } from './module-filter';

@@ -142,6 +142,24 @@ export function parseClarifiedRequirement(response: string): {
 }
 
 /**
+ * v8.3.370: 剥离开头的 YAML frontmatter 块（---\n...\n---）。
+ * 宿主 AI 按澄清剧本回传时，块内容常自带 source/status frontmatter；
+ * CLI 落盘会统一追加系统头（buildClarifiedHeader），不剥离则双 frontmatter。
+ */
+export function stripLeadingFrontmatter(text: string): string {
+  let t = text.trim();
+  if (t.startsWith('---')) {
+    const end = t.indexOf('\n---', 3);
+    if (end !== -1) {
+      // 定位第二个 --- 之后的行尾
+      const after = t.slice(end + 4).replace(/^\n/, '');
+      return after.trimStart();
+    }
+  }
+  return text;
+}
+
+/**
  * 写入澄清后的需求文档
  * v8.2.0+: 改为写入 020-specs/requirements/ 作为黄金需求目录
  * 原始需求保留在 010-requirements/ 不变
@@ -744,6 +762,16 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
   let clarifyFileCount = 0;      // 澄清文件总数
   let newPathClarifyCount = 0;   // 新路径 CLARIFY.md 数
   let sourceDocCount = 0;        // 源需求文档数
+  // v8.3.352+: 真实澄清产物判定——存在且非骨架。analyze 预建骨架会写出带
+  // SPEC-SKELETON 标记的 CLARIFY.md，仅查存在性会把空壳误计为已澄清，
+  // 导致纯 prompt 模式（非 --auto）重跑时澄清被静默跳过（与 auto 分支幂等检测对齐）
+  const isRealClarify = async (fp: string): Promise<boolean> => {
+    try {
+      if (!(await pathExists(fp))) return false;
+      const content = await readFile(fp, 'utf-8');
+      return !/<!--\s*SPEC-SKELETON\s*-->/.test(content);
+    } catch { return false; }
+  };
   const checkClarifyMtime = async (fp: string) => {
     try {
       if (await pathExists(fp)) {
@@ -755,22 +783,24 @@ export async function hasValidClarifiedDocs(iterDir: string): Promise<boolean> {
     } catch { /* 忽略 */ }
   };
 
-  // 新路径：全局澄清
-  if (await pathExists(join(specsDir, 'overview', 'CLARIFY.md'))) {
+  // 新路径：全局澄清（骨架不计入有效产物）
+  const overviewClarify = join(specsDir, 'overview', 'CLARIFY.md');
+  if (await isRealClarify(overviewClarify)) {
     newPathClarifyCount++;
+    await checkClarifyMtime(overviewClarify);
   }
-  await checkClarifyMtime(join(specsDir, 'overview', 'CLARIFY.md'));
 
-  // 新路径：模块澄清
+  // 新路径：模块澄清（骨架不计入有效产物）
   try {
     if (await pathExists(specsDir)) {
       const entries = await readdir(specsDir, { withFileTypes: true });
       for (const e of entries) {
         if (e.isDirectory() && e.name !== 'overview') {
-          if (await pathExists(join(specsDir, e.name, 'overview', 'CLARIFY.md'))) {
+          const unitClarify = join(specsDir, e.name, 'overview', 'CLARIFY.md');
+          if (await isRealClarify(unitClarify)) {
             newPathClarifyCount++;
+            await checkClarifyMtime(unitClarify);
           }
-          await checkClarifyMtime(join(specsDir, e.name, 'overview', 'CLARIFY.md'));
         }
       }
     }

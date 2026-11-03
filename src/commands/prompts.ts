@@ -6,10 +6,17 @@
 import { logger } from '../utils/logger';
 import { writeFile, ensureDir, readFile, pathExists, readdir } from 'fs-extra';
 import { join } from 'path';
+import { randomUUID } from 'node:crypto';
 
 export interface PromptsOptions {
   web?: boolean;
   output?: string;
+  /** 导入自定义提示词 JSON 落盘到 .speccore/prompts/user/ */
+  import?: string;
+  /** 导出当前自定义提示词为 JSON 文件 */
+  export?: string;
+  /** 项目根目录（默认 process.cwd()，供 --project-dir / 联动调用场景使用） */
+  projectDir?: string;
 }
 
 export interface PromptTemplate {
@@ -44,23 +51,38 @@ export interface PromptParam {
  * v8.3.338+: init/welcome 生成静态页面时联动产出，保证 setup-guide/项目名片页内
  * 「查看提示词库」链接指向的 speccore-prompts.html 真实存在，杜绝 404。
  */
-export async function generatePromptsPage(outputPath?: string): Promise<string> {
-  const presets = await loadPresets();
-  const userPrompts = await loadUserPrompts();
+export async function generatePromptsPage(outputPath?: string, projectRoot?: string): Promise<string> {
+  const root = projectRoot || process.cwd();
+  const presets = await loadPresets(root);
+  const userPrompts = await loadUserPrompts(root);
   const allPrompts = [...presets, ...userPrompts];
 
-  const ctx = await readCurrentContext();
+  const ctx = await readCurrentContext(root);
   const html = generatePromptsHtml(attachParamFlags(applyDynamicDefaults(allPrompts, ctx)));
-  const target = outputPath || join(process.cwd(), 'outputs', 'speccore-prompts.html');
-  await ensureDir(join(process.cwd(), 'outputs'));
+  const target = outputPath || join(root, 'outputs', 'speccore-prompts.html');
+  await ensureDir(join(root, 'outputs'));
   await writeFile(target, html);
   return target;
 }
 
 export async function promptsCommand(options: PromptsOptions): Promise<void> {
   try {
+    const root = options.projectDir || process.cwd();
+
+    // 导入：JSON 文件 → .speccore/prompts/user/ 落盘（页面导出与 CLI 落盘的双通道闭环）
+    if (options.import) {
+      await importUserPrompts(options.import, root);
+      return;
+    }
+
+    // 导出：.speccore/prompts/user/ → JSON 文件
+    if (options.export) {
+      await exportUserPrompts(options.export, root);
+      return;
+    }
+
     // 生成 HTML 页面（v8.3.338+: 复用 generatePromptsPage）
-    const outputPath = await generatePromptsPage(options.output);
+    const outputPath = await generatePromptsPage(options.output, root);
 
     logger.info('');
     logger.success('✅ 提示词库页面已生成！');
@@ -71,8 +93,86 @@ export async function promptsCommand(options: PromptsOptions): Promise<void> {
   }
 }
 
-async function loadPresets(): Promise<PromptTemplate[]> {
-  const presetsDir = join(process.cwd(), '.speccore', 'prompts', 'presets');
+/** 用户提示词目录（自定义提示词落盘位置） */
+function userPromptsDir(projectRoot: string): string {
+  return join(projectRoot, '.speccore', 'prompts', 'user');
+}
+
+/** 规范化导入数据：数组或 { prompts: [...] } 包装，过滤无 name/prompt 的无效条目 */
+function normalizeImportedPrompts(data: unknown): PromptTemplate[] {
+  const items = Array.isArray(data) ? data : (data as any)?.prompts;
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((p: any) => p
+      && typeof p.name === 'string' && p.name.trim() !== ''
+      && typeof p.prompt === 'string' && p.prompt.trim() !== '')
+    .map((p: any) => ({
+      id: p.id || 'prompt-' + randomUUID(),
+      name: p.name,
+      category: p.category || 'custom',
+      icon: p.icon || '📝',
+      description: p.description || '',
+      prompt: p.prompt,
+      params: Array.isArray(p.params) ? p.params : extractParamsFromText(p.prompt),
+      builtin: false,
+      sort: 99,
+      createdAt: p.createdAt || new Date().toISOString(),
+      updatedAt: p.updatedAt || new Date().toISOString(),
+    }));
+}
+
+/** 从提示词文本提取 {参数名} 占位符（与页面 extractParams 一致） */
+function extractParamsFromText(text: string): PromptParam[] {
+  const matches = text.match(/\{([^}]+)\}/g) || [];
+  return matches.map(m => ({ key: m.slice(1, -1), placeholder: '', required: false }));
+}
+
+/** 导入自定义提示词：合并写入 user 目录（覆盖同名 id，保留其他条目） */
+export async function importUserPrompts(filePath: string, projectRoot: string): Promise<void> {
+  if (!(await pathExists(filePath))) {
+    logger.error(`导入失败: 文件不存在 ${filePath}`);
+    return;
+  }
+  const raw = await readFile(filePath, 'utf-8');
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    logger.error('导入失败: JSON 解析错误');
+    return;
+  }
+  const incoming = normalizeImportedPrompts(data);
+  if (incoming.length === 0) {
+    logger.warn('导入失败: 未找到有效的提示词条目（需要 name + prompt 字段）');
+    return;
+  }
+
+  const dir = userPromptsDir(projectRoot);
+  await ensureDir(dir);
+
+  // 合并策略：与既有条目按 id 去重（incoming 优先），保留未冲突的旧条目
+  const existing = await loadUserPrompts(projectRoot);
+  const merged = [...existing.filter(e => !incoming.some(i => i.id === e.id)), ...incoming];
+  const outFile = join(dir, 'custom-imported.json');
+  await writeFile(outFile, JSON.stringify(merged, null, 2), 'utf-8');
+
+  logger.success(`✅ 已导入 ${incoming.length} 条提示词（合并后共 ${merged.length} 条）`);
+  logger.info(`   落盘: ${outFile}`);
+  process.stdout.write(`[SPECCORE_PROMPTS_IMPORT: ${outFile}]\n`);
+}
+
+/** 导出当前自定义提示词为 JSON 文件 */
+export async function exportUserPrompts(filePath: string, projectRoot: string): Promise<void> {
+  const prompts = await loadUserPrompts(projectRoot);
+  await ensureDir(join(filePath, '..'));
+  await writeFile(filePath, JSON.stringify(prompts, null, 2), 'utf-8');
+  logger.success(`✅ 已导出 ${prompts.length} 条自定义提示词`);
+  logger.info(`   文件: ${filePath}`);
+  process.stdout.write(`[SPECCORE_PROMPTS_EXPORT: ${filePath}]\n`);
+}
+
+async function loadPresets(projectRoot: string): Promise<PromptTemplate[]> {
+  const presetsDir = join(projectRoot, '.speccore', 'prompts', 'presets');
   const presets: PromptTemplate[] = [];
 
   if (!(await pathExists(presetsDir))) return presets;
@@ -89,8 +189,8 @@ async function loadPresets(): Promise<PromptTemplate[]> {
   return presets.sort((a, b) => (a.sort || 99) - (b.sort || 99));
 }
 
-async function loadUserPrompts(): Promise<PromptTemplate[]> {
-  const userDir = join(process.cwd(), '.speccore', 'prompts', 'user');
+async function loadUserPrompts(projectRoot: string): Promise<PromptTemplate[]> {
+  const userDir = join(projectRoot, '.speccore', 'prompts', 'user');
   const prompts: PromptTemplate[] = [];
 
   if (!(await pathExists(userDir))) return prompts;
@@ -113,9 +213,9 @@ interface RuntimeContext {
 }
 
 /** 读取当前运行时上下文（.speccore/local/context.json 的 currentIteration/currentTask） */
-async function readCurrentContext(): Promise<RuntimeContext> {
+async function readCurrentContext(projectRoot: string): Promise<RuntimeContext> {
   try {
-    const ctxPath = join(process.cwd(), '.speccore', 'local', 'context.json');
+    const ctxPath = join(projectRoot, '.speccore', 'local', 'context.json');
     if (!(await pathExists(ctxPath))) return {};
     const data = JSON.parse(await readFile(ctxPath, 'utf-8'));
     return {
@@ -318,6 +418,24 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       color: #495057;
     }
     .btn-secondary:hover { background: #dee2e6; }
+    .persist-hint {
+      padding: 10px 30px;
+      background: #fff9db;
+      border-bottom: 1px solid #ffe8cc;
+      font-size: 12px;
+      color: #e67700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .persist-hint code {
+      background: #fff3bf;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #c92a2a;
+    }
     .content {
       padding: 30px;
       min-height: 520px;
@@ -793,6 +911,12 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       <p>预置模板 + 自定义提示词，一键复制，高效开发</p>
     </div>
 
+    <!-- 持久化提示：页面编辑只存浏览器，导出 JSON + CLI --import 才能落盘 -->
+    <div class="persist-hint" id="persistHint">
+      💡 本页新建/编辑仅保存在浏览器本地。持久化到项目：点「💾 导出」下载 JSON，再执行
+      <code>speccore prompts --import speccore-user-prompts.json</code> 落盘到 .speccore/prompts/user/。
+    </div>
+
     <!-- 常用场景快捷入口 -->
     <div class="scene-bar" id="sceneBar">
       <span class="scene-label">常用场景</span>
@@ -823,6 +947,9 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         ${categories.map(c => `<div class="tab" data-category="${c}">${categoryLabels[c] || c}</div>`).join('')}
       </div>
       <button class="btn btn-primary" onclick="openCreateModal()">+ 新建</button>
+      <button class="btn btn-secondary" onclick="exportToJson()" title="把浏览器内新建的提示词导出为 JSON，再用 speccore prompts --import 落盘">💾 导出</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()" title="从 JSON 文件导入提示词">📥 导入</button>
+      <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importFromJson(this)">
     </div>
 
     <!-- 标签云 -->
@@ -1332,7 +1459,7 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       }
 
       const data = {
-        id: editingId || 'custom-' + Date.now(),
+        id: editingId || genId(),
         name,
         category: document.getElementById('editCategory').value,
         icon: document.getElementById('editIcon').value || '📝',
@@ -1341,9 +1468,10 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
         params: extractParams(prompt),
         builtin: false,
         sort: 99,
-        createdAt: editingId ? undefined : new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
+      // 新建才写 createdAt；编辑时不放入 data，避免 spread 合并被 undefined 覆盖丢失
+      if (!editingId) data.createdAt = new Date().toISOString();
 
       // 保存到 localStorage
       const stored = JSON.parse(localStorage.getItem('speccore-user-prompts') || '[]');
@@ -1382,6 +1510,14 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       showToast('✅ 已删除');
     }
 
+    function genId() {
+      // crypto.randomUUID 仅在 secure context 可用（file:// 在部分浏览器不算），降级用时间戳+随机段
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return 'prompt-' + crypto.randomUUID();
+      }
+      return 'prompt-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    }
+
     function extractParams(text) {
       const matches = text.match(/\{([^}]+)\}/g) || [];
       return matches.map(m => ({
@@ -1397,6 +1533,65 @@ function generatePromptsHtml(prompts: PromptTemplate[]): string {
       toast.textContent = msg;
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 2000);
+    }
+
+    function collectUserPrompts() {
+      return JSON.parse(localStorage.getItem('speccore-user-prompts') || '[]');
+    }
+
+    // 导出：浏览器本地 → JSON 文件下载（落盘需 CLI speccore prompts --import）
+    function exportToJson() {
+      const stored = collectUserPrompts();
+      if (stored.length === 0) {
+        showToast('⚠️ 还没有自定义提示词');
+        return;
+      }
+      const blob = new Blob([JSON.stringify(stored, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'speccore-user-prompts.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      showToast('💾 已下载 JSON，用 speccore prompts --import 落盘');
+    }
+
+    // 导入：JSON 文件 → 浏览器本地（按 id 去重合并）
+    function importFromJson(input) {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const items = JSON.parse(reader.result);
+          const list = Array.isArray(items) ? items : (items.prompts || []);
+          const valid = list.filter(p => p && p.name && p.prompt);
+          if (valid.length === 0) {
+            showToast('⚠️ 未找到有效的提示词条目');
+            return;
+          }
+          const stored = collectUserPrompts();
+          valid.forEach(p => {
+            p.builtin = false;
+            const idx = stored.findIndex(x => x.id === p.id);
+            if (idx >= 0) stored[idx] = { ...stored[idx], ...p };
+            else stored.push(p);
+          });
+          localStorage.setItem('speccore-user-prompts', JSON.stringify(stored));
+          valid.forEach(p => {
+            const idx = prompts.findIndex(x => x.id === p.id);
+            if (idx >= 0) prompts[idx] = { ...prompts[idx], ...p, builtin: false };
+            else prompts.push({ ...p, builtin: false });
+          });
+          render();
+          showToast('📥 已导入 ' + valid.length + ' 条提示词');
+        } catch {
+          showToast('⚠️ JSON 解析失败');
+        }
+      };
+      reader.readAsText(file);
+      input.value = '';
     }
 
     // 加载 localStorage 中的用户提示词

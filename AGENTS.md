@@ -26,7 +26,7 @@ Read .speccore/PROJECT.yaml          ← 获取项目配置（端列表、源码
 |:---|:---|:---|:---|
 | **L1 TOC 目录** | `buildGlobalTOC` 扫描所有 `.md` 文件，生成带摘要/标签/章节的目录 | GLOBAL/、PATTERNS/、RULES/、SKILLS/ | AI **知道有这些文件**，按需 Read |
 | **L2 自动注入** | `loadGlobalContext` 将关键文件全文注入 Prompt | BUSINESS_RULES/（4000 字符/文件）、RULES/（2000 字符/文件，按 priority 排序，总量 ≤8000） | **关键规则必达**，不依赖 AI 主动 Read |
-| **L3 RAG 语义检索** | `indexDirectoryDocuments` 索引所有 `.md`，支持语义召回 | GLOBAL/ + RULES/ + SKILLS/ + PATTERNS/ | AI **忘了文件名也能通过语义找到** |
+| **L3 RAG 检索** | `indexDirectoryDocuments` 索引所有 `.md`（分块 + 关键词 + 同义词扩展，轻量语义召回，非向量库） | GLOBAL/ + RULES/ + SKILLS/ + PATTERNS/ | AI **忘了文件名也能按关键词/近义词找到** |
 | **L4 阅读清单** | Prompt 中附带"何时该读什么"指引 | 全量 | 告诉 AI **什么场景下该读哪个目录** |
 
 ### 阅读清单（何时该读什么）
@@ -67,7 +67,7 @@ SpecCore 规范驱动开发项目。
 |:---|:---|:---|
 | 切分层 | `010-requirements/features/{功能单元}/` | SOURCE.md（需求原文切片，旧版为 README.md） + _matrix.md（端覆盖 platforms + 澄清需求度 clarify + 负责人 owners）+ CHANGELOG.md（doc2spec 产出） |
 
-> **功能单元命名（v8.3.271+）**：目录名 = `{文档/端}-{序号}-{英文slug}`（中文标题转全拼，如 `admin-web-01-yudingguanli`）；中文显示名保留在 SOURCE.md 标题与 `_matrix.md` 的 `feature` 字段。旧迭代中文目录名兼容不迁移。
+> **功能单元命名（v8.3.363+）**：目录名 = 纯英文 slug（如 `booking-management`），无 `{文档/端}` 前缀与章节序号；英译三级降级：翻译缓存（`.unit-names.json`）→ LLM 批量英译（providers 池 → 环境变量 → 本地 Ollama）→ 拼音兜底。宿主 AI 环境（ai.provider=host 或 auto_host_ai: true）无 LLM 时 CLI 输出 `[SPECCORE_PROMPT]` 接力，宿主 AI 翻译后以 `--translate-response '<JSON>'`（Windows 可用 `--translate-response-file <path>` 绕开 shim 转义坑）续跑；**禁止主动传 `--translate-en off`**（拼音仅在英译全链路不可用时兜底）。中文显示名保留在 SOURCE.md 标题与 `_matrix.md` 的 `feature` 字段。旧迭代目录名兼容不迁移。
 | 分析层 | `020-specs/{功能单元}/` | overview/（单元概述）+ {端名}/（TECH/TEST/UI_SPEC） |
 | 全局层 | `010-requirements/overview/GLOBAL_CONTEXT-*.md` + `020-specs/overview/` | 非功能全局信息 + FUNCTION_MAP/REQUIREMENT 汇总 |
 

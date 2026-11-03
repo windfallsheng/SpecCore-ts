@@ -3,6 +3,7 @@
 # =============================================================================
 # 用途：上线前最终验收、灰度验证、生产数据模拟
 # 与 test 的区别：staging 环境与生产高度一致，用于最终上线前检查
+# ⚠️ 升级不覆盖本文件；新字段（tests.accounts / tests.auth 等）对照 staging.yaml.example 按需复制
 # 典型工作流：
 #   speccore pipeline --env staging --all
 #   （将当前分支合并到 staging → build → deploy）
@@ -49,10 +50,56 @@ platforms:
 tests:
   base_urls:
     h5: https://staging.example.com/h5
-    admin: https://staging.example.com/admin
+    admin-web: https://staging.example.com/admin
     order-api: https://api-staging.example.com
 
   visual_model:
     provider: qwen-vl
     model: qwen-vl-max
     timeout: 60000
+
+  # ── AI 验证线账号（v8.3.351+ 权威源）──
+  # 供 speccore verify --ai 生成验证剧本后，宿主 AI 取明文登录各端。
+  # 账号名即引用名（剧本只引用如 admin，不复制密码）。
+  # 选择规则（三选一，先到先得）：
+  #   1. platforms 列表包含目标端的账号（端匹配，优先）
+  #   2. 未写 platforms 的账号（不限端兜底）
+  #   3. 本段第一个账号
+  # platforms 里的端名必须与上方 platforms / base_urls 键一致（如 admin-web）。
+  # password 支持 ${ENV_VAR} 引用，明文不入库不进 git；
+  #   执行时如 STAGING_ADMIN_PASSWORD=xxx speccore verify --ai --env staging。
+  # 本段缺失时兑底 .speccore/tests/accounts.yaml 的 {env} 分组（全局兜底，
+  #   多环境共享账号时用；该文件建议加入 .gitignore）。
+  # 登录需二次验证时加 verification 块，只写取码通道不写码：
+  #   verification:
+  #     type: sms      # sms 短信 / totp 动态令牌 / graphic 图形码 / email 邮箱
+  #     note: 验证码发送至测试手机 138****1234，从短信网关平台读取（勿落盘）
+  # 以下为示例值，按项目实际账号/密码/验证码通道调整。
+  accounts:
+    admin:
+      username: admin
+      password: "${STAGING_ADMIN_PASSWORD}"
+      note: 管理员（全功能，admin-web 管理端）
+      platforms: [admin-web]                 # 限定该账号适用的端
+    buyer:
+      username: testuser
+      password: "${STAGING_USER_PASSWORD}"
+      note: 普通用户（下单/查询，h5 C 端）
+      platforms: [h5]
+    operator:
+      username: ops01
+      password: "${STAGING_OPS_PASSWORD}"
+      note: 运营（审核/退款，多端通用）       # 不写 platforms = 不限端兜底
+
+  # ── 冒烟线自动登录（v8.3.215+）──
+  # 访问受保护页面（如 Admin 后台）前自动登录；
+  # data-testid 按实际前端标识调整（login-username-input 等为示例）。
+  auth:
+    login_url: /login
+    username_selector: "[data-testid='login-username-input']"
+    password_selector: "[data-testid='login-password-input']"
+    submit_selector: "[data-testid='login-submit-btn']"
+    success_url_contains: /dashboard         # 可选：登录成功后 URL 含此片段
+    credentials:
+      username: admin                        # seed 默认账号，按实际调整
+      password_env: SMOKE_PASSWORD           # 密码从环境变量读取（推荐）

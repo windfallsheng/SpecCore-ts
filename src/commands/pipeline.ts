@@ -24,6 +24,7 @@ import { buildCommand } from './build';
 import { deployCommand } from './deploy';
 import type { PlatformConfig } from '../core/unified-config';
 import { runPipelineTest, formatPipelineTestReport } from '../core/pipeline-test';
+import { appendDeployLedger } from '../core/deploy-ledger';
 import { resolvePlatformBranch } from '../core/deploy/branch-resolver';
 import { join, isAbsolute } from 'path';
 import { findProjectRoot } from '../utils/task-utils';
@@ -369,6 +370,19 @@ export async function pipelineCommand(options: PipelineOptions): Promise<void> {
         if (stage === 'post-deploy') {
           // 部署后测试失败：已部署，不能阻断，只报告
           logger.warn(`   ⚠️ 部署后测试失败，服务已上线，请关注`);
+          // v8.3.352+: 失败写入部署问题账本（.speccore/local/deploy-ledger.md），
+          // 不在终端日志里一闪而过，下次部署前可作风险清单。
+          try {
+            await appendDeployLedger({
+              kind: 'post-deploy-test',
+              platform: platform.name,
+              env,
+              type: testType,
+              severity: testResult.severity,
+              message: testResult.error || result.testReport || 'post-deploy 测试失败',
+            });
+            logger.info(`   📝 已写入部署问题账本: .speccore/local/deploy-ledger.md`);
+          } catch { /* 账本写入失败不阻断主流程 */ }
           if (autoFix) {
             logger.info('');
             logger.info('[SPECCORE_PIPELINE_TEST_POST_DEPLOY_FAIL]');

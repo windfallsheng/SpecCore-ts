@@ -41,6 +41,8 @@ export interface DeployResult {
   message: string;
   skipped?: boolean;  // v8.3.97+: 未配置时跳过，非失败
   branch?: string;    // v8.3.348+: 实际使用的目标分支（由调用方赋值，汇总报告展示）
+  /** v8.3.352+: 部署后健康检查结果（未配置时 undefined，失败告警但不改变 success） */
+  health?: { ok: boolean; message: string };
 }
 
 /**
@@ -126,6 +128,17 @@ export async function deployPlatform(
       }
     }
 
+    // 4. 部署后健康检查（v8.3.352+）：配置了 health_check 才执行，失败告警不阻断
+    let health: { ok: boolean; message: string } | undefined;
+    if (deployConfig.health_check && !options.dryRun) {
+      health = await runHealthCheck(platform, env, deployConfig);
+      if (health.ok) {
+        logger.success(`  💚 健康检查通过: ${health.message}`);
+      } else {
+        logger.error(`  💔 健康检查失败: ${health.message}`);
+      }
+    }
+
     spinner.stop();
     const duration = Date.now() - start;
     return {
@@ -135,6 +148,7 @@ export async function deployPlatform(
       type: deployConfig.type,
       duration,
       message: `部署成功 (${(duration / 1000).toFixed(1)}s)`,
+      health,
     };
   } catch (e: any) {
     spinner.stop();
@@ -656,4 +670,301 @@ async function deploySftp(
   logger.info(`  📤 SFTP 上传: ${outputDir} → ${host}:${remoteDir}`);
   const sftpScript = `put -r ${outputDir}/* ${remoteDir}/`;
   execSync(`${passOpt}echo "${sftpScript}" | sftp ${keyOpt} ${host}`, { stdio: 'inherit', cwd });
+}
+
+// ═══════════════════════════════════════════════════════════
+// 部署后健康检查（v8.3.352+）
+// ═══════════════════════════════════════════════════════════
+
+/** 在远端/本地执行一次健康检查命令（ssh/docker 类型走远端，其余本地） */
+async function execHealthCommand(
+  config: DeployEnvConfig,
+  cwd: string,
+  command: string
+): Promise<void> {
+  if (config.type === 'ssh' || config.type === 'docker' || config.type === 'sftp' || config.type === 'pm2') {
+    if (!config.host) {
+      // 无 host：本地执行（本地 docker / 本地 pm2）
+      execSync(command, { stdio: 'pipe', cwd });
+      return;
+    }
+    const keyArgs = config.key ? ['-i', config.key] : [];
+    // 密码认证（v8.3.341+: sshpass 参数数组）
+    if (config.password) {
+      execSync('sshpass -V', { stdio: 'pipe' });
+      runFile('sshpass', ['-p', config.password, 'ssh', ...keyArgs, config.host, command], cwd);
+    } else {
+      runFile('ssh', [...keyArgs, config.host, command], cwd);
+    }
+  } else {
+    execSync(command, { stdio: 'pipe', cwd });
+  }
+}
+
+/** 执行部署后健康检查：health_check.url 走 HTTP 探测，health_check.command 走命令退出码 */
+async function runHealthCheck(
+  platform: PlatformConfig,
+  env: string,
+  config: DeployEnvConfig
+): Promise<{ ok: boolean; message: string }> {
+  const hc = config.health_check!;
+  const retries = hc.retries ?? 5;
+  const interval = hc.interval_ms ?? 3000;
+  const projectRoot = findProjectRoot() || process.cwd();
+  const cwd = platform.code_path
+    ? (isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path))
+    : process.cwd();
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  // HTTP 探测：curl 返回 2xx/3xx 视为健康
+  if (hc.url) {
+    logger.info(`  💚 健康检查: GET ${hc.url}（重试 ${retries} 次，间隔 ${interval}ms）`);
+    let lastStatus = '';
+    for (let i = 1; i <= retries; i++) {
+      try {
+        const out = execSync(
+          `curl -fsS -o /dev/null -w '%{http_code}' --max-time 10 '${hc.url}'`,
+          { stdio: 'pipe', cwd }
+        ).toString().trim();
+        lastStatus = out;
+        if (/^[23]\d\d$/.test(out)) {
+          return { ok: true, message: `${hc.url} → HTTP ${out}` };
+        }
+      } catch { /* 重试 */ }
+      if (i < retries) await sleep(interval);
+    }
+    return { ok: false, message: `${hc.url} 未通过（最后状态码: ${lastStatus || '无响应'}，已重试 ${retries} 次）` };
+  }
+
+  // 命令探测：退出码 0 视为健康
+  if (hc.command) {
+    logger.info(`  💚 健康检查: ${hc.command}（重试 ${retries} 次，间隔 ${interval}ms）`);
+    let lastErr = '';
+    for (let i = 1; i <= retries; i++) {
+      try {
+        await execHealthCommand(config, cwd, hc.command);
+        return { ok: true, message: `命令退出码 0: ${hc.command}` };
+      } catch (e: any) {
+        lastErr = e?.message || String(e);
+      }
+      if (i < retries) await sleep(interval);
+    }
+    return { ok: false, message: `命令失败: ${lastErr || hc.command}（已重试 ${retries} 次）` };
+  }
+
+  return { ok: false, message: 'health_check 未配置 url 或 command，无法执行' };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 回滚与备份清单（v8.3.352+）
+// ═══════════════════════════════════════════════════════════
+
+export interface RollbackOptions {
+  platform: string;
+  env: string;
+  /** 指定回滚到某备份（备份名格式见 listBackups 输出），缺省取最近一份 */
+  backupName?: string;
+  dryRun?: boolean;
+}
+
+/** 解析 SSH host（user@host:port），返回 ssh 基础参数与 sshpass 前缀 */
+function parseSshTarget(config: DeployEnvConfig): {
+  user: string; hostname: string; portArgs: string[];
+  keyArgs: string[]; sshpass: string;
+} {
+  if (!config.host) throw new Error('该部署类型需要 host 字段');
+  const m = config.host.match(/^([^@]+)@([^:]+)(?::(\d+))?$/);
+  if (!m) throw new Error(`host 格式错误: ${config.host}，应为 user@host:port`);
+  let sshpass = '';
+  if (config.password) {
+    execSync('sshpass -V', { stdio: 'pipe' });
+    sshpass = config.password;
+  }
+  return {
+    user: m[1],
+    hostname: m[2],
+    portArgs: m[3] ? ['-P', m[3]] : [],
+    keyArgs: config.key ? ['-i', config.key] : [],
+    sshpass,
+  };
+}
+
+/** 在远端执行命令（自动选择 sshpass/ssh） */
+function runRemote(
+  config: DeployEnvConfig,
+  cwd: string,
+  command: string
+): string {
+  const t = parseSshTarget(config);
+  const target = `${t.user}@${t.hostname}`;
+  const args = [...t.keyArgs, ...t.portArgs, target, command];
+  if (t.sshpass) {
+    return execFileSync('sshpass', ['-p', t.sshpass, 'ssh', ...args], { stdio: 'pipe', cwd, encoding: 'utf-8' });
+  }
+  return execFileSync('ssh', args, { stdio: 'pipe', cwd, encoding: 'utf-8' });
+}
+
+/** 列出远端备份（docker: .bak-* 镜像 tag；ssh: .bak-*.tar.gz 包；k8s: rollout history；helm: release history） */
+export async function listBackups(
+  platform: PlatformConfig,
+  env: string
+): Promise<{ platform: string; env: string; type: string; backups: string[] }> {
+  const config = platform.deploy?.[env];
+  if (!config) {
+    throw new Error(`端 "${platform.name}" 未配置 ${env} 环境的部署参数`);
+  }
+  const projectRoot = findProjectRoot() || process.cwd();
+  const cwd = platform.code_path
+    ? (isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path))
+    : process.cwd();
+
+  const parseLines = (out: string): string[] => out.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  switch (config.type) {
+    case 'docker': {
+      const imageName = config.image || platform.name;
+      const tag = config.tag || env;
+      const fullImage = config.registry ? `${config.registry}/${imageName}:${tag}` : `${imageName}:${tag}`;
+      if (config.host) {
+        const out = runRemote(config, cwd, `docker images '${imageName}' --format '{{.Tag}}' | grep -F '${tag}.bak-' | sort`);
+        return { platform: platform.name, env, type: 'docker', backups: parseLines(out) };
+      }
+      const out = execFileSync('docker', ['images', imageName, '--format', '{{.Tag}}'], { stdio: 'pipe', cwd, encoding: 'utf-8' });
+      const tags = parseLines(out).filter((t) => t.startsWith(`${tag}.bak-`)).sort();
+      return { platform: platform.name, env, type: 'docker', backups: tags };
+    }
+    case 'ssh': {
+      const remoteDir = config.remote_dir || `/opt/services/${platform.name}`;
+      const out = runRemote(config, cwd, `ls -1t '${remoteDir}'.bak-*.tar.gz 2>/dev/null`);
+      return { platform: platform.name, env, type: 'ssh', backups: parseLines(out) };
+    }
+    case 'k8s': {
+      const namespace = config.target || 'default';
+      const deployment = config.image || platform.name;
+      const out = execFileSync('kubectl', ['rollout', 'history', `deployment/${deployment}`, '-n', namespace], { stdio: 'pipe', cwd, encoding: 'utf-8' });
+      return { platform: platform.name, env, type: 'k8s', backups: parseLines(out) };
+    }
+    case 'helm': {
+      const namespace = config.target || env;
+      const out = execFileSync('helm', ['history', platform.name, '-n', namespace], { stdio: 'pipe', cwd, encoding: 'utf-8' });
+      return { platform: platform.name, env, type: 'helm', backups: parseLines(out) };
+    }
+    default:
+      throw new Error(`部署类型 ${config.type} 不支持备份/回滚（支持: docker/ssh/k8s/helm）`);
+  }
+}
+
+/** 回滚到部署前备份 */
+export async function rollbackPlatform(
+  platform: PlatformConfig,
+  env: string,
+  options: RollbackOptions
+): Promise<DeployResult> {
+  const start = Date.now();
+  const config = platform.deploy?.[env];
+  if (!config) {
+    return {
+      success: false, platform: platform.name, env, type: 'none', duration: 0,
+      message: `端 "${platform.name}" 未配置 ${env} 环境的部署参数`,
+    };
+  }
+  const projectRoot = findProjectRoot() || process.cwd();
+  const cwd = platform.code_path
+    ? (isAbsolute(platform.code_path) ? platform.code_path : join(projectRoot, platform.code_path))
+    : process.cwd();
+
+  try {
+    switch (config.type) {
+      case 'docker': {
+        const imageName = config.image || platform.name;
+        const tag = config.tag || env;
+        const fullImage = config.registry ? `${config.registry}/${imageName}:${tag}` : `${imageName}:${tag}`;
+        const { backups } = await listBackups(platform, env);
+        if (backups.length === 0) throw new Error('远端无 .bak-* 备份 tag，无法回滚');
+        const backupTag = options.backupName || backups[backups.length - 1]; // 未指定取最近（sort 后最后一项）
+        if (options.backupName && !backups.includes(options.backupName)) {
+          throw new Error(`备份 "${options.backupName}" 不存在，可用: ${backups.join(', ')}`);
+        }
+        const rollbackCmd =
+          `docker tag '${fullImage}.${backupTag}' '${fullImage}' && ` +
+          `(docker stop ${imageName} 2>/dev/null || true) && ` +
+          `(docker rm ${imageName} 2>/dev/null || true) && ` +
+          `docker run -d --name ${imageName} --restart always '${fullImage}'`;
+        if (options.dryRun) {
+          logger.info(`  [DRY-RUN] 回滚命令: ${rollbackCmd}`);
+        } else if (config.host) {
+          runRemote(config, cwd, rollbackCmd);
+        } else {
+          execSync(rollbackCmd, { stdio: 'inherit', cwd });
+        }
+        return {
+          success: true, platform: platform.name, env, type: 'docker',
+          duration: Date.now() - start,
+          message: `已回滚镜像 tag: ${backupTag} → ${fullImage}`,
+        };
+      }
+      case 'ssh': {
+        const remoteDir = config.remote_dir || `/opt/services/${platform.name}`;
+        const { backups } = await listBackups(platform, env);
+        if (backups.length === 0) throw new Error('远端无 .bak-*.tar.gz 备份包，无法回滚');
+        const backupName = options.backupName || backups[0]; // ls -1t 已按时间倒序，第一项即最新
+        if (options.backupName && !backups.some((b) => b.endsWith(options.backupName!))) {
+          throw new Error(`备份 "${options.backupName}" 不存在，可用: ${backups.join(', ')}`);
+        }
+        const rollbackCmd =
+          `tar -xzf '${backupName}' -C "$(dirname '${remoteDir}')" && ` +
+          (config.script || `sudo systemctl restart ${platform.name}`);
+        if (options.dryRun) {
+          logger.info(`  [DRY-RUN] 回滚命令: ${rollbackCmd}`);
+        } else {
+          runRemote(config, cwd, rollbackCmd);
+        }
+        return {
+          success: true, platform: platform.name, env, type: 'ssh',
+          duration: Date.now() - start,
+          message: `已回滚远端目录: ${backupName} → ${remoteDir}`,
+        };
+      }
+      case 'k8s': {
+        const namespace = config.target || 'default';
+        const deployment = config.image || platform.name;
+        const undoArgs = ['rollout', 'undo', `deployment/${deployment}`, '-n', namespace];
+        if (options.backupName) undoArgs.push('--to-revision', options.backupName);
+        if (options.dryRun) {
+          logger.info(`  [DRY-RUN] kubectl ${undoArgs.join(' ')}`);
+        } else {
+          runFile('kubectl', undoArgs, cwd);
+        }
+        return {
+          success: true, platform: platform.name, env, type: 'k8s',
+          duration: Date.now() - start,
+          message: `已回滚 deployment/${deployment}${options.backupName ? ` 到 revision ${options.backupName}` : ' 到上一版本'}`,
+        };
+      }
+      case 'helm': {
+        const namespace = config.target || env;
+        const rollbackArgs = ['rollback', platform.name, '-n', namespace];
+        if (options.backupName) rollbackArgs.push(options.backupName);
+        if (options.dryRun) {
+          logger.info(`  [DRY-RUN] helm ${rollbackArgs.join(' ')}`);
+        } else {
+          runFile('helm', rollbackArgs, cwd);
+        }
+        return {
+          success: true, platform: platform.name, env, type: 'helm',
+          duration: Date.now() - start,
+          message: `已回滚 release ${platform.name}${options.backupName ? ` 到 revision ${options.backupName}` : ' 到上一版本'}`,
+        };
+      }
+      default:
+        throw new Error(`部署类型 ${config.type} 不支持回滚（支持: docker/ssh/k8s/helm）`);
+    }
+  } catch (e: any) {
+    return {
+      success: false, platform: platform.name, env, type: config.type,
+      duration: Date.now() - start,
+      message: `回滚失败: ${e.message || e}`,
+    };
+  }
 }

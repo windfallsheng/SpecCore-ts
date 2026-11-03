@@ -194,7 +194,7 @@ export async function parseFeatureList(iterDir: string): Promise<string[]> {
  * v8.3.201+: 读取 features/ 下的一级子目录名作为功能单元清单。
  * 只认「目录」，忽略 INDEX.md 等文件；排除 . 开头（.meta 等）与 _ 开头（_shared 等）的系统目录。
  */
-async function readFeatureDirs(featuresDir: string): Promise<string[]> {
+export async function readFeatureDirs(featuresDir: string): Promise<string[]> {
   if (!await pathExists(featuresDir)) return [];
   const names: string[] = [];
   try {

@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="zh-CN" data-theme="ocean"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>SpecCore — 项目配置引导</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@font-face{font-family:"Orbitron";font-style:normal;font-weight:500 900;font-display:swap;src:url("fonts/Orbitron.woff2") format("woff2")}@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;src:url("fonts/JetBrainsMono.woff2") format("woff2")}
 [data-theme="ocean"]{--cyan:#0ea5e9;--bg:#0b1929;--card:rgba(13,31,56,.95);--border:rgba(14,165,233,.15);--text:#bae6fd;--muted:#5b7fa5;--green:#14b8a6;--orange:#f97316;--purple:#6366f1;--red:#ef4444}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:24px 20px;position:relative}
@@ -229,6 +229,21 @@ Iteration-xxx/<br>
 </div>
 </div>
 <div class="step-desc" style="margin-top:8px;font-size:10px">💡 <code>speccore run</code> 是流水线入口：无参即智能续跑（检测断点从第一个未完成阶段继续），也可按预设流水线或起止点自动执行。快捷语法糖（v8.3.290+）：<code>speccore run develop</code>（preset 直呼）、<code>speccore run smoke</code>（单阶段快捷）、<code>speccore run split-units to execute</code>（阶段范围）——高频操作不必依赖 ask 引擎。</div>
+</div>
+
+<div style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--cyan)">🧪 测试验证（v8.3.350+）</div>
+<div style="padding:12px;border-radius:8px;border:1px solid rgba(20,184,166,.2);background:rgba(20,184,166,.04)">
+<div class="step-desc">开发完成后用两条线保障质量——传统冒烟 + AI 视觉验证，按需选择：</div>
+<div class="method-card m1" style="margin-top:8px"><div class="method-title">🤖 AI 浏览器验证（无需写选择器）</div><div class="step-desc">CLI 从 UI_SPEC/TEST 切片生成自然语言剧本，宿主 AI 用 Browser 子代理真实打开页面逐项验证，截图+判定回写结果：</div><div class="method-cmd" style="margin-top:4px">/spec-verify --ai</div><div class="method-cmd">speccore verify --ai --scope deployed</div></div>
+<div class="method-card m2" style="margin-top:8px"><div class="method-title">👁️ 视觉判定兜底（只截图也能断言）</div><div class="step-desc">AI 仅截图未判定（judged=false）时，CLI 用视觉模型对「截图+预期结果原文」做业务断言，三级通道自动回退（Browser 子代理 → Playwright MCP → 视觉判定）：</div><div class="method-cmd" style="margin-top:4px">speccore verify --ai-judge &lt;results.json&gt;</div></div>
+<div class="method-card m3" style="margin-top:8px"><div class="method-title">🔢 账号密码走环境变量</div><div class="step-desc">账号权威源：环境文件 <code>tests.accounts</code>（就近声明），accounts.yaml 为全局兑底；username/password 支持 <code>${VAR}</code> 引用，密码不落盘不泄密：</div><div class="method-cmd" style="margin-top:4px">password: ${STAGING_USER_PASSWORD}</div></div>
+<div class="step-desc" style="color:var(--cyan);margin-top:8px">💡 传统冒烟 依旧可用：<code>speccore verify --config ./tests/smoke.yaml --stage dev</code>，与 AI 验证互不干扰。</div>
+<div style="margin-top:10px;padding:10px;border-radius:6px;border:1px solid rgba(14,165,233,.2);background:rgba(14,165,233,.04)">
+<div style="font-size:10px;font-weight:700;color:var(--cyan);margin-bottom:4px">🎛️ 双线开关与剧本分层（settings.tests）</div>
+<div class="step-desc" style="font-size:9px">.speccore.yml 的 <code>settings.tests</code> 三段开关，缺省全开，按需关闭：</div>
+<div style="font-size:9px;color:var(--muted);margin:4px 0;line-height:1.7"><code>smoke.enabled: false</code> — 关冒烟线（质量门禁自动触发的 UI 验证跳过）<br><code>ai_verify.enabled: false</code> — 关 AI 验证线<br><code>layered.common / layered.modules: false</code> — 关剧本某层（公共能力层/模块层，关闭不生成场景）</div>
+<div class="step-desc" style="font-size:9px">三条触发路径，显式优先于配置：<b>CLI 显式参数</b>（--ai / --ui，始终执行）＞ <b>配置开关</b>（settings.tests，兜底）＞ <b>质量门禁自动触发</b>（受开关拦截，可被显式参数覆盖）</div>
+</div>
 </div>
 
 <div style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--cyan)">📚 提示词库（快速上手）</div>

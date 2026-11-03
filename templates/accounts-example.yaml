@@ -1,0 +1,49 @@
+# accounts.yaml — AI 浏览器验证账号配置（v8.3.350+）
+#
+# ⚠️ v8.3.351+ 账号收敛：本文件降为全局兑底源。
+# 账号权威源是环境文件 .speccore/environments/{env}.yaml 的 tests.accounts（就近声明，
+# 账号名即引用名）；仅当环境文件未声明 accounts 时，才兑底本文件的 {env} 分组。
+#
+# 用途：speccore verify --ai 生成验证剧本后，宿主 AI 按账号源取明文登录各环境。
+# 结构：环境名 → accounts → 角色账号（用户名/密码/可选说明/可选限定端）
+# 环境名必须与 .speccore/environments/{env}.yaml 的文件名一致。
+#
+# ⚠️ 本文件含明文密码，建议加入 .gitignore，仅保存在本机与可信 CI 环境。
+# ⚠️ 剧本（AI_VERIFY_PLAN.md / plan.json）只引用账号名（如 staging.admin），不复制密码。
+#
+# 账号匹配规则：
+#   1. 优先选 platforms 列表包含目标端的账号（如 admin-web 端选管理员账号）
+#   2. 无端限定匹配时使用该环境下第一个账号
+#
+# 环境变量引用（敏感密码不入库）：
+#   username/password 可写 ${ENV_VAR} 形式，执行 AI 从环境变量取明文，
+#   剧本只引用账号名（如 staging.admin），不落任何密码明文。
+#
+# 登录验证码约定（v8.3.354+）：
+#   账号登录需二次验证时，账号下加 verification 块，只写「取码通道指引」不写码本身。
+#     verification:
+#       type: sms                  # sms 短信 / totp 动态令牌 / graphic 图形码 / email 邮箱
+#       note: 验证码发送至测试手机 138****1234，从短信网关平台读取（勿落盘）
+#   剧本头会集中列出「登录验证码说明」，宿主 AI 按 note 自行取码后登录。
+
+staging:
+  accounts:
+    admin:
+      username: admin
+      password: "change-me"
+      note: 管理员（全功能，admin-web 等管理端）
+      platforms: [admin-web]          # 可选：限定该账号适用的端
+    user:
+      username: testuser
+      password: "${STAGING_USER_PASSWORD}"   # 环境变量引用：执行时从 STAGING_USER_PASSWORD 取明文
+      note: 普通用户（下单/查询，h5 等 C 端）
+      verification:                       # 可选：登录需手机验证码时声明取码通道
+        type: sms
+        note: 验证码发送至测试手机 138****1234，从短信网关测试平台读取（勿落盘）
+
+production:
+  accounts:
+    ops:
+      username: ops-verify
+      password: "${PROD_OPS_PASSWORD}"   # 生产密码建议只存环境变量/密钥管理，不入仓库
+      note: 生产验证专用账号（只读权限，慎用写操作）

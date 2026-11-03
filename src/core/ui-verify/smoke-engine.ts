@@ -130,27 +130,83 @@ async function performLogin(
     await page.goto(loginUrl, { waitUntil: 'networkidle' });
     await page.fill(auth.username_selector, creds.username);
     await page.fill(auth.password_selector, creds.password);
+    await page.click(auth.submit_selector);
 
-    if (auth.success_url_contains || auth.success_selector) {
-      await Promise.all([
-        page.click(auth.submit_selector),
-        auth.success_url_contains
-          ? page.waitForURL((url) => url.href.includes(auth.success_url_contains!), { timeout })
-          : page.waitForSelector(auth.success_selector!, { timeout }),
-      ]);
-    } else {
-      await page.click(auth.submit_selector);
-      await page.waitForTimeout(auth.wait_after_login ?? 2000);
+    // 首次成功判定：配置了验证码块时给短机会（验证码环节出现的节奏），否则用完整超时
+    const firstTimeout = auth.verification ? (auth.verification.code_timeout ?? 10000) : timeout;
+    let success = await tryWaitLoginSuccess(page, auth, firstTimeout);
+
+    // v8.3.354+: 提交后未达成功判定且配置了验证码块 → 进入二次验证（填码再提交）
+    if (!success && auth.verification) {
+      success = await performVerificationStep(page, auth.verification, auth, timeout);
     }
 
-    if (auth.wait_after_login) await page.waitForTimeout(auth.wait_after_login);
-    logger.success('   ✅ 登录成功，登录态已共享到后续场景');
+    if (success) {
+      if (auth.wait_after_login) await page.waitForTimeout(auth.wait_after_login);
+      logger.success('   ✅ 登录成功，登录态已共享到后续场景');
+    } else {
+      logger.warn('   ⚠️ 自动登录未达成功判定（后续场景将以未登录态执行）');
+    }
   } catch (e: any) {
     const message = e instanceof Error ? e.message : String(e);
     logger.warn(`   ⚠️ 自动登录失败: ${message}（后续场景将以未登录态执行）`);
   } finally {
     await page.close();
   }
+}
+
+/**
+ * 等待登录成功判定（URL 片段 / 成功元素；无判定配置时提交后等待视为成功）。
+ * 超时/失败返回 false，不抛异常——由调用方决定是否进入验证码补救路径。
+ */
+async function tryWaitLoginSuccess(page: Page, auth: AuthConfig, timeout: number): Promise<boolean> {
+  try {
+    if (auth.success_url_contains) {
+      await page.waitForURL((url) => url.href.includes(auth.success_url_contains!), { timeout });
+      return true;
+    }
+    if (auth.success_selector) {
+      await page.waitForSelector(auth.success_selector, { timeout });
+      return true;
+    }
+    await page.waitForTimeout(auth.wait_after_login ?? 2000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 登录二次验证（v8.3.354+）：等验证码输入框出现 → 填码（code_env 优先、fixed_code 兜底）→ 提交 → 再判定。
+ * 码源缺失时不硬阻断（降级为未登录态执行），避免登录本身可用却因验证码配置缺失整体失败。
+ */
+async function performVerificationStep(
+  page: Page,
+  v: NonNullable<AuthConfig['verification']>,
+  auth: AuthConfig,
+  timeout: number
+): Promise<boolean> {
+  const typeLabel = v.type ? `（${v.type}）` : '';
+  try {
+    await page.waitForSelector(v.code_selector, { timeout: v.code_timeout ?? 10000 });
+  } catch {
+    logger.warn(`   ⚠️ 未检测到验证码输入框 ${v.code_selector}，跳过验证码步骤`);
+    return false;
+  }
+
+  const code = v.code_env ? (process.env[v.code_env] || '') : (v.fixed_code || '');
+  if (!code) {
+    logger.warn(
+      `   ⚠️ 验证码来源缺失${typeLabel}：${v.code_env ? `环境变量 ${v.code_env} 未设置` : 'code_env/fixed_code 均未配置'}，跳过验证码步骤`
+    );
+    return false;
+  }
+
+  logger.info(`   🔢 进入登录二次验证${typeLabel}，自动填码...`);
+  await page.fill(v.code_selector, code);
+  const submitSelector = v.code_submit_selector || auth.submit_selector;
+  await page.click(submitSelector);
+  return tryWaitLoginSuccess(page, auth, timeout);
 }
 
 async function launchBrowser(
@@ -326,6 +382,13 @@ async function runScenario(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`  ❌ 场景执行失败: ${message}`);
+    // v8.3.353+: 场景级异常显式记为失败步骤（空 steps 的 every 恒为 true，属假通过 bug）
+    steps.push({
+      action: { type: 'navigate', value: spec.url },
+      passed: false,
+      error: message,
+      duration: Date.now() - startTime,
+    });
   }
 
   const passed = steps.every((s) => s.passed);
@@ -431,7 +494,8 @@ async function executeAction(page: Page, action: Action, ctx: FrameContext): Pro
       break;
 
     case 'navigate':
-      if (!action.value) throw new Error('navigate 需要 value (URL)');
+      // v8.3.353+: 无 value 的历史 spec 跳过（runScenario 开头已 goto spec.url）
+      if (!action.value) break;
       await page.goto(action.value, { waitUntil: 'networkidle' });
       break;
 
@@ -551,12 +615,14 @@ async function executeAssertion(page: Page, assertion: Assertion, ctx: FrameCont
 
   switch (assertion.type) {
     case 'visible':
-      if (!assertion.selector) throw new Error('visible 断言需要 selector');
+      // v8.3.353+: 无 selector 跳过（历史三件套 spec 兼容，可达性已由 navigate 证明）
+      if (!assertion.selector) break;
       await target.waitForSelector(assertion.selector, { state: 'visible' });
       break;
 
     case 'hidden':
-      if (!assertion.selector) throw new Error('hidden 断言需要 selector');
+      // v8.3.353+: 无 selector 跳过（同 visible 防御）
+      if (!assertion.selector) break;
       await target.waitForSelector(assertion.selector, { state: 'hidden' });
       break;
 

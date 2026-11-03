@@ -12,6 +12,7 @@ import { findTaskDir, TASK_TYPES, isTaskModuleDirName } from './task-paths';
 import { buildKnowledgeGraph, saveKnowledgeGraph, KnowledgeGraph } from './knowledge-graph';
 import { detectDecay, formatDecayReport, DecayReport } from './decay-detector';
 import { buildContextMarkdown, saveContextMarkdown } from './context-builder';
+import { logger } from '../utils/logger';
 
 // ═══════════════════════════════════════════════
 // 类型定义
@@ -25,6 +26,15 @@ export interface ReindexResult {
     relations: number;
     graphFile: string;
     contextFile: string;
+  };
+  /** v8.3.356+: 源码知识图谱（code-graph）重建结果 */
+  codeGraph?: {
+    nodes: number;
+    edges: number;
+    communities: number;
+    godNodes: number;
+    scannedFiles: number;
+    reqCodeLinks?: number;
   };
   decayReport?: DecayReport;
   summary: {
@@ -68,6 +78,14 @@ export interface IntegritySnapshot {
 // 核心扫描
 // ═══════════════════════════════════════════════
 
+/**
+ * v8.3.368: 判定是否为时间戳坟头（safeWrite 归档前的旧版平铺备份，如 CODE_INDEX-20260923065735.md）。
+ * 排除后 INDEX.md / TOC / RAG 索引不再把陈旧备份当正文。
+ */
+export function isTombstoneFile(name: string): boolean {
+  return /-\d{14}\.md$/.test(name);
+}
+
 /** 递归扫描目录下所有 .md 文件 */
 async function scanMarkdownFiles(dir: string, baseDir: string = dir): Promise<FileEntry[]> {
   if (!(await pathExists(dir))) return [];
@@ -80,6 +98,9 @@ async function scanMarkdownFiles(dir: string, baseDir: string = dir): Promise<Fi
       if (item.name.startsWith('.') || item.name === 'node_modules' || item.name === 'cache') continue;
       entries.push(...await scanMarkdownFiles(fullPath, baseDir));
     } else if (extname(item.name) === '.md') {
+      // v8.3.368: 排除时间戳坟头（safeWrite 归档前的旧版平铺备份，如 CODE_INDEX-20260923065735.md），
+      // 避免 INDEX.md / TOC / RAG 索引把陈旧备份当正文。
+      if (isTombstoneFile(item.name)) continue;
       const st = await stat(fullPath);
       const content = await readFile(fullPath, 'utf-8');
       entries.push({
@@ -518,6 +539,120 @@ export async function runReindex(cwd: string, options: { check?: boolean; iterat
       graphFile,
       contextFile,
     };
+
+    // ── Phase 3: 源码知识图谱（code-graph）+ 需求↔代码联动（v8.3.356+）──
+    // 断链修复：此前 reindex 只重建迭代层 knowledge-graph，code-graph 构建入口
+    // 零调用——GRAPH_REPORT.md 自述「reindex 全量重建」但实际未接入，
+    // analyze/execute 插件消费的一直是陈旧图谱。此处接入全量重建 + 联动。
+    try {
+      result.codeGraph = await rebuildCodeKnowledgeGraph(cwd, iteration);
+    } catch (error) {
+      logger.warn(`   ⚠️ 源码知识图谱构建跳过: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return result;
+}
+
+// ═══════════════════════════════════════════════
+// 源码文件收集（v8.3.356+: reindex 全量重建与 analyze 增量维护共用）
+// ═══════════════════════════════════════════════
+
+/** 噪声目录（收集时排除，避免把依赖/产物扫进图谱） */
+const NOISE_DIRS = /node_modules|\/dist\/|\/\.git\/|\/build\/|\/coverage\/|\.next\/|\/out\//;
+
+/**
+ * 收集多个源码目录（绝对路径）下的代码文件（绝对路径），排除噪声目录。
+ * analyze 增量维护与 reindex 全量重建共用，保证两侧扫描口径一致。
+ */
+export async function collectSourceFiles(dirs: string[]): Promise<string[]> {
+  const { glob } = await import('glob');
+  const files: string[] = [];
+  for (const dir of dirs) {
+    if (!(await pathExists(dir))) continue;
+    const pattern = join(dir, '**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}');
+    const matched = await glob(pattern, { absolute: true, nodir: true });
+    for (const f of matched) {
+      if (!NOISE_DIRS.test(f)) files.push(f);
+    }
+  }
+  return files;
+}
+
+/**
+ * 源码目录发现（v8.3.357+: reindex/doctor/execute 三方共用口径，analyze 同源复用）
+ * 顺序：PROJECT.yaml 各端 code_path（存在的才纳入）→ 回退 src/。
+ * 返回绝对路径列表；两者均不存在时返回空数组。
+ */
+export async function discoverCodeDirs(cwd: string): Promise<string[]> {
+  const codeDirs: string[] = [];
+  try {
+    const { loadProjectConfig } = await import('./unified-config');
+    const pc = await loadProjectConfig();
+    for (const p of pc.platforms || []) {
+      if (p.code_path) {
+        const dir = p.code_path.replace(/^\.\//, '');
+        if (await pathExists(join(cwd, dir))) codeDirs.push(join(cwd, dir));
+      }
+    }
+  } catch { /* PROJECT.yaml 缺失时回退 src */ }
+  if (codeDirs.length === 0) {
+    const srcDir = join(cwd, 'src');
+    if (await pathExists(srcDir)) codeDirs.push(srcDir);
+  }
+  return codeDirs;
+}
+
+/**
+ * 源码知识图谱全量重建（v8.3.356+）
+ *
+ * 源码目录发现顺序：PROJECT.yaml 各端 code_path（存在的才纳入）→ 回退 src/。
+ * 多目录用 preScannedFiles 同源模式合并一次构建（跳过 glob 单目录限制），
+ * 排除 node_modules/dist/.git 等噪声目录。构建完成后接需求↔代码联动。
+ */
+async function rebuildCodeKnowledgeGraph(
+  cwd: string,
+  iteration?: string
+): Promise<NonNullable<ReindexResult['codeGraph']>> {
+  const { buildCodeKnowledgeGraph } = await import('./code-graph');
+
+  // 1. 源码目录发现：PROJECT.yaml code_path 优先，回退 src/
+  const codeDirs = await discoverCodeDirs(cwd);
+  if (codeDirs.length === 0) {
+    logger.info('   ℹ️ 未发现源码目录（PROJECT.yaml code_path 与 src/ 均不存在），跳过源码图谱');
+    return { nodes: 0, edges: 0, communities: 0, godNodes: 0, scannedFiles: 0 };
+  }
+
+  // 2. 多目录文件收集（共享口径，排除噪声目录）
+  const files = await collectSourceFiles(codeDirs);
+  if (files.length === 0) {
+    logger.info('   ℹ️ 源码目录无代码文件，跳过源码图谱');
+    return { nodes: 0, edges: 0, communities: 0, godNodes: 0, scannedFiles: 0 };
+  }
+
+  // 3. 全量构建
+  logger.info(`\n📊 源码知识图谱重建（${codeDirs.length} 个源码目录，${files.length} 个文件）...`);
+  const graph = await buildCodeKnowledgeGraph({
+    projectRoot: cwd,
+    projectName: 'Project',
+    preScannedFiles: files,
+  });
+
+  const result: NonNullable<ReindexResult['codeGraph']> = {
+    nodes: graph.nodes.length,
+    edges: graph.edges.length,
+    communities: graph.communities.length,
+    godNodes: graph.godNodes.length,
+    scannedFiles: files.length,
+  };
+
+  // 4. 需求↔代码联动（v8.3.356+: requirement-linker 从零接入变为链上消费）
+  try {
+    const { linkRequirementsToCode } = await import('./code-graph');
+    const link = await linkRequirementsToCode(cwd, iteration);
+    result.reqCodeLinks = link.totalLinkedNodes;
+  } catch (linkError) {
+    logger.warn(`   ⚠️ 需求↔代码联动跳过: ${linkError instanceof Error ? linkError.message : String(linkError)}`);
   }
 
   return result;

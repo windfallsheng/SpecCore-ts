@@ -28,7 +28,20 @@ import {
   type ModuleInfo,
 } from './code-scanner';
 import { summarizeCode, isTreeSitterLang } from './multi-lang-parser';
+// v8.3.365+: 业务切片——从导出符号提取带函数体的切片（结构摘要丢弃方法体，业务语义藏在函数体里）
+import { sliceCodeFile } from './unified-retrieval';
 import { logger } from '../utils/logger';
+
+// ── v8.3.365: 反推深度三档（depth 参数此前为死参数，本轮激活）──
+// 影响：每模块读文件数 / 每文件切片数 / 切片函数体行数上限
+export const DEPTH_CONFIG = {
+  quick:  { maxFiles: 3,  slicesPerFile: 2, maxBodyLines: 30 },
+  normal: { maxFiles: 8,  slicesPerFile: 3, maxBodyLines: 50 },
+  deep:   { maxFiles: 20, slicesPerFile: 5, maxBodyLines: 50 },
+} as const;
+export type ReverseDepth = keyof typeof DEPTH_CONFIG;
+/** 每模块切片总字符预算，防 IR 爆量 */
+const MAX_SLICE_CHARS_PER_MODULE = 10000;
 
 // ── 类型定义 ──
 
@@ -37,7 +50,7 @@ export interface ReverseRequirementOptions {
   sources?: string[];
   /** 分析深度 quick/normal/deep，影响读文件数与摘要粒度 */
   depth?: string;
-  /** 输出根目录，默认 .speccore/GLOBAL/requirements */
+  /** 输出根目录，默认 .speccore/GLOBAL/_reverse（v8.3.368: 与全局分析 requirements/ 域隔离，避免 REQUIREMENT.md 被两条管线抢用） */
   outputDir?: string;
   /** 只反推指定端（frontend/backend/mobile/cli/shared），缺省全端 */
   platforms?: string[];
@@ -57,7 +70,27 @@ export interface IRModule {
   imports: string[];
   /** tree-sitter 结构化摘要 */
   summary: string;
+  /** v8.3.365+: 带函数体的导出符号切片——业务语义抽象的素材来源 */
+  slices: IRCodeSlice[];
   lines: number;
+}
+
+/** 业务切片（v8.3.365+）：导出符号 + 注释 + 签名 + 函数体（截断后） */
+export interface IRCodeSlice {
+  /** 来源文件路径 */
+  file: string;
+  /** 符号名 */
+  name: string;
+  /** 符号类型（function/class/interface/type/enum/variable） */
+  type: string;
+  /** 前置注释（JSDoc 等） */
+  comments: string;
+  /** 签名行 */
+  signature: string;
+  /** 函数体（截断后） */
+  body: string;
+  /** 起始行号（1-based） */
+  lineStart: number;
 }
 
 export interface ReverseResult {
@@ -83,6 +116,8 @@ async function scanAndGroup(
 
   const platformFilter = new Set(options.platforms?.filter(Boolean) || []);
   const maxModules = options.maxModules || 30;
+  // v8.3.365: depth 参数激活（此前为死参数）
+  const dc = DEPTH_CONFIG[options.depth === 'deep' ? 'deep' : options.depth === 'quick' ? 'quick' : 'normal'];
 
   // 按「依赖深度」做分层排序（简单拓扑）：被依赖多的模块先分析（底层优先）
   const sortedModules = sortModulesByDependencies(index.modules);
@@ -102,9 +137,9 @@ async function scanAndGroup(
     const imports = dedupe(m.dependencies || []);
     const lines = files.reduce((a, f) => a + f.lines, 0);
 
-    // 读文件内容，生成 tree-sitter 摘要
+    // 读文件内容（v8.3.365: 文件数由 depth 决定，不再硬编码 8）
     const contents: Record<string, string> = {};
-    for (const f of files.slice(0, 8)) {
+    for (const f of files.slice(0, dc.maxFiles)) {
       try {
         const fullPath = join(process.cwd(), f.path);
         if (await pathExists(fullPath)) {
@@ -113,13 +148,44 @@ async function scanAndGroup(
       } catch { /* 忽略不可读文件 */ }
     }
     let summary = '';
-    for (const f of files.slice(0, 8)) {
+    for (const f of files.slice(0, dc.maxFiles)) {
       if (!contents[f.path]) continue;
       const lang = f.language;
       const s = isTreeSitterLang(lang)
         ? await summarizeCode(contents[f.path], lang)
         : null;
       if (s) summary += `\n${s}\n`;
+    }
+
+    // ── v8.3.365: 业务切片——tree-sitter 摘要只留符号/接口（丢弃方法体），
+    // 业务规则、异常分支、交互逻辑全在函数体里；此处从导出符号提取带函数体的
+    // 切片，让宿主 AI 有真实业务素材可抽象，而非对着签名猜概括 ──
+    const slices: IRCodeSlice[] = [];
+    let sliceChars = 0;
+    for (const f of files.slice(0, dc.maxFiles)) {
+      if (slices.length >= dc.maxFiles * dc.slicesPerFile) break;
+      if (!contents[f.path]) continue;
+      try {
+        const fileSlices = sliceCodeFile(contents[f.path], f.path);
+        for (const s of fileSlices.slice(0, dc.slicesPerFile)) {
+          const bodyLines = s.body.split('\n');
+          const body = bodyLines.length > dc.maxBodyLines
+            ? bodyLines.slice(0, dc.maxBodyLines).join('\n') + '\n// ... (截断)'
+            : s.body;
+          const charCost = (s.comments + s.signature + body).length;
+          if (sliceChars + charCost > MAX_SLICE_CHARS_PER_MODULE && slices.length > 0) break;
+          slices.push({
+            file: f.path,
+            name: s.name,
+            type: s.type,
+            comments: s.comments,
+            signature: s.signature,
+            body,
+            lineStart: s.lineStart,
+          });
+          sliceChars += charCost;
+        }
+      } catch { /* 单文件切片失败不阻断 */ }
     }
 
     result.push({
@@ -131,6 +197,7 @@ async function scanAndGroup(
       apis,
       imports,
       summary: summary.trim(),
+      slices,
       lines,
     });
   }
@@ -185,9 +252,27 @@ function buildIRSkeleton(m: IRModule): string {
     lines.push('> _无可解析摘要（文件可能为空或非代码）_');
   }
   lines.push('');
+  // v8.3.365+: 业务切片章节——结构摘要丢弃方法体，切片是业务语义素材
+  if (m.slices.length > 0) {
+    lines.push(`## 业务切片（v8.3.365+，含函数体）`);
+    lines.push('');
+    lines.push(`> CLI 从导出符号提取的带函数体切片，是「业务规则 / 异常分支 / 交互逻辑」的素材来源。`);
+    lines.push(`> 切片不足以确认业务语义时，用 Read 工具深读对应文件原文（函数体）。`);
+    lines.push('');
+    for (const s of m.slices) {
+      lines.push(`### \`${s.file}\` — ${s.name} (${s.type} · L${s.lineStart})`);
+      lines.push('');
+      lines.push('```ts');
+      if (s.comments) lines.push(s.comments);
+      lines.push(s.signature);
+      lines.push(s.body);
+      lines.push('```');
+      lines.push('');
+    }
+  }
   lines.push(`## 业务语义（宿主 AI 填写）`);
   lines.push('');
-  lines.push(`> ⚠️ 以下由宿主 AI 基于「代码事实 + 结构摘要」做语义抽象，勿编造代码中不存在的逻辑。`);
+  lines.push(`> ⚠️ 以下由宿主 AI 基于「代码事实 + 结构摘要 + 业务切片」做语义抽象，勿编造代码中不存在的逻辑。`);
   lines.push('');
   lines.push(`### 模块职责`);
   lines.push('');
@@ -291,10 +376,12 @@ function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[
   lines.push('');
   lines.push(`目录：\`${irDir}\`（共 ${modules.length} 个 IR）`);
   lines.push('');
-  lines.push(`对每个 IR 文件，只做「业务语义抽象」：`);
-  lines.push(`1. 读该 IR 的「代码事实 + 源码结构摘要」（CLI 已提取，勿重读源码）；`);
-  lines.push(`2. 填写「模块职责 / 关键业务规则 / 输入输出 / 异常边界」；`);
-  lines.push(`3. 禁止编造代码中不存在的逻辑；不确定处标注 \`待确认\`。`);
+  lines.push(`对每个 IR 文件，做「业务语义抽象」：`);
+  lines.push(`1. 读该 IR 的「代码事实 + 源码结构摘要 + 业务切片」（CLI 已预提取）；`);
+  lines.push(`2. 业务切片不足以确认的规则 / 分支 / 交互，用 Read 工具按需深读锚点文件的函数体原文——`);
+  lines.push(`   业务语义藏在函数体里，只读签名写不出真实需求；`);
+  lines.push(`3. 填写「模块职责 / 关键业务规则 / 输入输出 / 异常边界」；`);
+  lines.push(`4. 禁止编造代码中不存在的逻辑；不确定处标注 \`待确认\`。`);
   lines.push('');
   lines.push(`## 第二跳：合成 UR`);
   lines.push('');
@@ -303,10 +390,21 @@ function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[
   lines.push(`3. 每条验收标准必须带「溯源锚点」（引用真实 IR 模块 id），功能单元表必须填「溯源锚点」列；`);
   lines.push(`4. 端覆盖矩阵已由 CLI 确定，勿改动。`);
   lines.push('');
-  lines.push(`## 第三跳：验证环（v8.3.301+，反幻觉门禁）`);
+  lines.push(`## 第三跳起：QA 环（v8.3.367+，对齐 recipe-reverse-engineer 五阶段）`);
   lines.push('');
-  lines.push(`完成两跳后，运行 \`speccore global from-source --src <dirs> --verify\` 做锚点一致性校验：`);
-  lines.push(`CLI 会把 REQUIREMENT.md 里的每条「溯源锚点」与 IR 模块清单比对，悬空锚点（引用不存在的模块）即疑似 AI 幻觉，须修正或补充依据后重新校验。`);
+  lines.push(`两跳完成后进入「验证 → 审查 → 修订」闭环（对应业界最优配方 discover→generate→verify→review→revision）：`);
+  lines.push('');
+  lines.push(`### 1. 验证（--verify）：锚点门禁 + 完整性基线 + code-verifier 剧本`);
+  lines.push(`运行 \`speccore global from-source --src <dirs> --verify\`：CLI 校验「溯源锚点」与 IR 清单一致性（悬空锚点=疑似幻觉）+ 覆盖完整性（未被引用的模块=遗漏），并生成 \`_qa/VERIFY_PLAYBOOK.md\` 与 \`_qa/verify.json\` 模板。`);
+  lines.push(`宿主 AI 按剧本扮演 code-verifier：逐条 AC 对照代码证据验证，填写 verify.json（status: verified/needs_review/inconsistent/unverified，须过 Quality Gate——计数平衡、无 blocked）。`);
+  lines.push('');
+  lines.push(`### 2. 审查（--review）：document-reviewer 语义审查`);
+  lines.push(`运行 \`speccore global from-source --src <dirs> --review\`：CLI 生成 \`_qa/REVIEW_PLAYBOOK.md\` 与 \`_qa/review.json\` 模板。`);
+  lines.push(`宿主 AI 按剧本扮演 document-reviewer：拿 verify.json 作证据，从完整性/正确性/可测试性/翻译腔/粒度/可追溯性六维审查「写得如何」，逐条 finding 做 Review Resolution 裁决（apply=必须修订 / decline=拒绝），填 review.json。`);
+  lines.push('');
+  lines.push(`### 3. 修订（--revise）：有条件修订 + re-validation`);
+  lines.push(`运行 \`speccore global from-source --src <dirs> --revise\`：CLI 读 review.json 做裁决门禁——无 apply findings 即闭环完成；有 apply findings 则生成 \`_qa/REVISION_PLAYBOOK.md\`（apply findings 全文作修订范围）并记入 \`_qa/REVISION_LOG.md\`。`);
+  lines.push(`修订后必须重新验证（re-validation）：先 \`--verify\` 重跑 code-verifier，再 \`--review\` 带 prior_feedback 重跑 document-reviewer，直到无 apply findings。`);
   lines.push('');
   lines.push(`## 约束`);
   lines.push('');
@@ -323,11 +421,16 @@ function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[
 export async function reverseRequirementsFromCode(
   options: ReverseRequirementOptions,
 ): Promise<ReverseResult> {
-  const outputDir = options.outputDir || join('.speccore', 'GLOBAL', 'requirements');
+  const outputDir = options.outputDir || join('.speccore', 'GLOBAL', '_reverse');
   const irDir = join(outputDir, '_ir');
   await ensureDir(irDir);
 
-  logger.info('   🔍 反推需求：扫描源码并分组...');
+  const depthLabel = options.depth === 'deep'
+    ? 'deep（每模块 ≤20 文件 × 5 切片）'
+    : options.depth === 'quick'
+      ? 'quick（每模块 ≤3 文件 × 2 切片）'
+      : 'normal（每模块 ≤8 文件 × 3 切片）';
+  logger.info(`   🔍 反推需求：扫描源码并分组（深度: ${depthLabel}）...`);
   const { modules } = await scanAndGroup(options);
   if (modules.length === 0) {
     throw new Error('未找到可反推的代码模块。请确认源码目录或 --platforms 过滤条件。');
@@ -363,7 +466,7 @@ export async function reverseRequirementsFromCode(
   };
 }
 
-function sanitize(id: string): string {
+export function sanitize(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
@@ -385,6 +488,20 @@ export interface VerifyAnchorsResult {
 const ANCHOR_RE = /\[?溯源[:：]\s*`([^`]+)`\]?/g;
 
 /**
+ * 提取 REQUIREMENT.md 中已填写的溯源锚点（占位锚点「_AI 填写模块id」不计入）。
+ * v8.3.367: 从 verifyReverseAnchors 抽出，供 QA 环（完整性基线）复用。
+ */
+export function extractFilledAnchors(content: string): string[] {
+  const anchors: string[] = [];
+  let m: RegExpExecArray | null;
+  ANCHOR_RE.lastIndex = 0;
+  while ((m = ANCHOR_RE.exec(content)) !== null) {
+    anchors.push(m[1]);
+  }
+  return anchors.filter(a => !/_AI 填写|填写模块id/.test(a));
+}
+
+/**
  * 校验 REQUIREMENT.md 的溯源锚点与 IR 模块清单的一致性。
  * 锚点与 IR 文件名都经过 sanitize 归一化后比对（'/' → '-'），
  * 悬空锚点即宿主 AI 引用了不存在的模块——典型幻觉特征，须修正后重新校验。
@@ -404,15 +521,7 @@ export async function verifyReverseAnchors(outputDir: string): Promise<VerifyAnc
   }
 
   const content = await readFile(urPath, 'utf-8');
-  const anchors: string[] = [];
-  let m: RegExpExecArray | null;
-  ANCHOR_RE.lastIndex = 0;
-  while ((m = ANCHOR_RE.exec(content)) !== null) {
-    anchors.push(m[1]);
-  }
-
-  // 占位锚点（AI 未填写）不计入校验
-  const filled = anchors.filter(a => !/_AI 填写|填写模块id/.test(a));
+  const filled = extractFilledAnchors(content);
   const dangling = filled.filter(a => !whitelist.has(sanitize(a)));
 
   const reportPath = join(outputDir, 'VERIFY_REPORT.md');
@@ -446,7 +555,7 @@ function buildVerifyReport(total: number, dangling: string[]): string {
   lines.push('# 反推需求验证报告（VERIFY）');
   lines.push('');
   lines.push(`> 生成时间: ${new Date().toISOString()}`);
-  lines.push(`> 校验规则: REQUIREMENT.md 中每条「溯源锚点」必须能回溯到真实存在的 IR 模块（\`.speccore/GLOBAL/requirements/_ir/\`）。`);
+  lines.push(`> 校验规则: REQUIREMENT.md 中每条「溯源锚点」必须能回溯到真实存在的 IR 模块（\`.speccore/GLOBAL/_reverse/_ir/\`）。`);
   lines.push('');
   lines.push('## 统计');
   lines.push('');

@@ -1102,8 +1102,11 @@ export async function splitDocumentToUnits(
   translateResponse?: string,
   onDuplicate?: string,
   titles?: string[]
-): Promise<void> {
+): Promise<string[]> {
   const content = await readFile(outputPath, 'utf-8');
+  // v8.3.362+: 收集本轮实际写入的功能单元目录名，供调用方（unitize）切分后
+  // 跑端推断（inferFeaturePlatforms）——端分析前移到切分层，taskify 拆得更准
+  const writtenUnits: string[] = [];
   // v8.3.263: 收集同目录其它文档名（端级文档）——总纲文档（如 overview-requirements.md）
   // 的端级汇总章节与端文档切出的单元语义重复（文本层面不相似，Jaccard 拦不住），
   // 需由 AI 切分阶段识别「该章节是端级汇总」并归入 global
@@ -1162,7 +1165,7 @@ export async function splitDocumentToUnits(
   // 无功能单元且无全局信息才跳过（纯总览文档如 PRD 的全局信息仍要归到 overview）
   if (units.length === 0 && globalSections.length === 0) {
     logger.warn('未检测到可拆分的功能单元，跳过拆分');
-    return;
+    return [];
   }
 
   if (units.length > 0) {
@@ -1240,38 +1243,35 @@ export async function splitDocumentToUnits(
     u.title = stripSectionPrefix(u.title) || u.title;
   }
   const unitNames = translateEn === 'off'
-    ? new Map<string, string>()
+    ? (() => {
+      // v8.3.364: off 显式禁用英译时给足提示（此前静默拼音，用户会误以为「英文没生成」）
+      logger.warn('⚙️  --translate-en off：已显式跳过英译，目录名将使用拼音（如 yudingguanli 而非 booking-management）');
+      logger.info('   💡 需要英文名请用默认 auto（LLM/宿主 AI 英译优先）或 --translate-en host 接力');
+      return new Map<string, string>();
+    })()
     : await translateUnitTitles(units.map(u => u.title), featuresDir, translateEn || 'auto', translateResponse);
   if (unitNames === null) {
     // 接力中断：已输出 [SPECCORE_PROMPT] 且 exitCode 置 10，等待宿主 AI 翻译后 --translate-response 续跑
-    return;
+    return [];
   }
   const seenUnitDirs = new Set<string>(existingUnitDirs);
+  // v8.3.352+: 标题 → 实际目录名映射（含 rename -2/-3 后缀），供 INDEX「目录」列回填
+  const unitDirNameByTitle = new Map<string, string>();
   // v8.3.275: 同名单元处理三选一（TTY 交互 / --on-duplicate），懒创建 readline
   let rl: ReturnType<typeof createInterface> | null = null;
   for (let unitIndex = 0; unitIndex < units.length; unitIndex++) {
     const unit = units[unitIndex];
-    // v8.3.277: docSlug 避开全局保留词（overview/global）——
-    // converted/ 下常见 overview.md 这类文件名，直接作前缀会让全部单元目录名
-    // 以 overview- 开头，被下方「全局章节拦截」误杀
-    let docSlug = sanitizeUnitName(basename(sourceFileName, '.md')) || 'doc';
-    docSlug = docSlug.replace(/^(overview|global)(-|$)/i, 'doc$2');
-    // v8.3.316+: docSlug 统一以字母结尾（如 plan-24 → plan、2026 → doc）——
-    // taskify 的 stripUnitSeqPrefix 靠「前段以字母结尾的 -NN- 才是序号段」锚定 seq，
-    // 若 docSlug 尾数字残留，plan-24-01-inbox 会被误剥成 01-inbox（序号冒充语义段）
-    docSlug = docSlug.replace(/\d+$/, '') || 'doc';
-    // v8.3.227+: 目录名加两位序号前缀（按文档内章节顺序），
-    // 保证文件系统排序 == 文档顺序，解决切分目录乱序问题
-    // v8.3.318: 序号回到文档章节序号（unitIndex+1）——v8.3.240 的 written+1 方案
-    // 在增量重切时错乱：已有 01/02/03 被 skip 后，新章节（第 4 章）written=0 拿 01，
-    // 与 01-inbox 序号撞车且破坏「排序==文档顺序」；章节序号幂等稳定，重切不变
-    const seq = String(unitIndex + 1).padStart(2, '0');
-    // v8.3.271+: 目录名尾段用英文 slug（v8.3.272+ 优先 LLM 英译，失败拼音兜底）；
+    // v8.3.363+: 目录名 = 纯功能单元名（英文 slug，LLM 英译优先、拼音兜底），
+    // 不再拼接 {文档名}-{章节序号}- 前缀——用户反馈前缀/序号段（new-feature-01-xxx）
+    // 既非单元语义也不美观。多文档同名章节由下方 -2/-3 后缀去重。
+    // 旧格式（doc-01-slug）目录不迁移，stripUnitSeqPrefix 兼容剥离（新格式无 -NN- 段原样返回）；
+    // 文件系统排序不再等于文档顺序，来源章节以 SOURCE.md 标题与 INDEX.md 记载为准。
+    // v8.3.271+: 目录名用英文 slug（v8.3.272+ 优先 LLM 英译，失败拼音兜底）；
     // 中文显示名保留在 SOURCE.md 标题与 _matrix.md feature 字段
     // v8.3.282: slug 剥离括号注释——「通知触发机制（跨页面通用）」只取「通知触发机制」主体，
     // 避免「kuayemiantongyong」这类说明性后缀污染目录名（单元内容不受影响）
     const slugSource = stripParenthetical(unitNames.get(unit.title) || unit.title);
-    let unitDirName = sanitizeUnitName(`${docSlug}-${seq}-${toEnglishSlug(slugSource)}`);
+    let unitDirName = sanitizeUnitName(toEnglishSlug(slugSource));
     // v8.3.278: 同名检测两级——目录名命中，或「标题命中 + 内容指纹相同」的换名场景
     // （拼音→英文重切时目录名变了但内容同源，仍应走三选一而非被指纹检测误拦；
     // 标题相同但内容不同的同名章节不命中，避免误伤）
@@ -1306,6 +1306,8 @@ export async function splitDocumentToUnits(
       if (action === 'skip') {
         logger.info(`   ⏭️  ${unit.title} 已存在（同名单元），跳过`);
         skipped++;
+        // v8.3.352+: skip 单元也记录既有目录名（conflictDir 即已存在目录），INDEX 目录列非空
+        unitDirNameByTitle.set(unit.title, conflictDir);
         continue;
       }
       if (action === 'overwrite') {
@@ -1332,6 +1334,7 @@ export async function splitDocumentToUnits(
       }
     }
     seenUnitDirs.add(unitDirName);
+    unitDirNameByTitle.set(unit.title, unitDirName);
 
     // v8.3.226+: 跨文档重复章节检测（内容指纹比对，与幂等目录跳过互补）——
     // 必须在目录创建前完成，避免重复单元残留空壳目录
@@ -1441,6 +1444,7 @@ export async function splitDocumentToUnits(
     await writeFile(join(unitDir, 'CHANGELOG.md'), changelogContent);
 
     written++;
+    writtenUnits.push(unitDirName);
     logger.info(`   ✅ ${unit.title} → features/${unitDirName}/`);
   }
 
@@ -1450,8 +1454,8 @@ export async function splitDocumentToUnits(
   // 修复同一单元跨切分批次（端标签不同）或同文档内同名章节重复追加的问题
   const featuresIndexPath = join(featuresDir, 'INDEX.md');
   let featuresIndex = '# 功能单元索引\n\n> 由 unitize 自动生成\n\n';
-  featuresIndex += '| 功能单元 | 来源章节 | 状态 | 涉及端 |\n';
-  featuresIndex += '| :--- | :--- | :--- | :--- |\n';
+  featuresIndex += '| 功能单元 | 来源章节 | 状态 | 涉及端 | 目录 |\n';
+  featuresIndex += '| :--- | :--- | :--- | :--- | :--- |\n';
   const seenRows = new Set<string>();
   const preservedRows: string[] = [];
   if (await pathExists(featuresIndexPath)) {
@@ -1467,7 +1471,16 @@ export async function splitDocumentToUnits(
           // 重切时按全局章节语义过滤，不再保留。
           if (isGlobalAnnotatedTitle(cells[1] || '')) continue;
           seenRows.add(dedupKey);
-          preservedRows.push(line);
+          // v8.3.352+: 目录列回填——旧 INDEX 行无目录列；能从本次切分映射（标题→目录名）
+          // 查到则回填真实目录名（含 skip 单元），查不到补空单元格对齐新表头
+          // v8.3.363: 有映射即重建目录列（重切换英文名/rename 后旧目录列会脱节，
+          // 如拼音目录 → 英文目录后 INDEX 仍指旧目录）
+          const dirOfRow = unitDirNameByTitle.get(cells[1] || '') || '';
+          if (dirOfRow) {
+            preservedRows.push(`| ${cells[1]} | ${cells[2]} | ${cells[3]} | ${cells[4] || ''} | ${dirOfRow} |`);
+          } else {
+            preservedRows.push(line.split('|').length <= 6 ? `${line} ${''} |` : line);
+          }
         }
       }
     } catch {}
@@ -1479,7 +1492,7 @@ export async function splitDocumentToUnits(
     if (isGlobalAnnotatedTitle(unit.title || '')) continue;
     // v8.3.273: 状态列由无意义的英文 draft 改为「待分析」（语义与 Task 状态体系一致；
     // 分析完成后的状态流转由 overview/FUNCTION_MAP 承担，INDEX 仅在切分时初始化）
-    const row = `| ${unit.title} | ${unit.sourceSection} | 待分析 | ${platformLabel} |`;
+    const row = `| ${unit.title} | ${unit.sourceSection} | 待分析 | ${platformLabel} | ${unitDirNameByTitle.get(unit.title) || ''} |`;
     const cells = row.split('|').map(c => c.trim());
     const dedupKey = `${cells[1]}|${cells[2]}`;
     if (seenRows.has(dedupKey)) continue;
@@ -1518,6 +1531,7 @@ export async function splitDocumentToUnits(
   logger.success(`✅ 已拆分 ${written} 个功能单元到 features/${skipped > 0 ? `（跳过 ${skipped} 个）` : ''}`);
   if (rl) rl.close();
   logger.info(`   📂 ${featuresDir}/`);
+  return writtenUnits;
 }
 
 /**

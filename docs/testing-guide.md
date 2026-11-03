@@ -41,6 +41,7 @@ SpecCore 提供从代码到部署的全链路测试能力：
 | **Lint 检查** | `speccore verify --type lint` | ESLint/Prettier 格式检查 | ~20s |
 | **单元测试** | `speccore verify --type test` | Jest/Vitest 单元测试 | ~1-2m |
 | **UI 冒烟** | `speccore verify --ui --smoke-only` | Playwright 无头浏览器页面可达性 | ~2-5m |
+| **AI 浏览器验证** | `speccore verify --ai` | CLI 切片生成剧本，宿主 AI 视觉执行事件交互与业务流程（无需 selector，真实验证码/跨页长流程主场；v8.3.355+ 剧本附原型/设计稿参考） | ~10-30m |
 | **视觉回归** | `speccore verify --ui --visual-only` | AI 视觉模型截图对比分析 | ~5-10m |
 | **API 契约** | `speccore verify --api-contract` | API_CONTRACT.yaml 结构验证 | ~1m |
 | **性能基线** | `speccore verify --perf` | Lighthouse Web Vitals 性能测试 | ~2-3m |
@@ -231,6 +232,13 @@ tests:
       username: admin                 # 用户名（明文，非敏感可用）
       password_env: SMOKE_PASSWORD    # 密码从环境变量读取（推荐，密码不落库）
       # password: admin123            # 或明文（仅内网默认账号可接受）
+    # verification:                   # 可选（v8.3.354+）：登录二次验证（验证码）
+    #   type: sms                     # 验证码类型（报告展示用）
+    #   code_selector: "input[name='smsCode']"   # 验证码输入框选择器
+    #   code_submit_selector: "button[type='button']"  # 可选：验证码提交按钮（缺省复用 submit_selector）
+    #   code_env: SIT_SMS_CODE         # 验证码来源环境变量（动态码落环境变量，优先于 fixed_code）
+    #   fixed_code: "888888"           # 或固定验证码（测试环境「可绕过」场景）
+    #   code_timeout: 10000            # 可选：等待验证码输入框出现（毫秒，默认 10000）
 ```
 
 ### 凭据来源：环境变量优先，明文兜底
@@ -241,6 +249,26 @@ tests:
 | `username` / `password` | 明文（仅用于内网默认账号等非敏感场景） |
 
 解析优先级：`*_env` 存在且环境变量有值 → 用环境变量；否则回退明文。
+
+### 登录二次验证（验证码，v8.3.354+）
+
+账号密码提交后若未达成功判定，且配置了 `verification` 块，引擎会**自动进入二次验证**：
+等待验证码输入框出现 → 填码（`code_env` 环境变量优先、`fixed_code` 兜底）→ 提交 → 再次判定。
+
+| 字段 | 说明 |
+|:---|:---|
+| `type` | 验证码类型（`sms`/`totp`/`graphic`/`email`），仅报告展示用 |
+| `code_selector` | 验证码输入框选择器（必填） |
+| `code_submit_selector` | 验证码提交按钮（缺省复用 `submit_selector`） |
+| `code_env` | 码来源环境变量名（动态码由取码脚本写入环境变量） |
+| `fixed_code` | 固定验证码（测试环境「可绕过」场景，后端固定校验码） |
+| `code_timeout` | 等待验证码输入框出现（毫秒，默认 10000） |
+
+三条约定原则：
+
+1. **测试环境优先绕过**：测试环境后端应支持固定验证码/验证码白名单，走 `fixed_code` 最简单可靠；
+2. **动态码只约定通道**：真实动态码走 `code_env`（取码脚本写入环境变量），配置里只落变量名不落码；
+3. **不可自动化显式降级**：码源未就绪时冒烟装配计入 skipped 并在报告声明，不静默假通过；真实动态码的场景验证优先走 `verify --ai` 的 AI 验证线（账号 `verification.note` 提供取码指引，见 accounts-example.yaml）。
 
 ### 首次开发项目的账号来源约定
 
@@ -291,6 +319,16 @@ data-testid="{模块}-{页面}-{元素}"
 ### 流程级场景骨架自动生成（v8.3.216+）
 
 `generateFlowScenariosFromSpec` 会从需求文档/Spec 的「业务流程」章节提取含 `→` 的流程步骤，自动生成流程级场景骨架（导航 + `data-testid` 占位断言）。骨架定位是「起点」而非「成品」——精确的 `fill`/`click` 交互步骤和选择器仍需前端按 `data-testid` 约定加标识后，由 AI/人工在骨架上补充。
+
+### 动作语义提取（v8.3.355+）
+
+装配链升级：流程段步骤**命中元素清单且含点击类动词**（点击/单击/勾选/选中/提交/保存/删除/取消/关闭/确认/返回/刷新/搜索/查询等）时，自动生成真实 `click` 动作场景（`navigate + wait + click(selector)`）；点击后只断言页面存活（body），不断言原元素可见（关闭/删除类点击后元素会消失，属误报）。三条安全边界：
+
+- **输入/选择类步骤不自动生成动作**（fill/select 需要值参数，值无法可靠推断），维持元素可见断言——宁可少生成，不生成错的；
+- **未命中元素清单的步骤维持骨架**（页面容器 + body 兜底），与旧行为一致；
+- **步骤文本自动剥离书名号/引号**再与元素清单匹配（「点击「新增」按钮」→「点击新增按钮」），显著提升命中率。
+
+> UI_SPEC「元素标识约定」写细 + 「交互流程」写成「点击「XX」按钮」句式，即可零手写获得交互级冒烟；文档含糊的项目行为与旧版完全一致。
 
 ---
 

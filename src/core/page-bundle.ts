@@ -28,12 +28,24 @@ export const ASK_MODE_PAGES: readonly string[] = [
   'speccore-ask-pipeline.html',
 ];
 
+/** 幂等复制本地字体资产到 HTML 落盘目录的 fonts/ 子目录（离线可用，失败不阻断页面主体） */
+export async function ensureHtmlAssets(destDir: string): Promise<void> {
+  try {
+    const fontsSrc = join(htmlTemplateDir(), 'fonts');
+    if (!(await pathExists(fontsSrc))) return;
+    const fontsDest = join(destDir, 'fonts');
+    await ensureDir(fontsDest);
+    await copy(fontsSrc, fontsDest, { overwrite: true });
+  } catch { /* 字体资产缺失不影响页面主体 */ }
+}
+
 /** 从包内模板复制单个 HTML 到项目 outputs/（存在才复制，幂等覆盖） */
 export async function copyHtmlTemplate(cwd: string, file: string): Promise<string> {
   const src = join(htmlTemplateDir(), file);
   const dest = join(cwd, 'outputs', file);
   await ensureDir(join(cwd, 'outputs'));
   if (await pathExists(src)) await copy(src, dest);
+  await ensureHtmlAssets(join(cwd, 'outputs'));
   return dest;
 }
 
@@ -41,7 +53,8 @@ export async function copyHtmlTemplate(cwd: string, file: string): Promise<strin
 export async function ensurePromptsPage(cwd: string): Promise<void> {
   try {
     const { generatePromptsPage } = await import('../commands/prompts');
-    await generatePromptsPage(join(cwd, 'outputs', 'speccore-prompts.html'));
+    await generatePromptsPage(join(cwd, 'outputs', 'speccore-prompts.html'), cwd);
+    await ensureHtmlAssets(join(cwd, 'outputs'));
   } catch { /* 联动失败不阻断 */ }
 }
 
@@ -56,6 +69,7 @@ export async function ensureAskPages(cwd: string): Promise<string> {
   const outPath = join(cwd, 'outputs', 'speccore-ask-onboarding.html');
   await ensureDir(join(cwd, 'outputs'));
   await writeFile(outPath, html);
+  await ensureHtmlAssets(join(cwd, 'outputs'));
   for (const f of [...ASK_MODE_PAGES, 'speccore-help.html']) {
     await copyHtmlTemplate(cwd, f);
   }
@@ -84,6 +98,7 @@ export async function ensureSetupGuidePage(cwd: string, projectName?: string, pk
   const outputPath = join(cwd, 'outputs', 'speccore-setup-guide.html');
   await ensureDir(join(cwd, 'outputs'));
   await writeFile(outputPath, html);
+  await ensureHtmlAssets(join(cwd, 'outputs'));
   await ensurePromptsPage(cwd);
   return outputPath;
 }

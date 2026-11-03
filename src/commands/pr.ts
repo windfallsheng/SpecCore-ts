@@ -43,6 +43,17 @@ async function resolvePrBase(): Promise<string> {
     return 'main';
   }
 }
+
+/**
+ * 解析 PR 目标分支（v8.3.351+）：显式 --base 支持环境名引用——
+ * 值若与 environments/ 下环境同名则取其 branch 字段（如 --base dev → develop），
+ * 直接分支名/含路径分隔符的值原样透传；未显式指定时走 pr_target 回退链。
+ * 与 ask 意图「合并到 {环境}」共用此入口：ask-engine 只识别与透传环境名，解析归 pr 命令。
+ */
+async function resolveBaseBranch(explicitBase: string | undefined): Promise<string> {
+  if (explicitBase) return await resolveEnvBranchRef(explicitBase);
+  return await resolvePrBase();
+}
 import { loadTaskQualityGate, mergeQualityGate, shouldRunUIVerify } from '../core/quality-gate';
 // v6.86.0+: AGENTS 全阶段扩展
 import { resolveAgentsForPhase } from '../core/agents';
@@ -491,7 +502,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
       // 自动创建 PR
       if ((options.createPr || options.autoMerge) && pushed) {
-        const prResult = await createPullRequest(options.base || await resolvePrBase(), options.title || commitMsg, options.draft, gitCwd);
+        const prResult = await createPullRequest(await resolveBaseBranch(options.base), options.title || commitMsg, options.draft, gitCwd);
         if (prResult.success) {
           logger.success(`✅ ${prResult.message}${prResult.url ? ': ' + prResult.url : ''}`);
           if (options.autoMerge) {
@@ -570,7 +581,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
     // 自动创建 PR / 合并
     if ((options.createPr || options.autoMerge) && pushed) {
-      const base = options.base || await resolvePrBase();
+      const base = await resolveBaseBranch(options.base);
       const title = options.title || msg;
       const prResult = await createPullRequest(base, title, options.draft, gitCwd);
       if (prResult.success) {
@@ -697,7 +708,7 @@ export async function prCommand(options: PrOptions): Promise<void> {
 
       // 自动创建 PR / 合并
       if ((options.createPr || options.autoMerge) && pushed) {
-        const base = options.base || await resolvePrBase();
+        const base = await resolveBaseBranch(options.base);
         const title = options.title || msg;
         const prResult = await createPullRequest(base, title, options.draft, gitCwd);
         if (prResult.success) {

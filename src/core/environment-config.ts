@@ -50,6 +50,12 @@ export interface EnvironmentConfig {
     };
     /** 测试登录配置（v8.3.215+）：冒烟/视觉测试执行前自动登录 */
     auth?: AuthConfig;
+    /**
+     * AI 验证线账号（v8.3.351+ 权威源）：环境内嵌账号，就近声明。
+     * 账号名即引用名（如 admin）；缺失时兜底 .speccore/tests/accounts.yaml 的 {env} 分组。
+     * username/password 支持 ${ENV_VAR} 引用，敏感值不落盘。
+     */
+    accounts?: Record<string, { username?: string; password?: string; note?: string; platforms?: string[] }>;
   };
   /** Pipeline 测试配置（v8.3.60+） */
   pipeline?: {
@@ -198,6 +204,13 @@ export async function loadEnvironmentConfig(filePath: string): Promise<Environme
       // v8.3.215+: 解析测试登录配置 auth
       if (t.auth && typeof t.auth === 'object') {
         config.tests.auth = parseAuthConfig(t.auth as Record<string, unknown>);
+      }
+      // v8.3.351+: AI 验证线账号（权威源，账号名即引用名；缺失时 accounts.yaml 兑底）
+      if (t.accounts && typeof t.accounts === 'object') {
+        config.tests.accounts = t.accounts as Record<
+          string,
+          { username?: string; password?: string; note?: string; platforms?: string[] }
+        >;
       }
     }
 

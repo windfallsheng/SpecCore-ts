@@ -1,5 +1,359 @@
 # Changelog
 
+## v8.3.370 (2026-11-03) — 澄清链走查修复：双 frontmatter 剥离 + CLARIFY_REPORT 断链修复
+
+真实走查澄清链（doc2spec → --clarify → [CLARIFY:] 回传）发现并修复两个断链：
+
+- **双 frontmatter 剥离**：宿主 AI 按澄清剧本回传时块内容自带 source/status frontmatter，CLI 落盘无条件追加系统头 → 双 frontmatter 文件。新增 `stripLeadingFrontmatter` 工具（剥离开头的 --- 块，无闭合 --- 不误伤正文分隔线），clarifyBlocks 路径拼接前先剥离。
+- **CLARIFY_REPORT 断链修复**：澄清报告刷新仅挂在 JSON 分支收尾，纯文本 [CLARIFY:] 回传路径不经过该分支 → 报告永不落盘。修复为澄清产物落盘后立即刷新报告（幂等，内容未变跳过写入）。
+
+## v8.3.369 (2026-11-03) — 「盘点器」升格「文档生成器」：TECH_STACK 检测重写 + API 提取器接入 + AI 接力闭环 + 4b/4c 骨架收敛
+
+对标业内（GitHub Linguist 检测策略 / ts-morph AST 路由提取 / LangChain 结构化交棒），三条路全部落地：事实层两处坏点修复，语义层补齐 AI 接力闭环，两套文档体系收敛为一个生成器。
+
+- **TECH_STACK 检测重写（对标 Linguist 双轨）**：旧版只找 `{dir}/package.json`（源码子目录必扑空 → 实盘「未检测到」），重写为「标记文件向上回溯 ≤6 层找工程根（package.json/pom.xml/go.mod/requirements.txt/Cargo.toml/Gemfile）→ 依赖表框架识别（16 框架，Next/Nuxt/Nest 按专一度优先）→ 扩展名统计兜底（15 语言）」，并补 TypeScript 判定（deps.typescript）。
+- **API 提取器接入（修复 API_INVENTORY 空壳）**：新增 `extractApiDetails` 提取「METHOD /path」明细（Express/Koa `router.get('/p')` 三种引号 + NestJS `@Controller` 前缀合并 + Java `@*Mapping`），回填 tree-sitter 分支恒空的 `apiDetails`——API_INVENTORY.md 与 API_CONTRACT.yaml 拿到真实数据。
+- **AI 接力闭环（--prompt/--apply 延伸）**：global-artifacts 线补齐语义层接力——CLI 生成确定性骨架 + `_DOCS_PLAYBOOK.md` 接力剧本（占位清单从实盘文档动态派生，附素材指引）；`--prompt` 输出接力 Prompt，`--apply '<JSON>'` 按「标题定位」把宿主 AI 语义内容合并进骨架（YAML 用 `"description 字段"` 映射回填），未命中占位逐条报告供修正重发。
+- **体系收敛（一个概念一个生成器）**：4b/4c 九文档（FUNCTION_MAP/API_CONTRACT.yaml/INTERACTION_MAP + 安全/性能/数据流/部署/一致性 5 文档）旧状无人生成只被检查，现并入 generateGlobalArtifacts 统一铺骨架（确定性事实 + `_AI 填写` 占位），global analyze Layer 4 检查自然通过，宿主 AI 按剧本填语义。
+- **回填引擎纯函数**：`mergeSectionIntoText`（标题定位替换）+ `fillYamlDescriptions`（YAML description 匹配回填）导出供单测，6 条回归测试全绿。
+
+## v8.3.368 (2026-11-03) — GLOBAL 目录治乱：坟头归档机制 + 顶层收编 + 反推域隔离（requirements/ ↔ _reverse/）
+
+上轮评估暴露的三个硬伤全部修复：时间戳备份在四层目录疯长污染索引、CODE_INDEX/TECH_STACK 平铺顶层错位、REQUIREMENT.md 被两条管线抢用互相覆盖。
+
+- **safeWrite 归档机制**：旧版「内容有变 → 平铺改名」（同目录 CODE_INDEX-20260923065735.md 这类坟头，已见 21 个）改为「归档同目录 .history/ 子目录」——主目录永远只有正本；.history/ 以点开头被 reindex 自动跳过，INDEX/TOC/RAG 三层索引不再扫到陈旧备份。
+- **顶层散文件收编 overview/**：CODE_INDEX.md / TECH_STACK.md 从 GLOBAL 根收编进 overview/（与 ARCHITECTURE/API_INVENTORY 同域）；config.ts 消费方早已定义 overview 新路径，写读两端对齐。
+- **reindex 排除时间戳坟头**：`scanMarkdownFiles` 增加 `-\d{14}.md` 模式排除（v8.3.368 前的存量坟头），INDEX.md 不再把备份当正文并列索引。
+- **反推域隔离（GLOBAL/_reverse/）**：源码反推需求产物（REQUIREMENT.md / REVERSE_PROMPT.md / _ir / _qa）默认目录从 requirements/ 迁至 _reverse/，与全局分析线（generateGlobalArtifacts 写 requirements/）彻底分离，REQUIREMENT.md 双管线抢用根除。QA 环（--verify/--review/--revise）自动跟随；未指定 --out-dir 且新域无产物、旧域有产物时自动接管旧域并提示迁移（v8.3.368 前存量项目兼容）。
+- **空目录不再预创建**：requirements/images、requirements/prototypes 无任何写入方，analyze 与 generateGlobalArtifacts 两处预创建删除。
+- **实盘迁移**：本项目 .speccore/GLOBAL 完成一次性治乱——21 个坟头全部归档各目录 .history/，反推产物迁入 _reverse/，重跑 reindex 后 INDEX.md 从 32 项（含 21 坟头）瘦身为 24 项干净索引。
+
+## v8.3.367 (2026-11-03) — 反推需求 QA 环补齐：对齐业内最优 recipe-reverse-engineer 五阶段（验证→审查→修订）
+
+用户指示「反推需求按业内最好方式实现，完全抄都可以」。对标 shinpr/claude-code-workflows 的 recipe-reverse-engineer 五阶段配方（discover→generate→verify→review→revision），补齐 SpecCore 缺失的后三段：
+
+- **验证环升级（--verify）**：新增完整性基线 `checkInventoryCoverage`（对应 Quality Gate 的 counts balance）——UR 溯源锚点覆盖 vs IR 单元清单，未覆盖模块 = unaccounted items 进入审查证据；无已填锚点判定 blocked。新增 `_qa/INVENTORY.md` 报告 + `_qa/VERIFY_PLAYBOOK.md` code-verifier 验证剧本 + `_qa/verify.json` 结构化验证结果模板（status: verified/needs_review/inconsistent/unverified，已存在不覆盖宿主 AI 填写）。
+- **语义审查（--review，全新）**：document-reviewer 角色剧本 `_qa/REVIEW_PLAYBOOK.md`，六维审查（completeness 完整性 / correctness 正确性 / testability 可测试性 / translation 翻译腔 / granularity 粒度 / traceability 可追溯性），以 verify.json 为验证证据（recipe: review 输入 = Step 3 输出）；`_qa/review.json` findings 模板带 Review Resolution 裁决字段（disposition: apply/decline）。
+- **有条件修订（--revise，全新）**：Review Resolution Gate——未裁决（pending>0）拒绝推进；decline-only 即 Unit Completion Gate 闭环完成；有 apply findings 则生成 `_qa/REVISION_PLAYBOOK.md` 修订剧本（apply findings 全文作修订范围，Operation Mode: update）+ `_qa/REVISION_LOG.md` 修订轮次记录，并输出 re-validation 指引（--verify→--review→--revise 直到无 apply findings）。
+- **两跳指引升级**：REVERSE_PROMPT.md 第三跳从单一验证环扩展为「验证→审查→修订」完整 QA 环指引；`extractFilledAnchors` 从 verifyReverseAnchors 抽出供完整性基线复用。
+- **CLI 接线**：`global from-source` / `spec-from-source` 新增 `--review`、`--revise` 选项（与 --verify 可叠加）。
+
+回归测试：新增 13 条（完整性基线 4 + 验证环 2 + 审查 2 + 修订门禁 5），全量 752/752 通过。
+
+## v8.3.366 (2026-11-03) — 知识图谱/RAG 链路评估问题修复：query 精确化 + 需求配 额 + 中英映射收敛 + Layer 3 业务切片
+
+架构评估点出的四个问题 + 用户「技术分析也不行」的素材管道问题，本轮一次还清：
+
+- **analyze RAG query 精确化**：检索 query 从迭代名（`ctx.iteration`）升级为当前功能单元需求原文（SOURCE.md 前 2000 字符 + platform），无单元时回退 platform+iteration。迭代名召回精度差一个量级的问题消除。
+- **需求注入配额（防 token 顶爆）**：新增 `buildBudgetedReqSection`（ai-context-generator，默认 40K 字符预算），超限按文档均分配额 + 段落边界截断，并生成「需求阅读清单」让 AI 按需 Read 原文；`generateAIContext` 的 prompt 文件与 `analyzeSingleFeature` 报告的需求原文段均启用。
+- **关键词提取收敛唯一真源（中英映射贯通）**：rag-engine 曾复制一份独立词表（STOP_WORDS/SEMANTIC_MAP/expandKeywords/extractKeywords），其中文组只有中文→中文同义，缺 utils/synonyms 的中英映射，中文 query（「登录」）命中不了英文代码符号（`login`）——文档 RAG 检索质量受损。本轮删除重复实现（-257 行），统一复用 `code-scanner.extractKeywords`（SEMANTIC_MAP 双向 + utils/synonyms 中英映射 + 合并停用词表）。
+- **global analyze Layer 3 业务切片**：`buildLayer3ModuleContext` 从匹配文件的导出函数/组件提取核心函数切片（每模块 ≤3 文件 × 2 切片、函数体 ≤40 行、6K 字符预算），业务规则/交互逻辑真实进入 Layer 3 素材；prompt 增加切片使用方法与「业务规则提炼 + 溯源锚点」强制指令，根治「技术分析只写路由/概括」的空洞。
+- **资产边界文档化**：新增 `docs/knowledge-assets-architecture.md`（六类资产消费矩阵 + 源码四窄门 + findRelevantCode/unifiedSearch/KG/code-graph 边界备忘 + 检索质量三道防线）；unified-retrieval 顶部注释补边界说明，防止后续再长出新词表/新检索线。
+
+回归测试：新增 8 条（配额截断 4 + 中英映射 4），全量 739/739 通过。
+
+## v8.3.365 (2026-11-03) — 源码反推需求空洞根因修复：业务切片入 IR + depth 激活 + 放开按需深读
+
+用户实测反馈：`global from-source` 反推的需求文档空洞——只有页面路由与概括信息，缺功能/业务/交互描述。四层根因：
+
+- **IR 素材层（最致命）**：tree-sitter 结构化摘要（summarizeCode）只保留 imports/symbols/apis 三行，**方法体被设计性丢弃**；业务规则、异常分支、交互逻辑全在函数体里 → 反推只剩「路由 + 符号名」，AI 只能对着签名猜概括。
+- **口径层**：两跳 prompt 明令「CLI 已提取，勿重读源码」——AI 被禁止读原文，无米下锅。
+- **参数层**：`--depth` 是死参数（只声明无消费），用户调 deep 无效。
+- **覆盖层**：`files.slice(0, 8)` 硬编码，大模块（20+ 文件）直接截断。
+
+本轮修复（两跳架构不变，第一跳素材升级）：
+
+- **业务切片入 IR**：每模块新增「业务切片」章节——用 sliceCodeFile（语言无关导出切片器，TS/JS/JSX 全覆盖）从导出符号提取带 JSDoc/签名/函数体的切片，前端交互逻辑（事件处理器函数体）首次进入反推素材。
+- **depth 三档激活**：quick（每模块 ≤3 文件 × 2 切片 / 体 ≤30 行）、normal 默认（≤8 × 3 / ≤50）、deep（≤20 × 5 / ≤50）；每模块切片总字符预算 10000 防 IR 爆量。
+- **prompt 改口径**：删除「勿重读源码」，改为「切片为基础素材；不足以确认的规则/分支/交互，用 Read 工具按需深读锚点文件函数体原文」——保留勿编造与溯源锚点约束。
+- **连带修复 sliceCodeFile 截断 bug**：签名行的括号未计入深度，函数体的 `{` 不在计数内，导致第一个空行/首个闭合块就误判「函数结束」——切片只剩函数头几行。此 bug 同样影响 RAG 代码切片质量，一并修复（签名行括号先计深度再进 body 循环）。
+
+## v8.3.364 (2026-11-03) — 英译链三处加固：off 显式提示 + 文件传参通道 + 文档规则同步
+
+外部项目验证暴露归因：宿主 AI 因旧错误经验（Windows shim 转义破坏）主动传 `--translate-en off`，拼音目录名被合理化。CLI 行为本正确，但有两处小瑕疵与一处文档缺口，本轮补齐：
+
+- **off 显式提示**：`--translate-en off` 此前静默降级拼音（帮助文本也未说明后果），用户会误以为「英文没生成」；现在 off 模式显式 warn「已跳过英译，目录名将用拼音」并提示英译路径。
+- **`--translate-response-file <path>` 新选项**：英译 JSON 从文件读取，彻底绕开 shell/npm shim 引号转义（Windows 宿主接力传参被吞的根治方案）；`--translate-response` 与文件通道互斥，文件读取失败/为空时显式报错。
+- **帮助文本补全**：`--translate-en auto(默认,LLM英译优先拼音兜底) | host(宿主AI接力) | off(禁用英译,目录名用拼音)`。
+- **文档规则同步**：AGENTS.md 命名规则更新至 v8.3.363（纯英文 slug、三级降级、禁止主动 off）；spec-unitize SKILL.md 接力剧本补 Windows 传参解法与 off 禁令；六宿主 commands 薄包装 description 同步英译铁律。
+
+## v8.3.363 (2026-11-03) — 功能单元目录名去前缀去序号：纯英文 slug 直命名
+
+功能单元目录名从「{文档名}-{章节序号}-{slug}」（如 new-feature-notification-01-inbox-notification）改为纯「{slug}」（如 inbox-notification）——文档名前缀与序号段既非单元语义也不美观。
+
+- **模板摘除 docSlug/seq 两段**：docSlug 保留词/尾数字处理与章节序号拼接逻辑一并删除；多文档同名章节由既有 -2/-3 后缀机制去重（sanitizeUnitName 冲突递增不变）。
+- **下游兼容**：旧格式目录不迁移；taskify 的 stripUnitSeqPrefix 只剥「唯一命中的 -NN-」段，新格式无此段原样返回，`{slug}-2` 冲突后缀不受影响（新增回归断言）。
+- **INDEX 目录列刷新**：目录列从「无列才回填」升级为「有映射即重建」——重切换英文名/rename 后（拼音目录→英文目录）INDEX 目录列同步刷新，不再指旧目录。
+- **排序语义调整**：文件系统排序不再等于文档顺序，来源章节以 SOURCE.md 标题与 INDEX.md 记载为准。
+- **英文名保障链不变**：LLM 英译优先（缓存/providers/宿主 AI 接力）→ 拼音兜底，auto_host_ai 默认 true，宿主 AI 环境切分即英文名；历史拼音目录（v8.3.272 前产物）重切时按三选一策略换英文名。
+- **顺手对齐版本号**：package.json 自 v8.3.350 起漏 bump（CHANGELOG 已记到 362），本轮补至 8.3.363，与 sync-version 同步口径。
+
+## v8.3.362 (2026-11-03) — 端分析前移到切分层：unitize 切分后自动推断涉及端并 回写 _matrix
+
+多端功能单元的端声明此前拖到 analyze/taskify 才补充，且 _matrix 单端声明非空时 taskify 直接采信、短路后续反推，易漏拆端。本轮把「端与依赖分析」前移到 unitize 切分完成后（方案 A）：
+
+- **切分后端自动分析**：splitDocumentToUnits 返回本轮切出的单元清单，unitize 随即对每单元跑分析——声明为空走六层推断，确定性来源（explicit/directory/keyword）自动回写 _matrix.md；已声明单端则用关键词层+目录层做超集检测，检出额外端仅提示不自动覆盖（单端声明是「文档所属端」事实）；前四层无果输出 AI 判断 prompt。
+- **AI 确认回写入口**：新增 `unitize --confirm-platforms '<JSON>'`，宿主 AI 语义判断后回写 platforms/dependencies/apis（platforms 走 persistInferredPlatforms 带来源注释，dependencies/apis 块级替换保留其余字段）。
+- **顺手修复**：推断写回链路 inferAndPersistFeaturePlatforms（v8.3.279）此前零调用方（断链），本轮接入；超集检测避开 inferFeaturePlatforms 的 Layer 2 矩阵短路（直接调关键词/目录层）。
+
+**验证**：tsc 零错误 + 726 测试全绿（新增 4 个单测：空声明自动回写/超集检测不覆盖/pending prompt/确认回写全字段）+ build 通过；Iteration-002 实测 --confirm-platforms 回写（旧注释替换不叠加、三字段落位）后数据恢复。
+
+## v8.3.361 (2026-11-03) — 图谱页入口打通：reindex 弹页标记 + status 面板常驻链接
+
+图谱资产此前「生成容易、打开难」：graph.html 没有命令入口，用户需记得隐藏路径并手动开文件。本轮补两个轻量入口。
+
+- **reindex 输出 `[SPECCORE_KNOWLEDGE: <path>]` 标记**：源码知识图谱重建成功后，stdout 输出纯标记（不带日志前缀），宿主 AI 按协议 present_files 直接展示图谱页；纯终端用户也有「🖼️ 图谱页面: .speccore/code-graph/graph.html」提示行可照抄打开。`--check` 只检查不重建，不输出标记。
+- **status 面板常驻图谱入口**：面板尾部（下一步之后）新增「🧩 图谱: .speccore/code-graph/graph.html」行，graph.html 存在即显（reindex 生成后随产随显），初始化与未初始化分支均覆盖。
+
+**验证**：tsc 零错误 + 722 测试全绿 + build 通过；实测 `status` 面板图谱行正常落位；`reindex` stdout 输出标记且 `--check` 模式标记数为 0。
+
+## v8.3.360 (2026-11-01) — 图谱页面交互修复六件套：边开关生效、God 橙边星标、退出重绘
+
+v8.3.358 双层视图上线后实测暴露一批交互缺陷：总览层边/God 开关形同虚设（开关只对成员层生效）、God 星标用了被 vis-network 忽略的 borderColor 字段、detail 面板遮搜索框、钻入成员随机散布重叠、页面依赖外网 CDN、退出成员层后节点层不重绘。本轮六件套一次收掉，全部经浏览器 canvas 像素采样实测。
+
+**P0 交互修复**
+
+- **总览层边开关按类型过滤**：EXTRACTED 桥接边 ↔ showExtracted、MIXED 桥接边 ↔ showInferred（含推断成分），初始态与开关一致（MIXED 默认隐藏）。
+- **总览层 God 开关生效**：God 社区橙边星标，开关即时切换；成员层 God node 同步高亮。
+- **detail 面板定位修正**：移到搜索框下方，不再遮挡。
+
+**P1 体验补齐**
+
+- **MIXED 桥接边图例**补充（琥珀色，总览层专属）。
+- **钻入成员层局部布局**：固定社区节点 + 150 迭代 stabilize，成员不再随机散布重叠（实测 0 对重叠）；stabilize 完成回调统一管理，防连续钻入监听堆积。
+- **vis-network 本地落地**：UMD 下载到 .speccore/code-graph/（离线可开），缺失时回退 unpkg CDN。
+
+**踩坑实录（三处浏览器侧陷阱）**
+
+- vis-network 10.x 绘制边框读 `color.border`，顶层 `borderColor` 被忽略——God 星标改走 color 对象（canvas 采样 0 → 4.5 万橙像素）。
+- `document.write` 回退串内字面 `<script>`/`</script>` 会被 HTML 解析器误判提前闭合标签——拆写 `'<scr'+'ipt'` + 尾串 `'<\/script>'` 转义，注释措辞同样避开该序列。
+- 退出成员层 remove 节点会触发 vis-network 10.x 节点层渲染损坏（社区方块填充色丢失，`redraw()` 与属性翻转均无效）——退出改为 hidden 隐藏而非 remove，重新钻入时 update 恢复（实测 11523+ 彩色像素）。
+
+**验证**：tsc 零错误 + 722 测试全绿 + build 通过；reindex 重建 graph.html（197 社区 / 1742 God / 81 联动）；浏览器实测边开关、God 橙边（像素 0 ↔ 4.5 万）、钻入 0 重叠、详情无遮挡、退出重绘（含重复进入/快速进出/拖拽缩放九步全过）、本地 vis 零 CDN 引用、控制台零 error。
+
+## v8.3.359 (2026-10-30) — analyze.ts 渐进拆分六批次：7833 → 6310 行，模式分发注册表化
+
+analyze.ts 长期膨胀至 7833 行（全仓库最大文件），入口 if 瀑布与单元域、总览、模式处理混杂一处。本轮按「逻辑不搬家、行为不变、每步独立验证」铁律渐进拆分：物理搬迁不动逻辑，每批次 tsc 零错误 + 722 测试全绿后才进下一批。
+
+**六批次拆分（analyze/ 子目录新建 12 文件）**
+
+- **批次 A 共享件**：emitAiPrompt / AnalyzeOptions / parseDocMarkers 下沉 analyze/shared.ts，AI 交棒出口与选项类型单一事实源。
+- **批次 B 六小模式**：from-code / audit-fix / context-guard / module / feature / doc 独立成 analyze/{mode}.ts（路径层级 ../../core/）。
+- **批次 C 总览**：overview 模式 + Prompt 构建 + [DOC:xxx] 落盘迁 analyze/overview.ts。
+- **批次 D 单元域全家桶**：IterationUnit/UnitAnalysis 类型、UNITS_CACHE_DIR、清单 CRUD、单元分析 Prompt、调度循环、质量报告、unitModes 全迁 analyze/units.ts（949 行）；analyze.ts 顶部改为 import + export 子句 re-export（保持对外兼容同时绑定本地作用域）。
+- **批次 E 内联块函数化**：--incremental/--reanalyze 与 --add-platform 两个内联块提为 analyze/incremental.ts 与 analyze/add-platform.ts。
+- **批次 F 入口注册表化（Strategy 模式）**：11 个模式早退块收敛为 analyze/modes.ts 注册表——detect 谓词与处理器解耦，注册顺序与旧 if 瀑布完全一致；唯一允许 fallthrough 的 --context-guard 语义原样保留。
+
+**外部锚点不动**：analyzeCommand 与 buildMultiDocPrompt 仍从 analyze.ts 导出（cli.ts / global.ts / prompt-builder.ts 依赖不变）；analyze/*.ts 子模块不反向 import analyze.ts，无循环依赖。
+
+- **验证**：tsc 零错误 + build + 全量 722 测试全绿；CLI 冒烟 context-guard / unit-modes / overview / incremental / module / feature / doc 七模式实测走通，from-code / full / add-platform 分发谓词静态核对一致；HEAD 原版对照实测确认两处既有行为未变（见下）。
+- **既有问题备忘（非本轮引入，行为与 HEAD 一致）**：① incremental-analyzer 快照路径 `join(iterDir, '..', SNAPSHOT_FILE)` 对绝对路径直接拼接，--incremental 首跑 ENOENT；② audit-fix 的 `!(await import('fs-extra')).pathExists()` 中 await 只作用于 import，pathExists 保护形同虚设，无审计报告时 ENOENT 崩溃。两处均待后续修复。
+
+## v8.3.358 (2026-10-30) — 图谱可视化双层视图 + 社区检测重写：12MB 毛线球成为历史
+
+图谱「建、查、联、检」四环打通后，唯独「看」这一环停留在修复前：graph.html 单层全量渲染，真实项目节点过万即毛线球；社区检测用连通分量，大库 import 全连通导致单社区数千节点，且分量之间定义上无边、桥接边恒为 0；74% 孤立节点无社区归属。本轮重写可视化与社区检测，顺带清出 7000+ 重复边与 26000 条悬空边。
+
+**双层视图（P0 社区聚合，12MB → 3.6MB）**
+
+- **社区总览层默认渲染**：页面打开只画社区节点（196 个）+ 桥接聚合边（跨社区边按社区对合并），秒开不毛线球；双击社区钻入成员层，面包屑返回，两级数据在 CLI 侧预计算分层写好，浏览器只切换。
+- **需求联动侧栏 + 详情面板**：51 条需求↔代码联动数据侧栏可点（点击高亮关联节点并自动钻入所在社区）；节点/社区详情面板展示类型、位置、度、God 标记与关联需求。
+- **边/God 开关 + 连续色相调色板**：EXTRACTED/INFERRED 边与 God 高亮可开关；196 社区各归其色，修复旧调色板 30 社区 %10 同色。
+- **物理引擎收敛**：stabilization 限 250 次迭代，完成后关闭物理引擎——修复节点永远漂移、上百对重叠的旧疾。
+
+**社区检测重写（连通分量 → 目录层级自适应）**
+
+- **目录即模块边界**：二段目录前缀起步（src/core），超过 500 成员的社区按更深目录段递归细分，目录到底仍超阈值退化为按文件分组——任何社区展开后成员可控（实测最大 834）；跨目录引用边自然成为桥接边（0 → 393）。
+- **孤立节点归队**：12811 个无边节点按目录归入社区，「未分类」巨池消失；社区 id 按 label 字典序分配，跨重建稳定。
+
+**数据治理（全量/增量口径统一）**
+
+- **悬空边过滤**：指向外部符号（commander/Math.min）的边无节点可消费，全量构建统一丢弃（37287 → 4086 有效边）；degree/god/密度等统计口径与增量路径对齐。
+- **边去重**：parser 对同一引用重复提取，全量版曾带 7178 条重复边；同 key（source|target|type）保留 EXTRACTED 优先。
+- **增量丢边修复**：旧实现按变化文件整体丢弃相关边，「未变文件 ↔ 变化文件」的边永久丢失；改为只丢删除文件边，悬空边由构建器统一兑底。
+- **性能**：增量合并的嵌套 nodes.find（O(E×N)，3.7 万边 × 1.7 万节点）改 Map 索引。
+
+- **验证**：tsc 零错误 + build + 全量 722 测试全绿（+3 社区检测单测）；reindex 冒烟 17196 节点 / 4086 边 / 196 社区，execute 保鲜同口径（4086 边，两径一致）；浏览器实测双层钻入、需求联动、节点静止不漂移。
+
+## v8.3.357 (2026-10-30) — 图谱检索四缺口补齐：中文映射 + 正向链路 + 公共逻辑 + execute 保鲜
+
+上轮四环修复打通了「建、查、联、检」的链路，但执行阶段图谱检索仍有四个缺口：中文任务名与英文代码名字面断裂、需求→代码正向通道未消费、公共依赖不会推荐、批次执行中图谱不保鲜。本轮四缺齐补。
+
+**中文全拼映射（中文任务名不再缺席）**
+
+- **extractKeywords 三轨提取**：camelCase/snake_case 拆分之外，中文段加全拼连写（「站内信通知」→ zhanneixintongzhi，命中拼音 slug）、逐字拼音（zhan/nei/xin/tong/zhi，命中零散拼音命名）、中文原词（命中中文命名节点）三轨并行；口径与功能单元命名规则同源（中文标题转全拼）。
+
+**正向链路（需求语言直接驱动检索）**
+
+- **REQ.md 作检索输入**：插件读任务目录 00-specs/REQ.md 需求要点（标题+前 40 行），提取关键词后经 REQ_CODE_LINK 正向命中关联代码节点（+4 权重）——任务名匹配落空时需求文本兜底，图谱上下文不再整体缺席；反向联动（节点→需求）保留。
+
+**公共依赖候选（公共逻辑会推荐了）**
+
+- **跨社区桥接节点推送**：桥接度（跨社区边数）排序取 top 5，优先与任务相关社区相连的桥接节点——被多子系统共用的公共设施进入候选；注入「公共依赖候选」区块提示复用而非重写。
+- **god 加权任务相关性化**：全局中心性不再无条件加分（全局的「大」≠任务的「相关」），仅命中关键词的 god 节点保留 +2。
+
+**execute 保鲜（批次执行拿新图）**
+
+- **批次前增量同步**：execute 获取迭代锁后、任务清单输出前，按同源文件列表增量同步源码图谱——任务 A 写的新代码，任务 B 的图谱上下文能看到；同步失败不阻断执行。
+- **discoverCodeDirs 四方共享**：源码目录发现（PROJECT.yaml code_path → 回退 src/）抽为共享函数，reindex/doctor/execute 三方消重，analyze 同源复用。
+
+- **验证**：tsc + build + 全量 719 测试全绿（+4 中文映射单测）；execute --list-pending 冒烟实测 1.8 秒保鲜 17164 节点 / 37226 边（增量同步真实生效）。
+
+## v8.3.356 (2026-10-30) — 知识图谱断链四环修复（建·查·联·检）+ 图谱性能炸弹铲除
+
+全局层知识图谱此前「建而不查、联而不通、检而不真」——构建入口零调用、查询引擎无 CLI 接入、需求联动未挂 from-source、doctor 只看文件存在性。本轮四环闭环，并顺手铲除一个节点过万后构建管线复杂度爆炸的隐藏炸弹。
+
+**建 — reindex 全量重建 + analyze 增量维护**
+
+- **reindex Phase 3 源码知识图谱**：全量索引重建时自动构建源码知识图谱——源码目录按 PROJECT.yaml 各端 code_path 发现（存在才纳入）回退 src/，多目录收集排除噪声（node_modules/dist/.git 等）；产物含 30 社区 / 1713 god nodes / 17138 节点。
+- **analyze Layer 1 前增量维护**：迭代层分析启动时以同源文件列表增量同步图谱，保证分析阶段读到的图谱不落后于源码。
+- **collectSourceFiles 三方共享**：analyze/doctor/reindex 共用同一文件收集口径，避免三处扫描规则漂移。
+
+**查 — 查询引擎从零接入 Prompt 插件**
+
+- **execute 影响面**：explainNode 展示最高分任务相关节点的直接邻接，实现 AI 知道改动会波及哪些既有符号。
+- **analyze 核心依赖链**：findPath 展示前两个 God 节点间最短路径，分析 AI 一眼看到系统核心骨架。
+
+**联 — requirement-linker 接入 from-source 链路**
+
+- **反推即联动**：analyzeFromCode 反推需求完成后自动执行需求↔代码联动（REQ_CODE_LINK.json）。
+- **全局层需求纳入**：extractRequirements 扩至 .speccore/GLOBAL/requirements/（递归 walk 支持子目录），103 条全局需求全部参与联动。
+
+**检 — doctor 图谱时效性真检查**
+
+- **多端 code_path 发现**：不再只查 src 单目录，按 PROJECT.yaml 各端 code_path 收集源码文件。
+- **文件级 mtime 比对**：任一源码文件晚于图谱生成时间即判定过期，消息直接给出图谱生成时间与源码最新变更时间。
+
+**性能炸弹铲除**
+
+- **idToNode Map 索引**：detectCommunities/buildModuleMap/报告生成三处嵌套 nodes.find 改 Map 索引，bridgeEdges 提前 break（取满 15 条即停）——节点数 5287→17135 后原实现百亿次扫描卡死 20 分钟，修复后 reindex 全链路 7.3 秒。
+
+- **验证**：tsc + build + 全量 715 测试全绿；reindex 冒烟实测 7.3 秒——源码图谱 17138 节点 / 37180 边 / 30 社区 / 1713 god nodes / 253 文件，需求↔代码联动 81 节点（103 需求，top 链接置信 0.8）。
+
+## v8.3.355 (2026-10-29) — 装配链动作语义提取 + AI 剧本原型参考
+
+两件 P0 落地：**动作语义提取**把自动装配链从「元素可见性」升级到「真实点击」；**AI 剧本原型参考**把原型/设计稿素材引入剧本，给执行 AI 视觉参照物。
+
+**动作语义提取（自动装配链升级）**
+
+- **点击类步骤生成真实 click 动作**：流程段步骤命中元素清单且含点击类动词（点击/单击/点选/按下/勾选/选中/触发/提交/保存/删除/取消/关闭/确认/返回/刷新/搜索/查询）时，生成 `navigate + wait + click(selector)` 场景；点击后断言页面存活（body），不断言原元素可见（关闭/删除类点击后元素消失属误报）。
+- **元素匹配去引号**：步骤文本先剥离书名号/引号（「点击「新增」按钮」→「点击新增按钮」），显著提升与元素清单（如「新增按钮」）的字面命中率。
+- **宁可少生成不生成错的**：输入/选择类步骤（fill/select 需要值参数，值无法可靠推断）不自动生成动作，维持元素可见断言；未命中元素清单的步骤维持骨架（页面容器 + body 兜底）；单字「点」不进动词词典（「重点」「地点」不误判）。
+
+**AI 剧本原型参考**
+
+- **素材收集（collectPrototypeAssets）**：扫描 010-requirements 下 prototypes/、assets/designs/、assets/prototypes/、assets/screenshots/ 目录（最多 3 层），收集图片与 HTML 绝对路径。
+- **剧本「## 原型与设计稿参考」区块**：有素材时剧本头列出清单，执行 AI 打开对照理解界面——复杂流程有了视觉参照物；plan.json 新增 `prototypeAssets` 字段。
+
+- **验证**：tsc + build + 全量 715 测试全绿（+9 单测：动作提取 6 项 + 素材收集 3 项）；真实浏览器端到端——UI_SPEC 元素清单 + 「点击「新增」按钮」流程生成 VERIFY_SPEC 后自动装配 click 场景 4/4 步通过（点击真实按钮 + 页面存活）。
+
+## v8.3.354 (2026-10-29) — 登录验证码约定落地：AI 线取码指引 + 冒烟线自动填码
+
+双线落地登录二次验证（验证码）约定：**AI 线**把账号 `verification.note` 取码指引写进剧本（真实验证码主战场）；**冒烟线**新增 `auth.verification` 块，账号密码提交后未达成功判定时自动填码再提交（固定码场景实用）。四条约定原则：约定层级就近、测试环境优先绕过、动态码只约定通道不落码、不可自动化显式跳过计入 skipped。
+
+**AI 验证线**
+
+- **账号 verification 字段**：环境内嵌账号（environments/{env}.yaml tests.accounts）与 accounts.yaml 兑底账号均支持 `verification: { type, note }`——只写「取码通道指引」不写码本身。
+- **剧本双处提示**：剧本头新增「## 登录验证码说明」区块集中列出全部验证码账号（ref/type/note）；公共层登录态场景步骤同步带就近提示（「该账号登录需要验证码（sms）：...」）；机器可读 plan.json 新增 `accountVerifications` 字段。
+- **账号模板示例**：accounts-example.yaml 增加 verification 配置注释与示例。
+
+**冒烟验证线**
+
+- **auth.verification 块**：`code_selector`（验证码输入框）/`code_submit_selector`（提交按钮，缺省复用 submit_selector）/`code_env`（码来源环境变量，优先于 fixed_code）/`fixed_code`（固定验证码，可绕过场景）/`code_timeout`（默认 10000，兼作首次成功判定短超时）/`type`（报告展示）。
+- **performLogin 二次验证**：账号密码提交后首次成功判定给短机会（有验证码块时用 code_timeout），未达成则等验证码输入框出现 → 填码 → 提交 → 再次判定；码源缺失时告警降级不阻断（登录本身可用时不被验证码配置缺失拖垮）。
+- **装配透明与假通过防护**：冒烟前账号装配段展示验证码装配状态；验证码未就绪（code_env 未设置 / fixed_code 缺失）计入 skipped 并在报告清单显式声明，不静默假通过。
+
+- **文档**：testing-guide §4.5 新增「登录二次验证」小节（字段表 + 三条约定原则）、config-reference auth 字段表补 verification 条目。
+- **验证**：tsc + build + 全量 706 测试全绿（+3 验证码约定单测）；真实浏览器冒烟实证——固定码 888888 走通「账号密码 → 验证码框 → 填码提交 → 成功页」全链，错误码正确降级未登录态，code_env 未设置时装配告警 + 跳过清单显式声明。
+
+## v8.3.353 (2026-10-29) — 验证线六项收尾：精细格式断链修复 + 剧本配对优化 + 假通过清零
+
+验证线收尾六项：`--config` 精细格式断链修复、routes 三件套误判修复、AI 剧本配对优化、验收表格素材提取，外加三处「假通过」清零（场景异常、失败零退出、timeout 字符串）。
+
+**精细格式断链修复**
+
+- **--config 精细场景完整透传**：TestCase 新增 `verify_scenarios` 字段——VERIFY_SPEC 格式经 --config 加载时，22 种动作 + 9 种断言完整透传冒烟引擎（不再只提取 navigate 降级为可达性）；TestConfig 格式支持 `tests[].verify_scenarios` 数组与单场景直挂 `actions`/`assertions` 两种写法；navigate 相对路径自动拼接 baseUrl，完整 URL 不再重复拼接（修复双重前缀隐患）。
+- **routes 三件套误判修复**：可达性断言改为 `visible + body`（无 selector 的 visible 断言在引擎必抛错，历史三件套页面可达却被误判失败）；引擎侧对无 selector 断言、无 value navigate 跳过（可达性已由导航证明），兼容已生成的历史 spec。
+- **路由/页面扫描 navigate 补 value**：generateSpecFromRoutes/Pages 生成的 navigate 动作此前缺 value，执行引擎必抛错导致扫描 spec 全场景失败——补上 `baseUrl + path`。
+
+**AI 剧本优化**
+
+- **TEST 段配对改为标题关键词就近匹配**：替代同下标取模（流程段与用例段数量错位时取模会轮转配错预期）；同下标 tie-break + 无重合时退回同下标配对，单流程单用例的常见形态行为不变。
+- **TEST 验收表格「操作步骤」列提取**：`extractTableOperationSteps` 防御式提取（仅精确匹配列头、占位单元格跳过、多表容错），双线共用——AI 线把表格步骤拆为精细步骤，冒烟线（generateFlowScenariosFromSpec）把表格步骤生成流程场景骨架。
+
+**假通过清零**
+
+- **场景级异常显式记为失败步骤**：runScenario 外层异常此前不记步骤（空 steps 的 every 恒为 true），场景失败被报成「0/0 步通过 + 100% 通过率」——修复后异常记为失败步骤。
+- **验证失败非零退出**：UI 验证报告与代码验证报告两处 summary.failed > 0 时设置 exitCode=1（此前 CI 无法感知失败）；冒烟/视觉/API 失败现在都能中断流水线。
+- **timeout 字符串归一化**：verify 命令 commander 默认值 '120000' 是字符串，未转数字导致 Playwright 报 expected float——verifyCommand 入口归一化。
+
+- **验证**：tsc + build + 全量 703 测试全绿；端到端冒烟实证——精细场景（navigate+click+text 断言）经 --config 真实执行 3/3 步通过，失败断言 1/2 步 + exit=1，通过场景 exit=0。
+
+## v8.3.352 (2026-10-29) — 部署回滚与健康检查 + 验证假通过修复 + 迭代链路四项收尾
+
+两线并进：**部署线**补上「上线后怎么办」的真回滚能力与部署后健康检查；**验证线**拆掉「跳过当通过」的假通过隐患；另完成澄清/审计/备份/索引四项链路收尾。
+
+**部署回滚与健康检查**
+
+- **部署真回滚（deploy --rollback / --list-backups）**：四种类型支持——docker（远端 .bak-* 镜像 tag 重新 tag 回原 tag + 重启容器）/ ssh（远端 .bak-*.tar.gz 解压覆盖 + 重启）/ k8s（kubectl rollout undo）/ helm（helm rollback）；`--list-backups` 只读列出备份清单（不执行变更），`--rollback --backup-name <名>` 指定回滚目标（docker 传 tag 名、k8s/helm 传 revision 号、ssh 传文件名），缺省取最近一份；`--dry-run` 预览回滚命令；不支持类型（static/script/vercel 等）给出明确提示。
+- **部署后健康检查（deploy.health_check 配置）**：`url`（HTTP 探测，2xx/3xx 视为健康）或 `command`（远端/本地命令，退出码 0 视为健康，ssh/docker/sftp/pm2 类型有 host 时走远端），`retries`（默认 5）/`interval_ms`（默认 3000）重试参数；部署成功后自动执行，失败**告警不阻断**（已上线不可逆），汇总报告醒目标出健康状态；preview 面板同步展示配置。
+- **部署问题账本（.speccore/local/deploy-ledger.md）**：post-deploy 测试失败（pipeline）与部署后健康检查失败（deploy）写入跨迭代账本——表格化留痕（时间/类型/端/环境/测试类型/严重度/摘要），幂等追加不覆盖历史，下次部署前可作风险清单；失败不再只在终端日志一闪而过。
+- **空 platforms 配置优雅兜底**：PROJECT.yaml 未配置任何平台时，loadProjectConfigWithEnv 不再抛 `platforms is not iterable` TypeError，改为空数组让调用方的既有空配置检查路径走到（deploy/pipeline/rollback 统一输出可读提示）。
+
+**验证假通过修复**
+
+- **跳过项显式计入汇总**：UIVerifyReport.summary 新增 skipped 字段，三类降级不再无声蒸发——契约缺失（API_CONTRACT.yaml 不存在/解析失败）、账号未就绪（登录场景降级跳过）、URL 无法确定——逐一计入 skipped 并在汇总报告 + 独立「跳过清单」逐条列出（含原因）；logUIReport 同步展示。
+- **契约缺失开关（verify --require-contract）**：API 测试缺契约/解析失败时升级为验证失败（非零退出），杜绝「契约缺失 = 验证通过」假象；默认仍是跳过仅告警（语义向后兼容），API 测试真实失败同样计入失败。
+
+**迭代链路四项收尾**
+
+- **澄清状态机幂等修复**：CLARIFY.md 存在且非骨架（`<!-- SPEC-SKELETON -->`）即视为已澄清——analyze 预建的骨架不再被误判为「已澄清」，重复澄清不再覆盖真实产物。
+- **审计孤儿目录过滤**：features 重切（单元改名/删除）后，020-specs 下旧单元目录不再进入质量审计（孤儿目录不作为功能模块审计）；无 features/ 目录的老项目过滤自动关闭。
+- **切分备份生命周期（unitize --prune-backups [days]）**：overwrite 的时间戳备份目录生命周期管理——不带参数仅列出，带天数删除 N 天前的过期备份。
+- **INDEX 目录列回填（doc2spec）**：标题 → 实际目录名映射（含 rename -2/-3 后缀）；skip 单元也记录既有目录名，旧 INDEX 行的「目录」列从本次切分映射回填。
+
+- **测试**：新增 2 个测试文件（quality-audit-orphan 孤儿过滤两场景 / requirement-clarifier-has-valid 真实产物判定），部署/验证改动经 tsc + build + 冒烟验证（--list-backups 空配置优雅提示、--require-contract 契约缺失非零退出、账本落盘幂等追加）；全量 703 测试全绿。
+
+## v8.3.350 (2026-10-29) — AI 浏览器验证：账号配置 + 剧本生成 + 宿主执行协议
+
+新增「AI 浏览器验证」模式，替代 selector 式冒烟的人工配置负担：CLI 从 020-specs 提取功能单元的交互规格与测试用例，生成自然语言验证剧本（含环境入口地址与账号引用）；宿主 AI（Browser 子代理）按剧本视觉驱动执行交互与业务断言，结果回写 JSON；CLI 再生成 HTML 报告。范围支持全部功能 / 本次部署功能 / 指定模块。
+
+核心分工原则：**CLI 只切片不解析语义**——按标题从 UI_SPEC.md/TEST.md 抓取原文段落组装剧本，语义理解与页面操作交给执行 AI，避免 CLI 侧脆弱的 markdown 语义解析。
+
+- **账号配置（独立文件）**：新增模板 templates/accounts-example.yaml；init 时落盘 `.speccore/tests/accounts.yaml`（已存在不覆盖，example 始终刷新）。按环境分组、每环境多角色（username/password/note/可选限定端），注释提醒明文密码自行保管；剧本只引用账号名（如 staging.admin），不复制密码，执行 AI 直接读 accounts.yaml 取明文。**敏感密码支持环境变量引用**：username/password 可写 `${VAR}` 形式（不落任何明文），剧本生成时扫描引用清单写入 plan.json 的 accountEnvVars（ref/field/varName/是否已设置）与剧本 md 提示段，未设置的环境变量逐条警告（不阻断），执行 AI 按提示从环境变量取明文。
+- **部署清单落盘（支撑 --scope deployed）**：deploy 成功后写 `.speccore/local/deploy-manifest.json`（env/time/platforms{name,type,git{branch,commit}}），单端部署追加进 platforms 数组（同名覆盖）；pipeline 复用同享。
+- **剧本生成（新模块 src/core/ai-verify/）**：scope-resolver 三范围解析（all 全部功能单元 / deployed 读部署清单端名筛选 / modules:单元名精确匹配，均可叠加 --platform 端过滤；无清单时报错提示先部署）；plan-generator 逐单元逐端生成场景——入口地址取 environments/{env}.yaml 的 tests.base_urls（键=端名），账号引用按「端匹配 → 无端限定 → 第一个」三级选择，UI_SPEC.md 抓「页面清单/交互流程」段、TEST.md 抓「测试用例」段（正则按 ^#{2,3} 标题切段，原文保留），`<!-- SPEC-SKELETON -->` 空模板单元自动跳过，缺地址/缺账号端进入跳过项标注；产出 `Iteration-NNN/000-overview/ai-verify/` 下 plan.json（机器可读）+ AI_VERIFY_PLAN.md（按端分组可读剧本）。
+- **verify 命令接入**：新增 --ai / --scope <all|deployed|modules:xxx> / --platform / --env / --ai-report / --ai-judge 选项；--ai 走剧本生成分支（非 TTY 默认 staging 环境，TTY 交互选择；无账号文件时从模板生成示例并提醒填写），输出 `[SPECCORE_AI_VERIFY: <plan.json>]` + `[SPECCORE_AI_VERIFY_ACCOUNTS: <accounts.yaml>]` 接管标记；--ai-report 读 results.json + 同目录 plan.json 生成 HTML 报告并打印通过/失败/跳过/未执行摘要，失败时退出码 1。现有 --ui selector 冒烟完全不动，两模式并存。
+- **执行协议（spec-verify 技能分支）**：SKILL.md 增加 AI 模式段——看到 [SPECCORE_AI_VERIFY] 标记后：读 plan.json + accounts.yaml（取账号明文或按 accountEnvVars 从环境变量取，勿写入落盘文件）→ 按端分批逐场景执行（打开入口 → 登录 → 按操作步骤原文交互 → 每步截图）→ 判定 pass/fail/skip + 理由 + 截图路径（验证码/支付/生物识别标 skip）→ 结果写 `<剧本目录>/results.json` → `speccore verify --ai-report` 生成 HTML 报告展示路径。**三级执行通道回退**（适配国内外工具差异）：通道 1 Browser 子代理（Qoder 原生，executor=browser-agent）→ 通道 2 Playwright MCP（宿主无 Browser 子代理时，executor=playwright-mcp）→ 通道 3 截图 + CLI 视觉判定兜底（宿主无多模态时写 judged:false，`verify --ai-judge` 用视觉模型判定回写，executor=visual-judge）。allowed-tools 补 Write/Edit（写 results.json）。
+- **结果解析与报告（result-parser）**：校验 results.json 结构（非法返回 null），场景名与 plan.json 对齐（缺漏场景标未执行），HTML 报告复用 ui-verify 报告视觉风格——总览（通过/失败/跳过/未执行）+ 按端分组场景卡片（截图 + AI 判断理由 + 执行通道标签 executor）+ 失败红色标注 + 生成期跳过项，落盘 report.html。
+- **视觉判定兜底（新模块 visual-judge + --ai-judge）**：宿主 AI 无多模态能力时只操作页面截图、结果写 judged:false + screenshots；`speccore verify --ai-judge <results.json>` 筛选 judged≠true 且含截图的场景，用视觉模型（qwen-vl 默认，读取 .speccore.yml quality_gates.verify_ui.visual_model，--visual-model 可覆盖）对「截图 + 预期结果原文」做业务断言，回写 results.json（executor 改写为 visual-judge）并重新生成报告。visual-model-client 的 callVisualModel 新增 customPrompt 支持（业务断言替代内置 UI 质量扫描 prompt，四提供商通用），判定失败不阻塞流程（截图缺失/模型调用失败均标失败并记录理由）。
+- **命令模板入口（createToolIntegrations）**：TOOL_COMMANDS 的 spec-verify 模板 补 AI 模式描述与 `--ai --scope` 命令入口，claude/codebuddy/cursor/trae/trae-cn/windsurf 六种工具的 slash 命令经 `speccore update` 同步获得 AI 验证入口。
+- **「合并到 {环境}」意图词条（pr 目标分支指向环境分支）**：ask 新增确定性短路——「合并/提交到 测试/开发/生产/预发布/本地 等环境」句一律路由 `pr --base <环境名>`，不被 execute 的宽触发词「开发」或 KB 词条顺序抢占（「合并需求」无「到」字不短路，仍走 analyze）；`pr --base` 现在支持环境名引用（新增 resolveBaseBranch：环境名→resolveEnvBranchRef 解析 environments/{env}.yaml 的 branch，直接分支名/含路径值原样透传），与 pr_target 环境名引用同链路——「识别在 ask、解析在 pr」。域检测对齐 AMBIGUOUS_INTENTS 机制：「合并到测试环境」也是日常讨论高频句，无 speccore 上下文词时先确认（输出「是 speccore 操作还是普通对话」待确认块），带上下文词（如「用 speccore 合并到测试环境」）直通。
+- **意图缓存模糊层防串参**：参数化句型（如「合并到{环境}」）的槽位词差异（测试 vs 开发）不再靠编辑距离模糊命中——模糊层新增语义 token 集一致性校验，只服务同义改写（语气词/助词增减），杜绝 test 缓存结果串到 dev 上。
+- **HTML 页面字体本地化（离线可用）**：全部 16 处 `fonts.googleapis` 的 `@import` 替换为本地 `@font-face`（templates/html/fonts/ 内置 OFL 开源 variable 字体 Orbitron.woff2 + JetBrainsMono.woff2，单文件覆盖全字重），消除外部网络请求与 @import 渲染阻塞（国内网络/离线环境字体不再丢失）；page-bundle 新增 ensureHtmlAssets 幂等复制，help/dashboard/about/status-panel/retro/welcome/ask/plan/execute 等 9 个 HTML 落盘命令写盘后自动把 fonts/ 补到落盘目录，模板复制链路同步携带。mermaid/chart.js 两个 CDN JS 库暂未本地化（体积大，失败时页面主体仍可读）。
+- **提示词库双通道打通（自定义提示词落盘）**：页面侧新建/编辑只存 localStorage 的断链修复——页面新增「💾 导出 / 📥 导入」按钮与持久化提示条，浏览器内编辑的提示词可导出 JSON；CLI 新增 `prompts --import <file>`（落盘 .speccore/prompts/user/，数组 / { prompts } 包装均支持，无效条目过滤、按 id 合并去重）与 `--export <file>`（导出当前自定义提示词），形成「页面编辑 → 导出 → 落盘 → 下次生成页面可读」闭环；generatePromptsPage/loadPresets/loadUserPrompts/readCurrentContext 全部参数化 projectRoot，修复 --project-dir 与 init/welcome 联动场景下读错目录的硬伤，prompts 命令同步新增 --project-dir 选项。新建条目 id 改为 `prompt-` + UUID（crypto.randomUUID，file:// 下浏览器不支持时降级时间戳+随机段），修掉 Date.now() 同毫秒撞 id 静默覆盖；编辑保存不再用 undefined 覆盖 createdAt。
+- **配置引导页补 AI 验证引导**：setup-guide 第 6 步新增「测试验证（v8.3.350+）」块——AI 浏览器验证（/spec-verify --ai，无需选择器）、视觉判定兜底（--ai-judge，三级通道回退说明）、账号密码 ${VAR} 环境变量引用三个方法卡 + 传统冒烟兼容提示，给刚上线的 AI 验证铺好上手路径。
+- **测试验证双线开关（settings.tests）**：`.speccore.yml` 新增 settings.tests 三段开关——smoke.enabled（配置式冒烟线：关闭时质量门禁自动触发的 UI 验证跳过，显式 --ui/--config/--stage 仍执行仅提示）、ai_verify.enabled（AI 宿主验证线：关闭时自动触发跳过，显式 --ai 仍执行仅提示）、layered.common/modules（剧本分层开关，关闭的层不生成场景但保留层头审计）。语义为「CLI 显式参数 > 配置开关」，缺省全开；DEFAULT_CONFIG/类型/校验/序列化器/示例模板四处同步（含 config-serializer-consistency 机器锁与 config-example-alignment 对齐测试兜底，防手写序列化器漏写假补全）。
+- **AI 剧本分层（公共能力层 + 模块层）**：plan.json 新增 groups 分层视图（scenarios 平铺保留兼容）——公共能力层（common）由 CLI 模板生成每端三类场景（入口可达性 / 登录态验证 / 全局导航，id 前缀 common__，登录态无账号时进跳过项），先于模块层执行（登录就绪是模块场景前置）；模块层（modules）为各功能单元 UI_SPEC/TEST 切片场景；AI_VERIFY_PLAN.md 与 HTML 报告均按层组织（层头含 enabled 状态与层说明，关闭层标 ⏭️，旧剧本无 groups 回退按端分组）；verify --ai 输出按层统计 + 四步执行协议（按层推进→层内按端分批→写 results.json→--ai-report），SKILL.md 执行协议同步按层推进；无功能单元时公共层开启仍可仅生成公共层场景。
+- **测试**：新增 5 个测试文件（scope-resolver 三范围+端过滤+无清单报错 / plan-generator 地址注入+账号引用+SKELETON 跳过+缺地址标注+环境变量引用扫描+分层视图+公共层三类场景+层开关 / result-parser 结构校验+场景对齐+报告落盘+分层渲染+旧剧本回退 / visual-judge 待判定筛选+截图缺失降级+业务断言回写+results.json 落盘 / prompts 导入落盘+包装格式+无效条目过滤+合并去重+导出+projectRoot 参数化+无 id 生成 UUID 唯一 id），52 用例；build 通过，全量 692 测试全绿。
+- **测试验证体系五项优化（账号收敛 / 契约拆段 / 词条分层 / 开关矩阵 / 剧本头警告）**：
+  - **账号收敛（tests.accounts 权威源）**：AI 验证线账号权威源从 accounts.yaml 移到环境文件 `environments/{env}.yaml` 的 tests.accounts（就近声明，账号名即引用名，如 admin）；accounts.yaml 降为全局兑底源（仅环境文件无账号时兑底 {env} 分组），模板头部标注新定位；剧本登录场景按来源标注凭据读取位置，${VAR} 引用扫描双源兼容；环境文件已有账号时不再生成 accounts.yaml 占位模板（避免噪音）。环境解析层 tests 段白名单同步补 accounts 字段（漏写被冒烟当场抓出）；剧本新增 accountSources 字段（机器可读的账号来源说明），`SPECCORE_AI_VERIFY_ACCOUNTS` 标记与 SKILL 执行协议随之改为按实际来源输出（内嵌账号时指向环境文件而非 accounts.yaml，避免执行 AI 取凭据落空）。
+  - **环境契约拆段（部署契约 vs 验证契约）**：staging.yaml.example 的 tests 段改为「验证契约」独立块——一个环境文件承载两份契约，消费方不同：部署契约（branch/platforms.build_cmd/platforms.deploy/stages/pipeline）被 build/deploy/pipeline 消费，验证契约（tests.base_urls/visual_model/auth/accounts）被 verify 冒烟线与 AI 验证线消费；注释逐字段标注消费方，杜絶部署参数与验证参数混写。
+  - **歧义词条显式分层（priority tie-break）**：COMMAND_KB 词条新增 priority 字段——触发词总长度同分时按 priority 裁决（值大者赢，缺省 0），priority 相同才回退声明顺序；verify 声明 priority:1（「验证」同挂 verify/validate 时测试动作义优先），知识库头部注释声明「歧义词条必须显式设 priority，禁止依赖声明顺序先到先得」，把隐性先到先得改成显式分层（治标：补丁堆叠根因仍在多义词条共享触发词）。
+  - **开关矩阵（配置引导页补课）**：setup-guide 测试验证块新增「双线开关与剧本分层（settings.tests）」说明——smoke.enabled / ai_verify.enabled / layered.common+modules 三段开关与「CLI 显式参数 > 配置开关 > 质量门禁自动触发」三路径优先级；账号卡片同步更新为双源口径（tests.accounts 权威源 + accounts.yaml 兑底）。
+  - **剧本头降级警告**：公共能力层无登录账号时，AI_VERIFY_PLAN.md 头部显式标注「公共能力层降级」——逐端列出登录态跳过原因，提醒执行 AI 公共层仅覆盖纯可达性（入口可达/全局导航），并给出补齐账号路径；有账号时不出现警告。
+- **需求链路审查修复（澄清幂等 / 孤儿目录 / INDEX 目录列 / 备份提示 / 交互访谈）**：
+  - **澄清状态机幂等修复**：analyze 澄清检测前先查 `020-specs/{单元}/overview/CLARIFY.md` 已落盘（非骨架）即视为已澄清、跳过检测——不依赖 _matrix.md 的 clarify 标记（该标记无回写通道，此前已澄清单元每次 analyze 都被重复要求澄清）；标记保留为历史快照，不参与运行时判定。
+  - **交互澄清协议升级为六步（混合式）**：buildClarifyPhasePrompt 在「深度分析」与「生成 Draft v1」之间新增 Step 2 关键问题访谈——先提炼 3-5 个「影响大且原文无答案」的问题（附选项与推荐项）向用户提问，答案作为硬约束再动笔；不问可推断问题与实现细节；后续 Draft/对比/多轮批改/确认写入依次重排为 Step 3-6。
+  - **孤儿 020-specs 目录检测**：analyze 预建骨架后对比当前功能单元清单，发现 020-specs 下不对应的旧单元目录（重切改名/删除残留）时 warn 提示，由用户决定迁移或删除（此前永久残留且 QUALITY_AUDIT 会误当功能模块审计出噪音）。
+  - **INDEX 新增「目录」列**：features/INDEX.md 表头加目录列，写入行与存量旧行均回填真实目录名（skip 单元回填既有目录名，查不到补空）——从 INDEX 即可定位磁盘目录，不再靠标题猜；dedupKey 与幽灵行过滤逻辑不变。
+  - **备份目录堆积提示**：analyze 扫描 features 时统计 overwrite 时间戳备份目录数并提示可手动删除（备份仍可回滚，各消费点 isTimestampBackup 过滤不变）。
+- **澄清判定与审计的骨架过滤闭环 + 备份生命周期**：
+  - **hasValidClarifiedDocs 骨架过滤**：纯 prompt 模式（非 --auto）的澄清判定此前仅查 CLARIFY.md 存在性，analyze 预建骨架（带 SPEC-SKELETON 标记的空模板）会被误计为已澄清，导致从未真正澄清也被静默放行；现在「存在且非骨架」才算有效产物（全局级与单元级同口径，与 auto 分支幂等检测对齐），新增 5 例回归测试覆盖骨架误计/覆盖过半/mtime 防线。
+  - **QUALITY_AUDIT 孤儿目录过滤**：审计扫描 020-specs 一级目录时按 features/ 清单过滤孤儿（重切旧单元残留），不再把废弃产物当功能模块审计；无 features/ 的老项目过滤自动关闭；新增 2 例测试。
+  - **unitize --prune-backups 备份生命周期**：overwrite 时间戳备份此前只有提示无清理手段，新增 `--prune-backups [days]`——不带天数仅列出（dry-run，含年龄），带天数删除早于 N 天的备份；analyze 的堆积提示同步指路该命令。
+
+边界：AI 视觉操作对常规 CRUD 页面稳定，验证码/支付/生物识别场景标记 skip 需人工兜底；剧本质量取决于 020-specs 分析产物完整度（SKELETON 空模板自动跳过）；账号明文密码属用户仓库自主管理（可改用 ${VAR} 环境变量引用避免入库），CLI 不做加密（与 environments 密码策略一致）；三级通道中 Browser 子代理为 Qoder 原生能力，其余国内外工具按通道 2/3 降级适配。环境文件同时承载部署契约与验证契约（tests 段），两契约字段勿混写；ask 意图词典仍有多义词共享触发词（priority 仅显式化裁决，治标未治根）。
+
 ## v8.3.349 (2026-10-29) — 环境示例模板补齐 v8.3.348 新能力
 
 `update` 升级时生成的环境示例（`.speccore/environments/staging.yaml.example`）补上部署链路改造后的新内容：

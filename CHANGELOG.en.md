@@ -2,7 +2,365 @@
 
 ---
 
+## v8.3.370 (2026-11-03) — Clarify-chain walkthrough fixes: double-frontmatter stripping + CLARIFY_REPORT breakage fix
+
+A real end-to-end walkthrough of the clarify chain (doc2spec → --clarify → [CLARIFY:] apply-back) surfaced and fixed two broken links:
+
+- **Double-frontmatter stripping**: the host AI's apply-back blocks carry their own source/status frontmatter (as taught by the clarify playbook), while the CLI unconditionally prepends its system header — producing double-frontmatter files. Added `stripLeadingFrontmatter` utility (strips the leading --- block; content without a closing --- is returned untouched so body dividers are not harmed), applied before header assembly in the clarifyBlocks path.
+- **CLARIFY_REPORT breakage fix**: the clarify report refresh was only wired to the tail of the JSON branch, so plain-text [CLARIFY:] apply-backs never reached it — the report was never written. Now refreshed immediately after clarify artifacts land (idempotent: skips writing when content is unchanged).
+
+## v8.3.369 (2026-11-03) — From "inventory tool" to "document generator": TECH_STACK detection rewrite + API extractor wiring + AI relay loop + 4b/4c skeleton consolidation
+
+Benchmarked against industry best practice (GitHub Linguist detection strategy / ts-morph AST route extraction / LangChain structured handoff), all three paths are implemented: both fact-layer defects fixed, the semantic layer gains a closed AI relay loop, and the two parallel doc systems converge into one generator.
+
+- **TECH_STACK detection rewrite (Linguist-style dual track)**: the old logic only looked for `{dir}/package.json` (always misses when pointed at a source subdirectory — hence the on-disk "not detected"), rewritten to: marker-file upward search ≤6 levels for the project root (package.json/pom.xml/go.mod/requirements.txt/Cargo.toml/Gemfile) → dependency-table framework detection (16 frameworks, Next/Nuxt/Nest prioritized by specificity) → extension-statistics fallback (15 languages), plus TypeScript detection via deps.typescript.
+- **API extractor wired (fixes empty API_INVENTORY)**: new `extractApiDetails` extracts "METHOD /path" entries (Express/Koa `router.get('/p')` across all three quote styles + NestJS `@Controller` prefix merging + Java `@*Mapping`), backfilling the always-empty `apiDetails` from the tree-sitter branch — API_INVENTORY.md and API_CONTRACT.yaml now get real data.
+- **AI relay loop (--prompt/--apply extended)**: the global-artifacts line gains a semantic relay — the CLI generates deterministic skeletons plus a `_DOCS_PLAYBOOK.md` relay playbook (placeholder inventory dynamically derived from the on-disk docs, with material pointers); `--prompt` emits the relay prompt, `--apply '<JSON>'` merges the host AI's semantic content into skeletons by heading targeting (YAML uses the `"description 字段"` mapping), with unmatched placeholders reported individually for correction and resend.
+- **System convergence (one concept, one generator)**: the 4b/4c nine documents (FUNCTION_MAP/API_CONTRACT.yaml/INTERACTION_MAP + security/performance/data-flow/deployment/consistency) were previously checked but never generated; they are now skeletoned by generateGlobalArtifacts (deterministic facts + `_AI 填写` placeholders), so the global analyze Layer 4 check passes naturally and the host AI fills semantics per the playbook.
+- **Pure-function backfill engine**: `mergeSectionIntoText` (heading-targeted replacement) + `fillYamlDescriptions` (YAML description matching) exported for unit tests; 6 regression tests green.
+
+## v8.3.368 (2026-11-03) — GLOBAL directory cleanup: timestamp backups archived, top-level files regrouped, reverse-requirement domain isolated (requirements/ ↔ _reverse/)
+
+All three hard problems from the previous audit are fixed: timestamp backup files proliferating across four directory layers and polluting indexes, CODE_INDEX/TECH_STACK misplaced at the GLOBAL root, and REQUIREMENT.md being overwritten by two competing pipelines.
+
+- **safeWrite archiving**: the old "content changed → rename in place" behavior (creating tombstones like CODE_INDEX-20260923065735.md — 21 found) is replaced by archiving into a per-directory `.history/` subdirectory — the main directory always holds only the canonical file; `.history/` starts with a dot so reindex skips it automatically, keeping INDEX/TOC/RAG clean of stale backups.
+- **Top-level files regrouped into overview/**: CODE_INDEX.md / TECH_STACK.md moved from the GLOBAL root into overview/ (alongside ARCHITECTURE/API_INVENTORY); the config.ts consumer already defined the overview paths, so writers and readers are now aligned.
+- **reindex excludes timestamp tombstones**: `scanMarkdownFiles` now skips the `-\d{14}.md` pattern (pre-existing tombstones), so INDEX.md no longer lists backups as canonical documents.
+- **Reverse-requirement domain isolated (GLOBAL/_reverse/)**: the default output directory for reverse-derived requirements (REQUIREMENT.md / REVERSE_PROMPT.md / _ir / _qa) moves from requirements/ to _reverse/, fully separating it from the global-analysis pipeline (generateGlobalArtifacts writes requirements/) — the REQUIREMENT.md double-pipeline conflict is eliminated. The QA loop (--verify/--review/--revise) follows automatically; when --out-dir is omitted and the new domain has no artifacts but the legacy domain does, the legacy domain is auto-adopted with a migration hint (backward compatible for pre-v8.3.368 projects).
+- **No more pre-created empty dirs**: requirements/images and requirements/prototypes had zero writers; both pre-creation sites (analyze and generateGlobalArtifacts) removed.
+- **On-disk migration**: this project's .speccore/GLOBAL was cleaned up in one pass — all 21 tombstones archived into per-directory .history/, reverse artifacts moved into _reverse/, and after re-running reindex, INDEX.md shrank from 32 entries (21 of them tombstones) to a clean 24-entry index.
+
+## v8.3.367 (2026-11-03) — Reverse-requirement QA loop: aligned with industry-best recipe-reverse-engineer five stages (verify→review→revise)
+
+Per the user's directive "implement reverse-requirement the industry-best way, copying is fine", SpecCore now fully transplants the recipe-reverse-engineer five-stage recipe (discover→generate→verify→review→revision) from shinpr/claude-code-workflows, completing the three missing stages:
+
+- **Verification loop upgrade (--verify)**: new completeness baseline `checkInventoryCoverage` (recipe's Quality Gate counts balance) — UR source anchors vs IR unit inventory; uncovered modules = unaccounted items become review evidence; zero filled anchors → blocked. New `_qa/INVENTORY.md` report + `_qa/VERIFY_PLAYBOOK.md` code-verifier playbook + `_qa/verify.json` structured verification template (status: verified/needs_review/inconsistent/unverified; never overwrites host-AI-filled results).
+- **Semantic review (--review, new)**: document-reviewer playbook `_qa/REVIEW_PLAYBOOK.md` with six review dimensions (completeness / correctness / testability / translation-leak / granularity / traceability), using verify.json as verification evidence (recipe: review input = Step 3 output); `_qa/review.json` findings template with Review Resolution dispositions (apply/decline).
+- **Conditional revision (--revise, new)**: Review Resolution Gate — unresolved findings (pending>0) refuse to proceed; decline-only passes the Unit Completion Gate; apply findings generate `_qa/REVISION_PLAYBOOK.md` revision playbook (apply findings verbatim as the revision scope, Operation Mode: update) + `_qa/REVISION_LOG.md` round records + re-validation guidance (--verify→--review→--revise until no apply findings).
+- **Two-hop guide upgrade**: REVERSE_PROMPT.md's third hop expands from a single verification loop to the full verify→review→revise QA-loop guide; `extractFilledAnchors` extracted from verifyReverseAnchors for baseline reuse.
+- **CLI wiring**: `global from-source` / `spec-from-source` gain `--review` and `--revise` options (combinable with --verify).
+
+Regression tests: 13 added (4 baseline + 2 verify + 2 review + 5 revision gates), full suite 752/752 passing.
+
+## v8.3.366 (2026-11-03) — Knowledge-graph/RAG pipeline evaluation fixes: precise query + requirement budget + CN→EN keyword unification + Layer 3 business slices
+
+All four issues found in the architecture evaluation, plus the "technical analysis is hollow too" material-pipeline issue, resolved in one pass:
+
+- **Precise analyze RAG query**: the retrieval query was upgraded from the iteration name (`ctx.iteration`) to the current feature unit's requirement text (first 2000 chars of SOURCE.md + platform), falling back to platform+iteration when no unit exists. The order-of-magnitude recall-precision gap of the iteration name is gone.
+- **Requirement injection budget (anti token-blowup)**: new `buildBudgetedReqSection` (ai-context-generator, default 40K chars). Over-budget docs are truncated at paragraph boundaries with per-doc quotas, plus a "requirement reading list" telling the AI to Read originals on demand. Enabled in both the `generateAIContext` prompt file and the `analyzeSingleFeature` report's requirement section.
+- **Keyword extraction unified to a single source (CN→EN mapping end-to-end)**: rag-engine had copied its own word tables (STOP_WORDS/SEMANTIC_MAP/expandKeywords/extractKeywords); its Chinese groups only mapped Chinese→Chinese synonyms, missing the utils/synonyms CN→EN mapping, so Chinese queries (「登录」) never matched English code symbols (`login`) — document RAG recall suffered. The duplicates are deleted (-257 lines) and everything now reuses `code-scanner.extractKeywords` (SEMANTIC_MAP bidirectional + utils/synonyms CN→EN + merged stop words).
+- **global analyze Layer 3 business slices**: `buildLayer3ModuleContext` now extracts core function slices from matched files (≤3 files × 2 slices per module, body ≤40 lines, 6K-char budget), so real business rules/interaction logic reach the Layer 3 material; the prompt gains slice-usage guidance and a mandatory "distill business rules with source anchors (file:function)" instruction, fixing hollow "routes and summaries only" technical analysis.
+- **Asset-boundary documentation**: new `docs/knowledge-assets-architecture.md` (six-asset consumption matrix + four source-entry gates + findRelevantCode/unifiedSearch/KG/code-graph boundary notes + three retrieval-quality defenses); unified-retrieval header comment documents the boundaries to stop new duplicate word tables or retrieval lines from sprouting.
+
+Regression tests: 8 added (4 budget truncation + 4 CN→EN mapping), full suite 739/739 passing.
+
+## v8.3.365 (2026-11-03) — Reverse-requirement hollowness fix: business slices in IR + depth activation + on-demand deep reads
+
+User-verified feedback: `global from-source` produces hollow requirement docs — page routes and generic summaries only, missing functional/business/interaction detail. Four root causes:
+
+- **IR material layer (fatal)**: the tree-sitter structural summary (summarizeCode) keeps only imports/symbols/apis and **deliberately drops method bodies**; business rules, error branches and interaction logic all live in function bodies → reverse output is nothing but routes and symbol names, and the AI can only guess summaries from signatures.
+- **Guidance layer**: the two-hop prompt explicitly said "CLI has extracted, do NOT re-read source" — the AI was forbidden from reading the original code, leaving it with no material.
+- **Parameter layer**: `--depth` was a dead parameter (declared, never consumed) — users setting deep got nothing.
+- **Coverage layer**: hardcoded `files.slice(0, 8)` truncated large modules (20+ files).
+
+Fixes (two-hop architecture unchanged, first-hop material upgraded):
+
+- **Business slices in IR**: each IR gains a "Business Slices" section — sliceCodeFile (language-agnostic export slicer, full TS/JS/JSX coverage) extracts slices with JSDoc/signature/function body; frontend interaction logic (event-handler bodies) enters reverse material for the first time.
+- **depth three tiers activated**: quick (≤3 files × 2 slices per module / body ≤30 lines), normal default (≤8 × 3 / ≤50), deep (≤20 × 5 / ≤50); per-module slice char budget of 10000 prevents IR bloat.
+- **Prompt guidance rewritten**: "do NOT re-read source" removed; now "slices are the base material; when insufficient for rules/branches/interactions, use Read to deep-read the anchor file's function bodies" — fabrication ban and traceability anchors retained.
+- **Related fix: sliceCodeFile truncation bug** — the signature line's braces were not counted in depth, so a function's opening `{` was invisible to the body loop, causing the first blank line or first closed block to be mistaken for "function end" — slices kept only the first few lines. This also degraded RAG code-slice quality; fixed by seeding brace depth from the signature line before the body loop.
+
+## v8.3.364 (2026-11-03) — Translation chain hardening: explicit off notice + file passthrough channel + doc rule sync
+
+External-project verification surfaced the root cause: the host AI actively passed `--translate-en off` based on a stale lesson (Windows shim escaping failures), rationalizing pinyin directory names. The CLI behaved correctly, but there were two small flaws and one documentation gap, now closed:
+
+- **Explicit off notice**: `--translate-en off` previously degraded to pinyin silently (the help text also did not state the consequence), making users think "English names were never generated"; off mode now explicitly warns "English translation skipped, directory names will use pinyin" and points to the translation paths.
+- **`--translate-response-file <path>` new option**: reads the translation JSON from a file, completely bypassing shell/npm shim quote escaping (the definitive fix for swallowed host-relay args on Windows); mutually exclusive with `--translate-response`, errors explicitly when the file is missing or empty.
+- **Help text completion**: `--translate-en auto(default, LLM translation first, pinyin fallback) | host(host-AI relay) | off(disables translation, pinyin directory names)`.
+- **Doc rule sync**: AGENTS.md naming rule updated to v8.3.363 (pure English slug, three-tier fallback, no proactive off); spec-unitize SKILL.md relay script gains the Windows passthrough solution and the off prohibition; six host command thin wrappers synced with the translation iron rule.
+
+## v8.3.363 (2026-11-03) — Feature unit directory names drop doc/seq prefixes: pure English slug naming
+
+Feature unit directory names changed from `{doc-name}-{chapter-seq}-{slug}` (e.g. new-feature-notification-01-inbox-notification) to a pure `{slug}` (e.g. inbox-notification) — the document-name prefix and chapter-sequence segment carry no unit semantics.
+
+- **Template drops both docSlug and seq segments**: reserved-word/trailing-digit handling and chapter-seq concatenation removed; same-name chapters across documents are still deduplicated by the existing -2/-3 suffix mechanism.
+- **Downstream compatibility**: legacy directories are not migrated; taskify's stripUnitSeqPrefix only strips a uniquely-hit -NN- segment, so the new format passes through unchanged and `{slug}-2` conflict suffixes are untouched (new regression assertions added).
+- **INDEX directory-column refresh**: the directory column is now rebuilt whenever a title mapping exists — after re-slicing with English names or rename (pinyin directory → English directory), the INDEX directory column refreshes instead of pointing at the stale directory.
+- **Ordering semantics**: filesystem order no longer equals document order; source chapter is recorded in SOURCE.md titles and INDEX.md.
+- **English-name chain unchanged**: LLM translation first (cache/providers/host-AI relay) then pinyin fallback; auto_host_ai defaults to true so slicing in a host-AI environment produces English names. Legacy pinyin directories (pre-v8.3.272) get English names on re-slice via the three-way strategy.
+- **Version alignment**: package.json had not been bumped since v8.3.350 (CHANGELOG already at 362); aligned to 8.3.363 now.
+
+## v8.3.362 (2026-11-03) — Platform analysis moved to the unitize layer: auto-infer involved platforms after slicing and write back _matrix
+
+Multi-platform feature units previously had their platform declarations filled only at analyze/taskify time, and a non-empty single-platform _matrix declaration was trusted by taskify outright (short-circuiting later inference), causing missed task splits. This round moves the platform/dependency analysis to right after unitize slicing (Plan A):
+
+- **Post-slice auto analysis**: splitDocumentToUnits now returns the list of units written this run; unitize immediately analyzes each — empty declarations go through the six-layer inference with deterministic sources (explicit/directory/keyword) auto-written back to _matrix.md; already-declared single-platform units get superset detection via keyword + directory layers, showing extra candidates as hints only (never auto-overriding the "document belongs to platform" fact); no result in the first four layers emits an AI judgment prompt.
+- **AI confirmation write-back entry**: new `unitize --confirm-platforms '<JSON>'` lets the host AI write back platforms/dependencies/apis after semantic judgment (platforms go through persistInferredPlatforms with a source note; dependencies/apis get block-level replacement preserving other fields).
+- **Fixes along the way**: the inference write-back chain inferAndPersistFeaturePlatforms (v8.3.279) previously had zero callers (broken link), now wired in; superset detection bypasses inferFeaturePlatforms' Layer-2 matrix short-circuit by calling the keyword/directory layers directly.
+
+**Verification**: zero tsc errors + 726 tests green (4 new unit tests: empty-declaration auto write-back / superset detection without override / pending prompt / confirmed write-back with all fields) + build passed; live-tested --confirm-platforms on Iteration-002 (old note replaced without stacking, all three fields written) then restored the data.
+
+## v8.3.361 (2026-11-03) — Graph page entry points: reindex presentation marker + persistent status-panel link
+
+The graph asset was easy to build but hard to open: graph.html had no command entry, and users had to remember a hidden path and open the file manually. This round adds two lightweight entry points.
+
+- **reindex emits a `[SPECCORE_KNOWLEDGE: <path>]` marker**: after a successful code-graph rebuild, the marker is written to stdout as a plain line (no log prefix), so the host AI presents the graph page via present_files per protocol; terminal users can also copy the `🖼️ 图谱页面: .speccore/code-graph/graph.html` hint line to open it directly. `--check` only inspects without rebuilding and emits no marker.
+- **status panel gains a persistent graph entry**: a new `🧩 图谱: .speccore/code-graph/graph.html` line at the panel footer (after the next-action line), shown whenever graph.html exists (appears as soon as reindex generates it), covering both initialized and uninitialized branches.
+
+**Verification**: zero tsc errors + 722 tests green + build passed; live-checked that the `status` panel renders the graph line, `reindex` prints the marker on stdout, and `--check` prints zero markers.
+
+## v8.3.360 (2026-11-01) — Graph page interaction fixes: working edge toggles, God orange badges, exit redraw
+
+After the v8.3.358 two-layer view shipped, live testing exposed a batch of interaction defects: overview-layer edge/God toggles were inert (they only affected the member layer), God badges used the borderColor field that vis-network ignores, the detail panel covered the search box, drilled-in members scattered with overlaps, the page depended on an external CDN, and the node layer failed to repaint after exiting a community. This round fixes all six at once, each verified via browser canvas pixel sampling.
+
+**P0 interaction fixes**
+
+- **Overview-layer edge toggle by type**: EXTRACTED bridge edges ↔ showExtracted, MIXED bridge edges ↔ showInferred (they contain inferred components); initial state matches the toggles (MIXED hidden by default).
+- **Overview-layer God toggle works**: God communities get orange border badges, toggling takes effect immediately; member-layer God nodes highlighted in sync.
+- **Detail panel repositioned** below the search box, no longer overlapping it.
+
+**P1 experience polish**
+
+- **MIXED bridge edge legend** added (amber, overview layer only).
+- **Local layout after drill-in**: existing community nodes pinned + 150-iteration stabilization, members no longer scatter with overlaps (0 overlapping pairs measured); stabilization-done callbacks centrally managed to avoid listener pile-up across rapid drill-ins.
+- **vis-network vendored locally**: UMD downloaded into .speccore/code-graph/ (page opens offline), falls back to unpkg CDN when missing.
+
+**Pitfalls recorded (three browser-side traps)**
+
+- vis-network 10.x reads `color.border` when drawing borders — the top-level `borderColor` field is ignored. God badges now go through a color object (canvas sampling: 0 → 45k orange pixels).
+- Literal `<script>`/`</script>` inside a `document.write` fallback string makes the HTML parser close the tag early — split as `'<scr'+'ipt'` and escape the tail as `'<\/script>'`; comments also avoid the literal sequence.
+- Removing member nodes on exit corrupts vis-network 10.x node-layer rendering (community boxes lose their fill color; `redraw()` and attribute flips don't help) — exit now hides members instead of removing them, restoring via update on re-entry (measured 11.5k+ colored pixels).
+
+**Verification**: tsc zero errors + all 722 tests green + build passes; reindex regenerated graph.html (197 communities / 1742 God nodes / 81 requirement links); browser-verified edge toggles, God orange badges (pixels 0 ↔ 45k), 0 overlaps on drill-in, unobstructed detail panel, exit repaint (all 9 steps passed incl. re-entry, rapid exit, drag/zoom), local vis with zero CDN references, zero console errors.
+
+---
+
+## v8.3.359 (2026-10-30) — analyze.ts progressive split in six batches: 7833 → 6310 lines, strategy-based mode dispatch
+
+analyze.ts had grown to 7833 lines (the largest file in the repo), mixing the entry if-cascade with the unit domain, overview generation, and mode handlers. This round splits it progressively under the iron rule of "move the physics, not the logic; behavior unchanged; verify each step independently" — every batch passes tsc with zero errors and all 722 tests before the next one starts.
+
+**Six batches (12 new files under analyze/)**
+
+- **Batch A, shared core**: emitAiPrompt / AnalyzeOptions / parseDocMarkers sink into analyze/shared.ts — single source of truth for the AI handoff and option type.
+- **Batch B, six small modes**: from-code / audit-fix / context-guard / module / feature / doc each become analyze/{mode}.ts (import depth ../../core/).
+- **Batch C, overview**: overview mode + prompt builder + [DOC:xxx] writer move to analyze/overview.ts.
+- **Batch D, unit domain family**: IterationUnit/UnitAnalysis types, UNITS_CACHE_DIR, list CRUD, unit analysis prompt, dispatch loop, quality report, and unitModes all move to analyze/units.ts (949 lines); analyze.ts switches to import + export-clause re-export (external compatibility kept, local scope bound).
+- **Batch E, inline blocks become functions**: the --incremental/--reanalyze and --add-platform inline blocks become analyze/incremental.ts and analyze/add-platform.ts.
+- **Batch F, entry registry (Strategy pattern)**: the 11 mode early-exit blocks collapse into an analyze/modes.ts registry — detect predicates decoupled from handlers, registration order identical to the old if-cascade; the only mode allowed to fall through, --context-guard, keeps its exact semantics.
+
+**External anchors untouched**: analyzeCommand and buildMultiDocPrompt are still exported from analyze.ts (cli.ts / global.ts / prompt-builder.ts dependencies unchanged); analyze/*.ts submodules never import analyze.ts back — no circular dependencies.
+
+- **Verification**: tsc zero errors + build + all 722 tests green; CLI smoke-tested seven modes live (context-guard / unit-modes / overview / incremental / module / feature / doc), from-code / full / add-platform dispatch predicates checked statically; HEAD comparison confirmed two pre-existing behaviors unchanged (below).
+- **Pre-existing issues (not introduced here; behavior identical to HEAD)**: ① incremental-analyzer snapshot path `join(iterDir, '..', SNAPSHOT_FILE)` concatenates an absolute path, so a first --incremental run hits ENOENT; ② audit-fix's `!(await import('fs-extra')).pathExists()` awaits only the import, so the pathExists guard is a no-op and missing audit reports crash with ENOENT. Both await a future fix.
+
+## v8.3.358 (2026-10-30) — Two-layer graph visualization + community detection rewrite: the 12MB hairball is history
+
+After the "build·query·link·check" loop was wired, only "view" lagged behind: graph.html rendered everything in a single layer, a hairball on real projects with 10k+ nodes; community detection used connected components, so imports in a large codebase merged everything into one giant community, and — by definition — no edges could cross components (bridge edges always 0); 74% of nodes had no community. This round rewrites visualization and community detection, and sweeps out 7000+ duplicate edges and 26000 dangling edges.
+
+**Two-layer view (P0 community aggregation, 12MB → 3.6MB)**
+
+- **Community overview by default**: the page first draws only community nodes (196) plus aggregated bridge edges (cross-community edges merged per community pair) — instant load, no hairball; double-click a community to drill into its member layer, breadcrumb to return; both layers are precomputed CLI-side, the browser only switches.
+- **Requirement sidebar + detail panel**: 51 requirement↔code links are clickable (highlight linked nodes and auto-drill into their community); node/community detail panel shows type, location, degree, God badge, and linked requirements.
+- **Edge/God toggles + continuous hue palette**: EXTRACTED/INFERRED edges and God highlight are toggleable; 196 communities each get a distinct color, fixing the old palette where 30 communities collided at %10.
+- **Physics convergence**: stabilization capped at 250 iterations, then physics is disabled — fixing nodes drifting forever and hundreds of overlapping pairs.
+
+**Community detection rewrite (connected components → adaptive directory hierarchy)**
+
+- **Directories as module boundaries**: starts at two-segment directory prefixes (src/core); communities over 500 members split recursively by deeper segments, falling back to per-file grouping when the directory bottoms out — any community's expanded layer stays manageable (largest observed: 834); cross-directory reference edges naturally become bridge edges (0 → 393).
+- **Isolated nodes rehomed**: 12811 edge-less nodes join communities by directory, the giant "uncategorized" pool disappears; community ids are assigned by label lexicographic order, stable across rebuilds.
+
+**Data hygiene (full/incremental parity)**
+
+- **Dangling edge filtering**: edges pointing to external symbols (commander/Math.min) have no consumable node, so full builds now discard them uniformly (37287 → 4086 valid edges); degree/god/density statistics align with the incremental path.
+- **Edge dedup**: the parser repeatedly extracted the same reference — the full build once carried 7178 duplicates; same key (source|target|type) keeps EXTRACTED first.
+- **Incremental edge-loss fix**: the old implementation dropped all edges touching changed files, permanently losing "unchanged ↔ changed" edges; now only edges of deleted files are dropped, with the builder filtering stragglers.
+- **Performance**: nested nodes.find (O(E×N), 37k edges × 17k nodes) in incremental merge replaced with a Map index.
+
+- **Verification**: tsc clean + build + all 722 tests green (+3 community-detection tests); reindex smoke: 17196 nodes / 4086 edges / 196 communities, execute freshness at parity (4086 edges, both paths identical); browser-tested drill-in, requirement panel, and stationary nodes.
+
+## v8.3.357 (2026-10-30) — Graph retrieval four-gap fix: pinyin mapping + forward link + public candidates + execute freshness
+
+The previous four-ring repair wired up "build·query·link·check", but execution-stage graph retrieval still had four gaps: Chinese task names broke against English code names, the requirement→code forward channel was unused, public dependencies were never recommended, and the graph went stale during batch execution. All four closed this round.
+
+**Chinese full-pinyin mapping (Chinese task names no longer absent)**
+
+- **extractKeywords three-track extraction**: beyond camelCase/snake_case splitting, Chinese segments get three parallel tracks — full-pinyin concatenation (「站内信通知」→ zhanneixintongzhi, hits pinyin slugs), per-character pinyin (zhan/nei/xin/tong/zhi, hits scattered pinyin naming), and the original Chinese word (hits Chinese-named nodes); the convention mirrors the feature-unit naming rule (Chinese title → full pinyin).
+
+**Forward link (requirement language drives retrieval)**
+
+- **REQ.md as retrieval input**: the plugin reads the task's 00-specs/REQ.md requirement points (title + first 40 lines), extracts keywords, and uses REQ_CODE_LINK to hit linked code nodes forward (+4 weight) — when task-name matching misses, requirement text still backstops, so graph context never goes absent; the reverse link (node → requirement) is kept.
+
+**Public dependency candidates (public logic now recommended)**
+
+- **Cross-community bridge nodes pushed**: ranked by bridge degree (cross-community edge count), top 5 kept, prioritizing bridges connected to task-relevant communities — shared facilities used by multiple subsystems enter the candidates; injected as a "公共依赖候选" section urging reuse over rewrite.
+- **God weighting made task-relevant**: global centrality no longer adds score unconditionally (globally "big" ≠ relevant to the current task); only keyword-matching god nodes keep +2.
+
+**Execute freshness (batches see the new graph)**
+
+- **Pre-batch incremental sync**: after acquiring the iteration lock and before listing tasks, execute syncs the source graph incrementally from the same-source file list — code written by task A becomes visible in task B's graph context; sync failure never blocks execution.
+- **discoverCodeDirs shared by four**: source-dir discovery (PROJECT.yaml code_path → fallback src/) extracted as a shared function, de-duplicating reindex/doctor/execute with analyze reusing the same convention.
+
+- **Verification**: tsc + build + full 719 tests green (+4 pinyin-mapping unit tests); execute --list-pending smoke synced 17164 nodes / 37226 edges in 1.8s (incremental sync proven live).
+
+---
+
+## v8.3.356 (2026-10-30) — Code-graph four-ring repair (build·query·link·check) + graph pipeline performance fix
+
+The global code knowledge graph was previously "built but never queried, linked but not wired, checked but not really" — the build entry had zero callers, the query engine had no CLI integration, requirement linking wasn't hooked to from-source, and doctor only checked file existence. This release closes all four rings and defuses a hidden complexity bomb that exploded once the graph passed 10k nodes.
+
+**Build — reindex full rebuild + analyze incremental upkeep**
+
+- **reindex Phase 3 source-code graph**: full reindex now also rebuilds the source knowledge graph — source dirs are discovered from PROJECT.yaml per-platform code_path (falling back to src/), multi-dir collection filters noise (node_modules/dist/.git etc.); output includes 30 communities / 1713 god nodes / 17138 nodes.
+- **analyze pre-Layer-1 incremental upkeep**: iteration analysis syncs the graph incrementally with the same-source file list before Layer 1, so the graph never lags behind the code during analysis.
+- **collectSourceFiles shared by three commands**: analyze/doctor/reindex share one file-collection convention, preventing drift between three scanning rules.
+
+**Query — query engine wired into prompt plugins**
+
+- **execute impact surface**: explainNode shows the direct neighborhood of the top task-relevant node, so the implementing AI knows which existing symbols a change will touch.
+- **analyze core dependency chain**: findPath shows the shortest path between the top two God nodes, giving the analyzing AI a glance at the system's core skeleton.
+
+**Link — requirement-linker wired into the from-source chain**
+
+- **Link on reverse-engineering**: analyzeFromCode now runs requirement↔code linking right after requirement extraction (REQ_CODE_LINK.json).
+- **Global requirements included**: extractRequirements extends to .speccore/GLOBAL/requirements/ (recursive walk for subdirs); all 103 global requirements now participate in linking.
+
+**Check — doctor checks graph freshness for real**
+
+- **Multi-platform code_path discovery**: no longer scans only src/; source files are collected per PROJECT.yaml platform code_path.
+- **File-level mtime comparison**: the graph is stale when any source file is newer than the graph's build time; the message shows both the graph time and the latest source change time.
+
+**Performance fix**
+
+- **idToNode Map index**: three nested nodes.find sites (detectCommunities / buildModuleMap / report generation) switched to Map indexing, plus early break on bridgeEdges — the old implementation froze for 20 minutes at 17135 nodes (billions of scans) after growing from 5287; the full reindex now finishes in 7.3s.
+
+- **Verification**: tsc + build + full 715 tests green; real reindex smoke in 7.3s — 17138 nodes / 37180 edges / 30 communities / 1713 god nodes / 253 files, 81 requirement-linked code nodes (103 requirements, top link confidence 0.8).
+
+---
+
+## v8.3.355 (2026-10-29) — Assembly-chain action semantics + prototype references in AI plan
+
+Two P0 items landed: **action semantic extraction** upgrades the auto-assembly chain from "element visibility" to "real clicks"; **prototype references in AI plan** bring prototype/design assets into the plan script, giving the executing AI visual reference points.
+
+**Action semantic extraction (auto-assembly chain upgrade)**
+
+- **Click steps generate real `click` actions**: when a flow-section step matches the element inventory and contains a click-class verb (点击/单击/点选/按下/勾选/选中/触发/提交/保存/删除/取消/关闭/确认/返回/刷新/搜索/查询), a `navigate + wait + click(selector)` scenario is generated; after the click only page liveness (body) is asserted, not the original element's visibility (elements disappear after close/delete clicks, which would be false positives).
+- **Quote-stripping element matching**: step text is first stripped of corner brackets/quotes (「点击「新增」按钮」→「点击新增按钮」), significantly raising literal match rates against the element inventory (e.g. 「新增按钮」).
+- **Prefer fewer actions over wrong actions**: input/select steps (fill/select need value parameters, which cannot be reliably inferred) never auto-generate actions and keep visibility assertions; steps that miss the element inventory keep the skeleton (page container + body fallback); the single character 「点」 is excluded from the verb dictionary (「重点」/「地点」no longer mis-trigger).
+
+**Prototype references in AI plan**
+
+- **Asset collection (collectPrototypeAssets)**: scans prototypes/, assets/designs/, assets/prototypes/, assets/screenshots/ under 010-requirements (up to 3 levels deep), collecting absolute paths of images and HTML files.
+- **Plan "## 原型与设计稿参考" section**: when assets exist the plan header lists them for the executing AI to open and compare — complex flows gain visual references; plan.json gains a `prototypeAssets` field.
+
+- **Verification**: tsc + build + full 715 tests green (+9 unit tests: 6 action-extraction + 3 asset-collection); real-browser end-to-end — a UI_SPEC element inventory plus a 「点击「新增」按钮」 flow step generated a VERIFY_SPEC with an auto-assembled click scenario passing 4/4 steps (real button click + page liveness).
+
+---
+
+## v8.3.354 (2026-10-29) — Login verification codes: AI-line retrieval hints + smoke-line auto-fill
+
+Two-line implementation of login two-factor verification (verification code) conventions: **AI line** writes account `verification.note` retrieval hints into the plan script (main battlefield for real dynamic codes); **smoke line** adds an `auth.verification` block that auto-fills and resubmits when the password submit doesn't reach the success condition (practical for fixed-code scenarios). Four conventions: declare nearest to usage, prefer bypass on test environments, only declare the channel for dynamic codes (never store codes), and explicitly skip uncovers with skipped accounting.
+
+**AI verification line**
+
+- **Account `verification` field**: both env-inline accounts (environments/{env}.yaml tests.accounts) and accounts.yaml fallback accounts support `verification: { type, note }` — only the retrieval channel is declared, never the code itself.
+- **Dual script hints**: new `## 登录验证码说明` section in the plan header lists all verification accounts (ref/type/note); common-layer login scenarios carry a nearby step hint; machine-readable plan.json gains `accountVerifications`.
+- **Template**: accounts-example.yaml documents the verification block with an example.
+
+**Smoke verification line**
+
+- **auth.verification block**: `code_selector` / `code_submit_selector` (defaults to submit_selector) / `code_env` (env-var code source, takes precedence over fixed_code) / `fixed_code` (bypassable fixed code) / `code_timeout` (default 10000, also the short first-attempt success timeout) / `type` (report display).
+- **performLogin two-step verification**: after password submit, first success check gets a short window (code_timeout when a verification block exists); if not reached, wait for the code input → fill → resubmit → re-check; missing code source degrades with a warning instead of blocking.
+- **Transparent assembly & false-pass prevention**: the pre-smoke account assembly section shows verification readiness; verification not ready (code_env unset / fixed_code missing) is counted as skipped with an explicit report entry.
+
+- **Docs**: testing-guide §4.5 gains a verification subsection (field table + three conventions); config-reference auth table gains verification entries.
+- **Verification**: tsc + build + 706 tests green (+3 verification-convention unit tests); real-browser smoke proved the fixed-code 888888 full chain (password → code input → fill & submit → success page), wrong code degrades to logged-out state, and unset code_env shows assembly warning + explicit skip entry.
+
+---
+
 > 📌 **Note**: English entries below cover selected releases. For the complete version history (v8.3.194 → v8.3.289), see the Chinese [CHANGELOG.md](CHANGELOG.md).
+
+## v8.3.353 (2026-10-29) — Verify-line six fixes: fine-spec pass-through + script pairing + zero false passes
+
+Six verify-line wrap-ups: `--config` fine-spec pass-through, routes-trio misjudgment fix, AI script pairing refinement, acceptance-table step extraction, plus three false-pass eliminations (scenario exceptions, zero exit on failure, timeout string).
+
+**Fine-spec pass-through**
+
+- **--config fine scenarios passed through intact**: TestCase gains a `verify_scenarios` field — when a VERIFY_SPEC file is loaded via --config, all 22 actions + 9 assertions reach the smoke engine intact (no longer reduced to navigate-only reachability); TestConfig format supports both `tests[].verify_scenarios` arrays and single-scenario inline `actions`/`assertions`; relative navigate URLs are joined onto baseUrl, and absolute URLs are no longer double-prefixed.
+- **Routes-trio misjudgment fix**: the reachability assertion becomes `visible + body` (a selector-less visible assertion always throws in the engine, so the historic trio misjudged reachable pages as failed); the engine now skips selector-less assertions and value-less navigates (reachability already proven by navigation), keeping legacy generated specs compatible.
+- **Route/page scan navigate gets value**: generateSpecFromRoutes/Pages previously emitted navigate actions without value, which the engine always threw on — failing every scanned scenario; now filled with `baseUrl + path`.
+
+**AI script refinements**
+
+- **TEST pairing by title-keyword proximity**: replaces same-index modulo (mismatched flow/case counts rotated expected results wrongly); same-index tie-break + fallback to same-index when no overlap, so the common single-flow/single-case shape behaves unchanged.
+- **Acceptance-table operation-step extraction**: `extractTableOperationSteps` extracts defensively (exact header match only, placeholder cells skipped, multi-table tolerant), shared by both lines — the AI line turns table steps into fine-grained steps, the smoke line (generateFlowScenariosFromSpec) turns them into flow-scenario skeletons.
+
+**False-pass eliminations**
+
+- **Scenario-level exceptions recorded as failed steps**: runScenario's outer exception previously recorded no step (empty steps' every is always true), reporting failures as "0/0 steps + 100% pass rate" — now the exception becomes a failed step.
+- **Non-zero exit on verification failure**: both the UI report and the code-verification report now set exitCode=1 when summary.failed > 0 (CI previously couldn't sense failures); smoke/visual/API failures can now break the pipeline.
+- **Timeout string normalization**: the verify command's commander default '120000' is a string; un-converted it made Playwright throw "expected float" — normalized at the verifyCommand entry.
+
+- **Verification**: tsc + build + full 703 tests green; end-to-end smoke evidence — a fine scenario (navigate+click+text assertion) executed via --config passed 3/3 steps, a failing assertion showed 1/2 steps + exit=1, and a passing scenario exited 0.
+
+## v8.3.352 (2026-10-29) — Deploy rollback & health checks + silent-skip fixes + four pipeline-hygiene fixes
+
+Two fronts at once: the **deploy line** gains real rollback ("what to do after go-live") plus post-deploy health checks; the **verify line** kills "skipped = passed" false positives; plus four iteration-chain hygiene fixes (clarify / audit / backups / index).
+
+**Deploy rollback & health checks**
+
+- **Real rollback (deploy --rollback / --list-backups)**: four types supported — docker (re-tag the remote `.bak-*` image tag back to the original tag + restart the container) / ssh (extract the remote `.bak-*.tar.gz` over the dir + restart) / k8s (`kubectl rollout undo`) / helm (`helm rollback`). `--list-backups` is read-only (lists backups, changes nothing); `--rollback --backup-name <name>` picks a specific backup (docker tag name / k8s & helm revision number / ssh filename), defaulting to the most recent one; `--dry-run` previews the rollback commands; unsupported types (static/script/vercel/...) get a clear message.
+- **Post-deploy health check (deploy.health_check config)**: `url` (HTTP probe, 2xx/3xx = healthy) or `command` (remote/local command, exit 0 = healthy; remote when ssh/docker/sftp/pm2 types have a host), with `retries` (default 5) / `interval_ms` (default 3000). Runs automatically after a successful deploy; failure **warns but never blocks** (already live and irreversible), and the summary report highlights the health state; the preview panel shows the config too.
+- **Deploy problem ledger (.speccore/local/deploy-ledger.md)**: post-deploy test failures (pipeline) and health-check failures (deploy) are appended to a cross-iteration ledger — tabular records (time/kind/platform/env/test-type/severity/summary), idempotent append (history never overwritten), serving as a risk checklist before the next deploy; failures no longer flash past in the terminal log only.
+- **Graceful empty-platforms fallback**: with no platforms configured in PROJECT.yaml, loadProjectConfigWithEnv no longer throws `platforms is not iterable` — it returns an empty array so the callers' existing empty-config checks kick in (deploy/pipeline/rollback all print readable hints).
+
+**Silent-skip fixes (no more false passes)**
+
+- **Skipped items counted explicitly**: UIVerifyReport.summary gains a `skipped` field; three degradation paths no longer evaporate silently — missing contract (API_CONTRACT.yaml absent / unparsable), account not ready (login scenario degrades to skip), URL undeterminable — each is counted into `skipped` and listed with its reason in both the summary report and a dedicated "skip list"; logUIReport renders it too.
+- **Contract-required switch (verify --require-contract)**: a missing/unparsable API contract escalates to a verification failure (non-zero exit), killing the "missing contract = passed" illusion; the default stays skip-with-warning (backward compatible), and real API test failures count as failures as well.
+
+**Four iteration-chain hygiene fixes**
+
+- **Clarify state-machine idempotence**: an existing CLARIFY.md that is not a skeleton (`<!-- SPEC-SKELETON -->`) counts as clarified — analyze's pre-built skeletons are no longer misread as "already clarified", and re-clarification no longer overwrites the real artifact.
+- **Audit orphan filtering**: after features re-slicing (units renamed/deleted), stale unit dirs under 020-specs no longer enter the quality audit (orphan dirs are not audited as modules); for legacy projects without features/, the filter auto-disables.
+- **Slice-backup lifecycle (unitize --prune-backups [days])**: lifecycle management for overwrite timestamp backup dirs — no arg lists them only, a day count deletes backups older than N days.
+- **INDEX dir-column backfill (doc2spec)**: title → actual dir-name mapping (incl. rename -2/-3 suffixes); skipped units record their existing dir name too, and legacy INDEX rows get their "目录" column backfilled from the current slicing mapping.
+
+- **Tests**: 2 new test files (quality-audit-orphan two-scenario orphan filtering / requirement-clarifier-has-valid real-artifact detection); the deploy/verify changes passed tsc + build + smoke (--list-backups graceful empty-config hint, --require-contract non-zero exit on missing contract, ledger idempotent append); full suite 703/703 green.
+
+## v8.3.350 (2026-10-29) — AI browser verification: accounts, layered scripts, dual-line switches
+
+A new "AI browser verification" mode replaces the manual selector-config burden of smoke tests: the CLI slices interaction specs and test cases from 020-specs into natural-language verification scripts (with env entry URLs and account references); the host AI (Browser sub-agent) visually drives the interactions and business assertions; results are written back to JSON; the CLI then renders an HTML report. Scope: all units / deployed-only / named modules.
+
+Core division of labor: **the CLI slices, never parses semantics** — it grabs raw paragraphs from UI_SPEC.md/TEST.md by headings, leaving semantic understanding and page operations to the executing AI.
+
+- **Account config (separate file)**: templates/accounts-example.yaml → `.speccore/tests/accounts.yaml` on init (never overwrites; example always refreshed). Grouped by env with multiple roles; scripts reference account names only (e.g. `staging.admin`) — no password copies; the executing AI reads plaintext directly. Sensitive credentials support `${VAR}` env references: the plan records ref/field/varName/set into accountEnvVars with per-var warnings.
+- **Deploy manifest**: deploy writes `.speccore/local/deploy-manifest.json` (env/time/platforms), powering `--scope deployed`.
+- **Script generation (new src/core/ai-verify/)**: scope-resolver (all / deployed / modules:xxx, stacked with --platform) + plan-generator (entry from environments tests.base_urls, account picked by "platform match → unrestricted → first", SKELETON units skipped) → `Iteration-NNN/000-overview/ai-verify/` plan.json + AI_VERIFY_PLAN.md.
+- **Layered scripts (common layer + modules layer)**: plan.json gains a `groups` view (flat `scenarios` kept for compatibility) — the **common layer** is CLI-templated per platform (entry reachability / login state / global navigation, id prefix `common__`, login skipped without accounts) and runs **before** the **modules layer** (per-unit UI_SPEC/TEST slices); login readiness is the modules prerequisite. Both AI_VERIFY_PLAN.md and the HTML report render per layer (layer head shows enabled state + note, closed layers marked ⏭️, legacy plans without groups fall back to per-platform rendering). `verify --ai` prints per-layer stats and a 4-step execution protocol (advance by layer → batch per platform → write results.json → --ai-report); the SKILL.md protocol advances by layer too. With no units, the common layer alone still yields a plan.
+- **Dual-line switches (settings.tests)**: `.speccore.yml` gains `settings.tests` — `smoke.enabled` (config-driven smoke line; auto-triggered UI verification is skipped when off, explicit --ui/--config/--stage still runs with a warning), `ai_verify.enabled` (AI host verification line; explicit --ai still runs with a warning), `layered.common/modules` (per-layer toggles; closed layers generate no scenarios but keep their audit header). Semantics: **explicit CLI flags > config switches**, all defaults on. Synced across DEFAULT_CONFIG / types / validation / serializer / example templates, with the serializer-consistency machine lock and example-alignment tests guarding against silent field loss.
+- **verify command wiring**: --ai / --scope / --platform / --env / --ai-report / --ai-judge; takeover markers `[SPECCORE_AI_VERIFY]` + `[SPECCORE_AI_VERIFY_ACCOUNTS]`; three-tier execution channel fallback in SKILL.md (Browser sub-agent → Playwright MCP → screenshots + `--ai-judge` visual fallback with executor audit). Existing --ui selector smoke is untouched — both modes coexist.
+- **HTML font localization**: all 16 `fonts.googleapis` @imports replaced with local @font-face (bundled OFL variable fonts Orbitron.woff2 + JetBrainsMono.woff2 in templates/html/fonts/); page-bundle's ensureHtmlAssets copies fonts/ next to every HTML output dir (9 commands + template copy chain). mermaid/chart.js CDN JS left for a later pass.
+- **"merge into {env}" intent**: ask gains a deterministic short-circuit — "合并/提交到 {env}" sentences always route to `pr --base <env>` (immune to execute's broad trigger "开发" and KB ordering); "合并需求" (no 到) still routes to analyze. `pr --base` now accepts env-name references (new resolveBaseBranch: env name → resolveEnvBranchRef → environments/{env}.yaml branch; literal branch names pass through) — same chain as pr_target env refs: "recognition in ask, resolution in pr". Domain detection aligned with the AMBIGUOUS_INTENTS mechanism: without speccore context words the answer first asks "speccore operation or plain discussion" (the sentence is common in everyday talk), while "用 speccore 合并到测试环境" goes straight through.
+- **Intent-cache fuzzy-layer param guard**: parameterized sentence templates (e.g. "合并到{env}") no longer fuzzy-hit across slot words (测试 vs 开发) — the fuzzy layer now requires identical semantic token sets, serving only synonymous rewording, so a cached test result can never leak onto dev.
+- **Prompt library dual-channel**: page-side edits were localStorage-only — the page now has export/import buttons, and the CLI gains `prompts --import <file>` (merged by id into .speccore/prompts/user/custom-imported.json) and `--export <file>`; all loaders parameterized on projectRoot (fixes --project-dir and init/welcome linkage). New-entry ids become `prompt-` + UUID (crypto.randomUUID with a timestamp fallback for file:// browsers), fixing same-millisecond Date.now() id collisions; edits no longer overwrite createdAt with undefined.
+- **Setup guide AI verification block**: setup-guide step 6 gains a "测试验证 (v8.3.350+)" block (AI browser verification / visual fallback / `${VAR}` account refs) to onboard the freshly shipped AI verification.
+- **Tests**: 5 new test files (scope-resolver / plan-generator incl. layered groups + layer toggles + common-layer scenarios / result-parser incl. layered rendering + legacy fallback / visual-judge / prompts incl. UUID id generation), 52 cases; build passes, full suite 692/692 green.
+- **Five verification-system refinements (account convergence / contract split / trigger tiering / switch matrix / plan-header warning)**:
+  - **Account convergence (tests.accounts as authoritative source)**: the AI-verification account authority moves from accounts.yaml into `environments/{env}.yaml` `tests.accounts` (declared locally; the account name is the ref, e.g. admin); accounts.yaml is demoted to a global fallback (used only when the env file has no accounts for that env), and its template header documents the new role. Login scenarios label the credential source; `${VAR}` scanning covers both sources; when the env file already declares accounts, the accounts.yaml placeholder template is no longer generated. The environment parser's tests whitelist gained the accounts field (the omission was caught by CLI smoke immediately). The plan now carries an `accountSources` field (machine-readable account-source hints); the `SPECCORE_AI_VERIFY_ACCOUNTS` marker and the SKILL execution protocol follow it and point to the actual source (the env file when inline accounts exist, so the executing AI never looks up credentials in the wrong file).
+  - **Environment contract split (deploy contract vs verification contract)**: staging.yaml.example's tests block is now a standalone "verification contract" section — one env file carries two contracts with different consumers: the deploy contract (branch/platforms.build_cmd/platforms.deploy/stages/pipeline, consumed by build/deploy/pipeline) and the verification contract (tests.base_urls/visual_model/auth/accounts, consumed by the verify smoke line and AI verification line); comments label each field's consumer to prevent mixing deploy and verification params.
+  - **Ambiguous trigger explicit tiering (priority tie-break)**: COMMAND_KB entries gain a `priority` field — equal trigger-length scores are decided by priority (higher wins, default 0), declaration order only as the last resort; verify declares priority:1 (the test-action sense wins when "验证" hangs on both verify and validate), and a KB header comment states "ambiguous entries must set priority explicitly — never rely on declaration order". The implicit first-come-first-served is now an explicit tier (symptom-level: multi-word shared triggers remain the root).
+  - **Switch matrix (setup guide)**: the guide's verification block gains a "dual-line switches & layered scripts (settings.tests)" panel — smoke.enabled / ai_verify.enabled / layered.common+modules plus the three-path priority "CLI explicit args > config switches > quality-gate auto-trigger"; the account card now states the dual-source model (tests.accounts authoritative + accounts.yaml fallback).
+ - **Plan-header degradation warning**: when the common layer lacks login accounts, AI_VERIFY_PLAN.md's header explicitly marks "公共能力层降级" — per-platform login-skip reasons, reminding the executing AI that the common layer covers reachability only (entry reachable / global navigation), with the fix path to add accounts; the warning is absent when accounts exist.
+- **Requirement-chain audit fixes (clarify idempotency / orphan dirs / INDEX dir column / backup hint / interactive interview)**: an end-to-end audit of the unitize → clarify → analyze chain surfaced and fixed five issues:
+  - **Clarify idempotency fix**: the clarify-detection loop now treats an already-landed `020-specs/{unit}/overview/CLARIFY.md` (non-skeleton) as "already clarified" and skips re-detection — no longer relying on the `_matrix.md` clarify flag, which had no write-back channel and kept re-prompting clarification on every analyze run.
+  - **Interactive clarify protocol upgraded to six steps**: a "key-question interview" is now inserted before drafting — after the deep review (Step 1), the AI asks 3-5 highest-impact questions the source docs cannot answer (with 2-3 options each and a recommended choice) and waits for answers before generating Draft v1; the original steps renumber accordingly (interview → draft → comparison view → iterative confirmation → confirmed write). Auto mode is unchanged.
+  - **Orphan 020-specs detection**: after pre-building skeletons, analyze compares top-level 020-specs directories (excluding overview/requirements) against the feature-unit list and warns about leftovers from a re-split — preventing QUALITY_AUDIT from auditing stale unit dirs as live modules.
+  - **INDEX dir-column addition**: the 010-requirements INDEX table gains a 目录 column, backfilled from the title → dir-name map for preserved legacy rows (including skipped units) and written for new rows — no more guessing which directory a feature unit lives in.
+  - **Backup accumulation hint**: when features/ contains timestamped split-backup directories (from overwrite), analyze prints a reminder that they are rollbackable copies and can be deleted once confirmed.
+- **Skeleton-filter closure for clarify detection & audit + backup lifecycle**:
+  - **hasValidClarifiedDocs skeleton filter**: the pure-prompt-mode (non --auto) clarify gate only checked CLARIFY.md existence, so analyze's pre-built skeletons (empty templates carrying the SPEC-SKELETON marker) were miscounted as clarified — clarification was silently skipped even when it never happened. Now only "exists and non-skeleton" counts as a real artifact (global and unit levels share the same predicate, aligned with the auto-branch idempotency check); 5 regression tests cover skeleton miscounting / half-coverage / mtime guard.
+  - **QUALITY_AUDIT orphan filter**: the audit's 020-specs top-level scan now filters orphans (stale unit dirs from a re-split) against the features/ list — abandoned artifacts are no longer audited as live modules; projects without features/ automatically disable the filter; 2 tests added.
+  - **unitize --prune-backups backup lifecycle**: overwrite timestamp backups previously had a hint but no cleanup path; new `--prune-backups [days]` — bare flag lists only (dry-run with age), a day count deletes backups older than N days; the analyze accumulation hint now points to this command.
 
 ## v8.3.348 (2026-10-28) — Deploy chain transparency: plan panel + automatic branch resolution + live config reads
 

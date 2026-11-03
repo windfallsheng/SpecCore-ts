@@ -23,7 +23,7 @@ import { buildCodeIndex, findRelevantCode, isIndexStale, loadFullIndex, resolveI
 import { summarizeSources } from './multi-lang-parser';
 // v8.3.125+: 同义词扩展，解决中英文/缩写匹配失败问题
 import { expandSynonyms, extractNormalizedKeywords } from '../utils/synonyms';
-import { generateAIContext, AIContextResult } from './ai-context-generator';
+import { generateAIContext, AIContextResult, buildBudgetedReqSection } from './ai-context-generator';
 import { cleanStaleCache } from './git-integration';
 import { generateQualityAudit } from './quality-audit';
 import { GLOBAL_SPECS_DIR, parsePlatformList } from './spec-paths';
@@ -1648,7 +1648,8 @@ export async function analyzeSingleFeature(
     r += `_未检测到明显架构影响_\n\n`;
   }
 
-  r += `## 3. 需求原文\n\n${content}\n`;
+  // v8.3.366: 需求原文按配额注入（超大 SOURCE.md 截断 + 阅读清单，防 token 顶爆）
+  r += `## 3. 需求原文\n\n${buildBudgetedReqSection([`## 来源: ${featureReqPath}\n\n${content}`]).section}\n`;
 
   // v8.3.122+: 写入 020-specs/{feature}/overview/ 与规范一致
   const overviewDir = join(iterDir, '020-specs', featureName, 'overview');

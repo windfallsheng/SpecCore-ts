@@ -31,6 +31,12 @@ export interface CommandKnowledge {
   examples: string[];
   related: string[];
   triggers: string[];
+  /**
+   * 同分 tie-break 显式优先级（缺省 0，值大者赢）。
+   * 歧义词条（如「验证」同挂 verify/validate）靠此裁决，不依赖数组声明顺序；
+   * 新增词条若与现有词条共享触发词，必须显式声明 priority。
+   */
+  priority?: number;
 }
 
 /** Pipeline 步骤 */
@@ -74,6 +80,9 @@ export interface AskEngineOptions {
 // 命令知识库
 // ============================================================
 
+// ⚠️ 同分裁决规则（v8.3.351+ 显式化）：
+// 触发词总长度同分时按 priority 裁决（值大者赢，缺省 0）；priority 也相同才回退声明顺序。
+// 歧义词条必须显式设 priority（如 verify 与 validate 共享「验证」），禁止依赖声明顺序先到先得。
 const COMMAND_KB: CommandKnowledge[] = [
   { name: 'init', aliases: ['in'], description: '初始化 SpecCore 项目，创建 .speccore 目录和配置',
     usage: 'speccore init [--interactive] [--name <name>]', examples: ['speccore init', 'speccore init --name my-project'], related: ['run', 'config'], triggers: ['初始化', 'init', '开始', '新建项目', '创建项目'] },
@@ -99,7 +108,9 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore pr [--task <id>] [--auto]', examples: ['speccore pr', 'speccore pr --task T-01 --auto'], related: ['done', 'execute'], triggers: ['pr', 'pull request', '提交', '合并', 'MR'] },
   // v8.3.95+: verify 命令
   { name: 'verify', aliases: ['vf'], description: '测试验证：冒烟测试 + 视觉检查 + API 契约 + 性能基线。支持 --headed 有头模式、--browser 多浏览器、--device 多设备',
-    usage: 'speccore verify [--ui] [--smoke-only] [--visual-only] [--headed] [--browser <b>] [--device <d>] [--config <file>]', examples: ['speccore verify --ui', 'speccore verify --ui --headed', 'speccore verify --config ./tests/smoke.yaml'], related: ['deploy', 'execute', 'dashboard'], triggers: ['verify', '测试', '冒烟', 'smoke', '视觉检查', 'ui验证', '验证', '跑测试', '测一下', '检查页面'] },
+    usage: 'speccore verify [--ui] [--smoke-only] [--visual-only] [--headed] [--browser <b>] [--device <d>] [--config <file>]', examples: ['speccore verify --ui', 'speccore verify --ui --headed', 'speccore verify --config ./tests/smoke.yaml'], related: ['deploy', 'execute', 'dashboard'], triggers: ['verify', '测试', '冒烟', 'smoke', '视觉检查', 'ui验证', '验证', '跑测试', '测一下', '检查页面'],
+    // v8.3.351+: 「验证」同挂 verify/validate，测试/验证动作词义优先（显式分层，不靠声明顺序）
+    priority: 1 },
   { name: 'validate', aliases: ['vl'], description: '合规验证：检查 Spec 完整性与一致性',
     usage: 'speccore validate [--iteration <name>]', examples: ['speccore validate', 'speccore validate --iteration Q2'], related: ['analyze'], triggers: ['验证', 'validate', '检查', '合规', '校验'] },
   { name: 'sync', aliases: ['sy'], description: '双向同步：代码↔Spec，--global 同步到全局层（原 sync-global）',
@@ -375,11 +386,16 @@ function matchCommandInKB(input: string): CommandKnowledge | null {
   // 触发词匹配（最不可靠，需诚实声明低置信度）
   let best: CommandKnowledge | null = null;
   let bestScore = 0;
+  let bestPriority = -Infinity;
   for (const cmd of COMMAND_KB) {
     // v8.3.257: 用匹配触发词的总长度加权——长词（如「全局分析」4字）比短词（「分析」2字）更具体，
     // 避免「全局分析」被 analyze 的泛触发词「分析」抢占
+    // v8.3.351+: 同分 tie-break 显式化——priority 值大者赢，priority 相同回退声明顺序
     const score = cmd.triggers.filter(t => lower.includes(t)).reduce((s, t) => s + t.length, 0);
-    if (score > bestScore) { bestScore = score; best = cmd; }
+    const priority = cmd.priority ?? 0;
+    if (score > bestScore || (score === bestScore && priority > bestPriority)) {
+      bestScore = score; best = cmd; bestPriority = priority;
+    }
   }
   if (bestScore > 0 && best) { lastKbMatchType = 'trigger'; return best; }
 
@@ -645,12 +661,61 @@ function formatCommandDisplay(r: IntentResult): string {
 }
 
 /** 模式3: 意图匹配（当前 ask 逻辑） */
+/**
+ * v8.3.351+: 提取「合并/提交到 {环境}」句式的目标环境名（归一化英文标识）供 pr 意图透传 --base；
+ * 识别与解析分离——分支解析在 pr 命令内走 resolveEnvBranchRef（与 pr_target 环境名引用同链路）。
+ * 无环境词时返回空串（普通 pr 意图不加 --base）。
+ */
+function extractMergeEnvTarget(input: string): string {
+  const match = input.match(/(?:合并|merge|合到|合入|提交|commit)(?:到|至|入)?[^，。！？]{0,6}(local|dev|develop|test|staging|production|prod|预发布|预发|线上|生产|测试|开发|本地)(?:\s*环境)?/i);
+  if (!match) return '';
+  const envMap: Record<string, string> = {
+    '预发布': 'staging', '预发': 'staging', '线上': 'production', '生产': 'production', 'prod': 'production',
+    '测试': 'test', '开发': 'dev', 'develop': 'dev', '本地': 'local',
+  };
+  return envMap[match[1].toLowerCase()] || match[1].toLowerCase();
+}
+
 async function handleMatch(input: string, isExplicit = false): Promise<AskResult> {
   // 补充分析意图已在 askEngine 顶层检测（第零层），此处不再重复
 
   // 优先用 KB 精确匹配
   const kbMatch = matchCommandInKB(input);
   const config = await loadAskConfig();
+
+  // v8.3.351+: 「合并/提交到 {环境}」确定性短路——无论 KB 词条（「开发」抢 pr 先手）
+  // 还是意图识别（execute 宽触发词）谁得先机，该句式一律路由 pr --base <环境>；
+  // 环境名是目标环境，不是开发/测试动作词。「合并需求」无「到」不短路（走 analyze）。
+  const mergeEnvTarget = extractMergeEnvTarget(input);
+  if (mergeEnvTarget && /(?:合并|merge|合到|合入|提交)(?:到|至|入)/i.test(input)) {
+    const mergeResult: AskResult = {
+      mode: 'match',
+      summary: `✅ 推荐: speccore pr --base ${mergeEnvTarget}`,
+      detail: `🎯 推荐命令: speccore pr --base ${mergeEnvTarget}\n创建 Pull Request：目标分支指向 ${mergeEnvTarget} 环境分支（pr 内解析 environments/${mergeEnvTarget}.yaml 的 branch）\n\n⚠️  请确认后执行以上命令。`,
+      commands: ['pr'],
+    };
+    // 域检测（与 AMBIGUOUS_INTENTS 机制对齐）：「合并到测试环境」也是日常讨论高频句，
+    // 分不清是 speccore 操作还是普通对话时先确认，不直接执行
+    if (!isExplicit && !isSpeccoreOperation(input)) {
+      return {
+        mode: 'ambiguous',
+        summary: `待确认: pr — 是 speccore 操作还是普通对话?`,
+        detail: [
+          '🤔 我识别到你可能想执行 speccore 命令，但不确定这是调用 CLI 还是普通技术讨论：',
+          '',
+          `  你的输入: "${input}"`,
+          `  匹配意图: pr → speccore pr --base ${mergeEnvTarget}（目标分支指向该环境分支）`,
+          '',
+          '如果是 speccore 操作（创建 PR 并指向该环境分支），请输入 y 确认；',
+          '如果是普通技术讨论（如讨论代码流向/分支策略），请直接描述你的问题。',
+          '',
+          '或输入 y 确认执行: speccore pr --base ' + mergeEnvTarget,
+        ].join('\n'),
+        commands: ['pr'],
+      };
+    }
+    return mergeResult;
+  }
   
   const results = await recognizeIntent(input);
   let best = results[0];
@@ -682,8 +747,11 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   
   // 如果 KB 有匹配且置信度高于意图识别，用 KB（但要整合意图识别的参数）
   // v8.3.191+: run 意图有 preset/起止点时，优先 run 编排（避免被 KB 的 split/deploy 等抢占）
+  // v8.3.351+: KB 命中 pr 且句中提取到目标环境（「合并到开发环境」）时强制走 KB 分支——
+  // 「开发」是环境名不是开发动作，不得被 execute 的宽触发词抢占
   const runHasParams = best?.command === 'run' && (best.extractedParams?.preset || best.extractedParams?.from || best.extractedParams?.to || best.extractedParams?.gate);
-  if (kbMatch && (!best || best.confidence < 60) && !runHasParams) {
+  const prWithEnvTarget = kbMatch?.name === 'pr' && extractMergeEnvTarget(input) !== '';
+  if (kbMatch && (!best || best.confidence < 60 || prWithEnvTarget) && !runHasParams) {
     const params = best?.extractedParams || {};
     let fullCommand = `speccore ${kbMatch.name}`;
     // v8.3.301+: from-source 端名自动映射的备注，等 paramNotes 声明后再 append
@@ -727,6 +795,17 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     }
     // v8.3.257: taskify 默认走 AI 增强路径（--prompt），除非用户明确要求传统模式
     if (kbMatch.name === 'taskify' && !params.splitDirect) { fullCommand += ` --prompt`; paramNotes.push(`🧠 模式: AI 智能拆分`); }
+
+    // v8.3.351+: KB trigger「合并」命中 pr 时，提取目标环境透传 --base——
+    // pr 命令内 resolveEnvBranchRef 解析为 environments/{env}.yaml 的 branch；
+    // 「合并到测试环境」在 COMMAND_MAPPINGS 无 pr 触发词（best 为空），必走本 KB 分支
+    if (kbMatch.name === 'pr') {
+      const mergeEnv = extractMergeEnvTarget(input);
+      if (mergeEnv) {
+        fullCommand += ` --base ${mergeEnv}`;
+        paramNotes.push(`🌿 目标环境: ${mergeEnv} → PR 目标分支指向该环境分支`);
+      }
+    }
 
     // 补充分析意图已在 askEngine 顶层检测，此处不再重复
     
@@ -882,6 +961,15 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   } else if (best.command === 'search') {
     // v8.3.257: search 用位置参数而非 -n（search 无 -n 选项，避免死参数）
     fullCommand = `speccore search "${params.name || input.slice(0, 40)}"`;
+  } else if (best.command === 'pr') {
+    fullCommand = `speccore pr`;
+    // v8.3.351+: 高置信度 pr 意图同样支持「合并到 {环境}」环境名透传（KB 分支的对称兜底）；
+    // 「需求合并」等语料由 SYNONYM_MAP 优先路由 analyze，不会落到此处
+    const mergeEnv = extractMergeEnvTarget(input);
+    if (mergeEnv) {
+      fullCommand += ` --base ${mergeEnv}`;
+      paramNotes.push(`🌿 目标环境: ${mergeEnv} → PR 目标分支指向该环境分支`);
+    }
   } else {
     fullCommand = `speccore ${best.command}`;
     // v8.3.257: -n/--iter 不是通用选项——仅 task new/iteration create 注册了 -n，

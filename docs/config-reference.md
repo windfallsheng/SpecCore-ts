@@ -901,6 +901,14 @@ tests:
     credentials:
       username: admin
       password_env: SMOKE_PASSWORD   # 密码从环境变量读取（推荐）
+    # v8.3.354+: 登录二次验证（验证码）——账号密码提交后未达成功判定时自动填码再提交
+    # verification:
+    #   type: sms                    # 验证码类型（报告展示用）
+    #   code_selector: "input[name='smsCode']"
+    #   code_submit_selector: "button[type='button']"  # 可选，缺省复用 submit_selector
+    #   code_env: SIT_SMS_CODE        # 动态码自环境变量注入（优先于 fixed_code）
+    #   fixed_code: "888888"          # 或固定验证码（测试环境可绕过场景）
+    #   code_timeout: 10000           # 可选，等验证码输入框出现（毫秒，默认 10000）
   visual_model:
     provider: qwen-vl
     model: qwen-vl-max
@@ -922,6 +930,13 @@ tests:
 | `credentials.password` | `string` | 密码（明文，仅内网默认账号可接受） |
 | `credentials.username_env` | `string` | 从环境变量读用户名 |
 | `credentials.password_env` | `string` | 从环境变量读密码（推荐） |
+| `verification` | `object` | 可选（v8.3.354+）：登录二次验证配置，账号密码提交后未达成功判定时自动填码再提交；适合固定码/可绕过场景，真实动态码优先走 `verify --ai` |
+| `verification.type` | `string` | 验证码类型（`sms`/`totp`/`graphic`/`email`，仅报告展示用） |
+| `verification.code_selector` | `string` | 验证码输入框选择器（必填） |
+| `verification.code_submit_selector` | `string` | 验证码提交按钮（缺省复用 `submit_selector`） |
+| `verification.code_env` | `string` | 码来源环境变量名（动态码由取码脚本写入环境变量，优先于 `fixed_code`） |
+| `verification.fixed_code` | `string` | 固定验证码（测试环境后端固定校验码） |
+| `verification.code_timeout` | `number` | 等待验证码输入框出现（毫秒，默认 10000） |
 
 ---
 

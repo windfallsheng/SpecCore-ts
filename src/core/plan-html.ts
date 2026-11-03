@@ -131,7 +131,7 @@ export function generatePlanHtml(
 <title>SpecCore 执行计划 — ${opts.iteration}</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600');
+@font-face{font-family:"Orbitron";font-style:normal;font-weight:500 900;font-display:swap;src:url("fonts/Orbitron.woff2") format("woff2")}@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;src:url("fonts/JetBrainsMono.woff2") format("woff2")}
 
 :root {
   --bg: #0b1929;

@@ -1,6 +1,6 @@
 /**
  * Code Knowledge Graph — 类型定义
- * v6.90.0: 本地 AST 解析构建代码知识图谱
+ * v8.3.356: 本地 AST 解析构建代码知识图谱
  */
 
 export type NodeType =
@@ -13,7 +13,7 @@ export type NodeType =
   | 'method'
   | 'property'
   | 'enum'
-  // v6.91.0+: 多模态节点
+  // v8.3.356+: 多模态节点
   | 'api_endpoint'
   | 'db_table';
 

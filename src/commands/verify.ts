@@ -21,8 +21,8 @@
 
 import { logger, Spinner } from '../utils/logger';
 import { getDefaultIteration, getIterationDir } from '../core/context';
-import { pathExists, readFile, writeFile, ensureDir } from 'fs-extra';
-import { join, basename, isAbsolute } from 'path';
+import { pathExists, readFile, writeFile, ensureDir, readdir } from 'fs-extra';
+import { join, basename, isAbsolute, dirname } from 'path';
 import { scanTasks, TaskState } from '../core/state';
 import { resolveTask, formatResolveResult } from '../core/resolver';
 import { runVerification, writeVerifyReport, VerifyReport } from '../core/verify-engine';
@@ -103,11 +103,47 @@ interface VerifyOptions {
   baseUrl?: string;
   envFile?: string;
   config?: string;
+  /** v8.3.352+: API 测试缺契约时报错阻断（默认跳过仅告警，防「契约缺失=验证通过」假象） */
+  requireContract?: boolean;
+  // v8.3.350+: AI 浏览器验证模式
+  ai?: boolean;
+  scope?: string;
+  platform?: string;
+  env?: string;
+  aiReport?: string;
+  aiJudge?: string;
 }
 
 export async function verifyCommand(options: VerifyOptions): Promise<void> {
   // v8.3.101+: 向上查找项目根目录（支持在子目录执行）
   const projectRoot = findProjectRoot() || process.cwd();
+
+  // v8.3.353+: CLI 参数归一化（commander 默认值是字符串，不转数字会让 Playwright 报 expected float）
+  if (typeof options.timeout === 'string') options.timeout = Number(options.timeout);
+
+  // v8.3.351+: 测试双线开关（一次读取，AI 验证/冒烟线/剧本分层共用；CLI 显式参数优先于开关）
+  const unifiedConfig = await loadConfig();
+  const testsCfg = unifiedConfig.settings?.tests;
+  const smokeOff = testsCfg?.smoke?.enabled === false;
+
+  // v8.3.350+ AI 模式：生成验证剧本 / 回写 HTML 报告 / 视觉判定兜底（不进入代码验证流程）
+  if (options.ai) {
+    await runAiVerifyMode(options, testsCfg);
+    return;
+  }
+  if (options.aiReport) {
+    await runAiReportMode(options.aiReport);
+    return;
+  }
+  if (options.aiJudge) {
+    await runAiJudgeMode(options.aiJudge, options);
+    return;
+  }
+
+  // 冒烟线已关闭但用户显式要求执行 → 显式参数优先，仅提示配置状态
+  if (smokeOff && (options.ui || options.smokeOnly || options.visualOnly || options.config || options.stage)) {
+    logger.warn('⚠️ 冒烟线已在 settings.tests.smoke.enabled 关闭，本次按显式参数执行');
+  }
 
   // v8.3.60+: 分层测试阶段映射
   if (options.stage) {
@@ -162,7 +198,8 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
     }
 
     const iterDir = await getIterationDir(iteration);
-    const config = await loadConfig();
+    // v8.3.351+: 复用函数开头读取的配置（含 tests 双线开关）
+    const config = unifiedConfig;
     const projectConfig = await loadProjectConfig();
     // v8.3.105+: 加载平台列表用于推断平台名
     const platformList = await parsePlatformList();
@@ -219,15 +256,21 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
 
       // UI 验证（任务绑定，自动检测配置）
       if (shouldRunUIVerify(resolvedQG)) {
-        logger.info(`🔒 质量门禁: UI 验证已启用（项目级${config.quality_gates?.verify_ui?.enabled ? '✅' : '⏭️'} → 任务级${taskQG?.verify_ui?.enabled ? '✅' : '⏭️'} → 命令行${options.ui ? '✅' : '⏭️'}）`);
-        const uiReport = await runUIVerification(task.id, iterDir, options, resolvedQG);
-        if (uiReport) {
-          logger.info('');
-          logUIReport(uiReport);
-          // 如果 UI 验证失败且阈值 strict，阻断后续流程
-          if (!uiReport.summary.passed && resolvedQG.verify_ui.threshold === 'strict') {
-            logger.error('❌ UI 验证失败（strict 模式），阻断执行');
-            return;
+        // v8.3.351+: 冒烟线开关——配置关闭且非命令行显式时跳过自动触发的 UI 验证
+        const cliExplicitUi = Boolean(options.ui || options.smokeOnly || options.visualOnly);
+        if (smokeOff && !cliExplicitUi) {
+          logger.info('⏭️ 冒烟线已在 settings.tests.smoke.enabled 关闭，跳过自动 UI 验证（可用 --ui 显式执行）');
+        } else {
+          logger.info(`🔒 质量门禁: UI 验证已启用（项目级${config.quality_gates?.verify_ui?.enabled ? '✅' : '⏭️'} → 任务级${taskQG?.verify_ui?.enabled ? '✅' : '⏭️'} → 命令行${options.ui ? '✅' : '⏭️'}）`);
+          const uiReport = await runUIVerification(task.id, iterDir, options, resolvedQG);
+          if (uiReport) {
+            logger.info('');
+            logUIReport(uiReport);
+            // 如果 UI 验证失败且阈值 strict，阻断后续流程
+            if (!uiReport.summary.passed && resolvedQG.verify_ui.threshold === 'strict') {
+              logger.error('❌ UI 验证失败（strict 模式），阻断执行');
+              return;
+            }
           }
         }
       }
@@ -367,6 +410,8 @@ function logReport(report: VerifyReport, reportPath: string): void {
 
   if (summary.failed > 0) {
     logger.warn(`   ❌ ${summary.failed} 项检查失败`);
+    // v8.3.353+: 失败必须非零退出（CI 无法感知失败即假通过）
+    process.exitCode = 1;
   }
   if (summary.warnings > 0) {
     logger.info(`   ⚠️ ${summary.warnings} 项警告`);
@@ -668,6 +713,12 @@ export function logUIReport(report: UIVerifyReport): void {
 
   if (summary.failed > 0) {
     logger.warn(`   ❌ ${summary.failed} 项检查失败`);
+    // v8.3.353+: 失败必须非零退出（CI 无法感知失败即假通过）
+    process.exitCode = 1;
+  }
+  // v8.3.352+: 跳过项显式展示——降级跳过不再无声蒸发
+  if (summary.skipped && summary.skipped > 0) {
+    logger.warn(`   ⏭️  ${summary.skipped} 项检查被跳过（未覆盖，详情见跳过清单）`);
   }
 }
 
@@ -745,6 +796,12 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
     }
   }
 
+  // v8.3.352+: 跳过项显式统计——契约缺失/账号未就绪/URL 无法确定等降级不再无声蒸发，
+  // 汇总报告单独列出，配合 --require-contract 可将契约缺失升级为失败。
+  let skippedCount = 0;
+  const skipReasons: string[] = [];
+  let contractFailure = false;
+
   // v8.3.216+: 冒烟前自动装配登录账号（开发完成、即将冒烟的时间点，内存装配 + 透明告知）
   if (mergedConfig.auth) {
     const hint = await extractTestAccountHint(findProjectRoot() || process.cwd());
@@ -756,11 +813,24 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
     logger.info(`\n🔐 冒烟登录账号装配：`);
     logger.info(`   - 账号: ${resolution.username || '（未确定）'}（来源：${resolution.usernameSource}）`);
     logger.info(`   - 密码: ${resolution.password ? '已就绪（' + resolution.password.length + ' 位）' : '（未确定）'}（来源：${resolution.passwordSource}）`);
+    // v8.3.354+: 验证码装配状态透明展示（就绪/降级原因）；未就绪计入 skipped，不假通过
+    if (resolution.verificationNote) {
+      logger.info(`   - 验证码: ${resolution.verificationNote}`);
+    }
     if (resolution.warnings.length > 0) {
       for (const w of resolution.warnings) {
         logger.warn(`   ⚠️ ${w}`);
       }
       logger.warn(`   💡 冒烟时若账号未就绪，登录将自动降级跳过（不影响页面可达性检查）`);
+    }
+    // 账号未就绪 → 登录场景降级跳过：计入 skipped，报告里可见「哪些场景因账号缺失没测」
+    if (!resolution.username || !resolution.password) {
+      skippedCount += 1;
+      skipReasons.push(`登录场景降级跳过（账号未就绪：${!resolution.username ? '用户名缺失' : ''}${!resolution.username && !resolution.password ? '、' : ''}${!resolution.password ? '密码缺失' : ''}）`);
+    } else if (resolution.verificationReady === false) {
+      // 账号密码就绪但验证码未就绪：登录可能卡在验证码环节，同样计入 skipped 显式声明
+      skippedCount += 1;
+      skipReasons.push('登录二次验证降级跳过（验证码码源未就绪：code_env 未设置或 fixed_code/code_selector 缺失）');
     }
   }
 
@@ -780,6 +850,8 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
     const targetUrl = resolveTestUrl(testCase, mergedConfig, options.url);
     if (!targetUrl) {
       logger.warn(`⚠️ 无法确定目标 URL，跳过: ${testCase.name}`);
+      skippedCount += 1;
+      skipReasons.push(`[${testCase.name}] 无法确定目标 URL`);
       continue;
     }
 
@@ -852,18 +924,34 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
           const apiReport = await runApiContractTest(apiSpec);
           if (apiReport) {
             logger.info(`   API 测试完成: ${apiReport.summary.passed}/${apiReport.summary.total} 通过`);
+            if (apiReport.summary.failed > 0) {
+              contractFailure = true;
+            }
           }
         } else {
-          logger.warn(`   ⚠️ API 规格解析失败: ${parseResult.error}`);
+          // v8.3.352+: 解析失败不再静默——计入 skipped；--require-contract 时升级为失败
+          skippedCount += 1;
+          skipReasons.push(`[${testCase.name}] API 规格解析失败: ${parseResult.error}`);
+          if (options.requireContract) contractFailure = true;
+          logger.warn(`   ⚠️ API 规格解析失败，已计入跳过项: ${parseResult.error}`);
         }
       } else {
-        logger.warn(`   ⚠️ 未找到 API_CONTRACT.yaml，跳过 API 测试`);
+        // v8.3.352+: 契约缺失显式计入 skipped（不再只 warn 后当无事发生）；
+        // --require-contract 时将「契约缺失」升级为验证失败，杜绝假通过。
+        skippedCount += 1;
+        skipReasons.push(`[${testCase.name}] 未找到 API_CONTRACT.yaml`);
+        if (options.requireContract) {
+          contractFailure = true;
+          logger.error(`   ❌ 未找到 API_CONTRACT.yaml（--require-contract 已开启，契约缺失按失败处理）`);
+        } else {
+          logger.warn(`   ⚠️ 未找到 API_CONTRACT.yaml，跳过 API 测试（已计入跳过项；--require-contract 可升级为失败）`);
+        }
       }
     }
   }
 
   // 汇总并输出报告
-  if (allReports.length > 0) {
+  if (allReports.length > 0 || skippedCount > 0) {
     const combinedReport: UIVerifyReport = {
       taskId: mergedConfig.name || 'test-config-run',
       timestamp: new Date().toISOString(),
@@ -878,10 +966,27 @@ async function runTestConfigMode(options: VerifyOptions): Promise<void> {
         passed: allReports.reduce((s, r) => s + r.summary.passed, 0),
         failed: allReports.reduce((s, r) => s + r.summary.failed, 0),
         duration: 0,
+        skipped: skippedCount,
       },
     };
 
     logUIReport(combinedReport);
+
+    // v8.3.352+: 跳过项清单单独列出——降级跳过的场景不再无声蒸发
+    if (skippedCount > 0) {
+      logger.warn('');
+      logger.warn(`⏭️  本次共跳过 ${skippedCount} 项检查（非失败，但未覆盖）：`);
+      for (const reason of skipReasons) {
+        logger.warn(`   - ${reason}`);
+      }
+    }
+
+    // v8.3.352+: 契约缺失/解析失败升级为失败时，验证非零退出
+    if (contractFailure) {
+      logger.error('❌ API 契约缺失/解析失败（--require-contract），验证不通过');
+      process.exitCode = 1;
+    }
+
     const htmlPath = await generateHtmlReport(combinedReport, outputDir);
     logger.info(`\n📄 测试报告: ${htmlPath}`);
   }
@@ -899,16 +1004,37 @@ function resolveTestUrl(testCase: TestCase, config: TestConfig, cliUrl?: string)
   return null;
 }
 
-/** 将 TestCase 转换为 VerifySpec */
+/** 将 TestCase 转换为 VerifySpec（v8.3.353+: 优先透传精细场景 verify_scenarios，否则 routes 可达性三件套） */
 function buildVerifySpecFromTestCase(testCase: TestCase, baseUrl: string): VerifySpec {
+  // 精细场景优先：完整执行 22 种动作 + 9 种断言，不再降级为纯可达性
+  if (testCase.verify_scenarios && testCase.verify_scenarios.length > 0) {
+    const scenarios = testCase.verify_scenarios.map((sc) => ({
+      ...sc,
+      // navigate 相对路径归一化：非 http(s):// 开头的 URL 拼上 baseUrl
+      actions: sc.actions.map((a) =>
+        a.type === 'navigate' && typeof a.value === 'string' && !/^https?:\/\//i.test(a.value)
+          ? { ...a, value: baseUrl.replace(/\/$/, '') + a.value }
+          : a
+      ),
+    }));
+    return {
+      name: testCase.name,
+      platform: 'test-config',
+      url: baseUrl,
+      scenarios,
+    };
+  }
+
   const routes = testCase.routes || ['/'];
   const scenarios = routes.map((route) => ({
     name: `navigate-${route}`,
     actions: [
-      { type: 'navigate' as const, value: baseUrl + route },
+      // 完整 URL 不再重复拼接（修复 VERIFY_SPEC 转换后双重前缀隐患）
+      { type: 'navigate' as const, value: /^https?:\/\//i.test(route) ? route : baseUrl + route },
       { type: 'screenshot' as const },
     ],
-    assertions: [{ type: 'visible' as const }],
+    // v8.3.353+: 断言 body 可见（无 selector 的 visible 断言必抛错，属历史 bug）
+    assertions: [{ type: 'visible' as const, selector: 'body' }],
   }));
 
   return {
@@ -1520,4 +1646,275 @@ function inferPlatformNameFromCodePath(
     }
   }
   return undefined;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// v8.3.350+ AI 浏览器验证模式（--ai 生成剧本 / --ai-report 回写报告）
+//
+// 分工原则：CLI 只切片不解析语义——从 020-specs 的 UI_SPEC.md/TEST.md
+// 按标题抓取原文段落组装剧本，语义理解与页面操作交给宿主 AI。
+// ══════════════════════════════════════════════════════════════════════
+
+/** 列出项目下已配置的环境名（排除 .example） */
+async function listEnvironmentNames(projectRoot: string): Promise<string[]> {
+  const envDir = join(projectRoot, '.speccore', 'environments');
+  let entries: string[];
+  try {
+    entries = await readdir(envDir);
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+    .map((f) => f.replace(/\.(yaml|yml)$/, ''))
+    .filter((n) => n && !n.includes('.example'));
+}
+
+/** 环境选择：--env 显式 > 交互选择（TTY）> 默认 staging */
+async function promptForEnv(projectRoot: string, explicit?: string): Promise<string> {
+  if (explicit) return explicit;
+  const names = await listEnvironmentNames(projectRoot);
+  if (names.length === 0) {
+    logger.warn('⚠️ 未找到任何环境配置（.speccore/environments/*.yaml），默认使用环境 "staging"');
+    return 'staging';
+  }
+  if (!process.stdin.isTTY) {
+    const fallback = names.includes('staging') ? 'staging' : names[0];
+    logger.info(`ℹ️ 非交互环境，默认使用环境 "${fallback}"（可用 --env 指定）`);
+    return fallback;
+  }
+  logger.info('可用环境:');
+  names.forEach((n, i) => logger.info(`  [${i + 1}] ${n}`));
+  const answer = await promptUser(`请选择环境（1-${names.length}，回车默认 staging）:`);
+  const idx = parseInt(answer, 10);
+  if (!Number.isNaN(idx) && idx >= 1 && idx <= names.length) return names[idx - 1];
+  if (names.includes(answer)) return answer;
+  return names.includes('staging') ? 'staging' : names[0];
+}
+
+/** --ai：生成验证剧本 + 输出宿主 AI 接管标记 */
+async function runAiVerifyMode(options: VerifyOptions, testsCfg?: { smoke?: { enabled?: boolean }; ai_verify?: { enabled?: boolean }; layered?: { common?: boolean; modules?: boolean } }): Promise<void> {
+  const { resolveScopeUnits, parsePlatformFilter } = await import('../core/ai-verify/scope-resolver');
+  const { generateAiVerifyPlan } = await import('../core/ai-verify/plan-generator');
+  const { loadEnvironmentByNameOrPath } = await import('../core/environment-config');
+
+  // v8.3.351+: AI 验证线开关——显式 --ai 优先，关闭时仅提示
+  if (testsCfg?.ai_verify?.enabled === false) {
+    logger.warn('⚠️ AI 验证线已在 settings.tests.ai_verify.enabled 关闭，本次按显式参数执行');
+  }
+
+  const projectRoot = findProjectRoot() || process.cwd();
+  const iteration = await getDefaultIteration(options.iteration);
+  const iterDir = await getIterationDir(iteration);
+  const env = await promptForEnv(projectRoot, options.env);
+  const platformFilter = parsePlatformFilter(options.platform);
+
+  // 环境配置（environments/{env}.yaml，提供 tests.base_urls）
+  const envConfig = await loadEnvironmentByNameOrPath(env);
+  if (!envConfig) {
+    logger.error(`❌ 无法加载环境配置 "${env}"（.speccore/environments/${env}.yaml）`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // 范围解析：all / deployed / modules:xxx
+  const resolved = await resolveScopeUnits({
+    iterDir,
+    scope: options.scope || 'all',
+    platformFilter: options.platform,
+    projectRoot,
+  }).catch((err: Error) => {
+    logger.error(`❌ ${err.message}`);
+    return null;
+  });
+  if (!resolved) {
+    process.exitCode = 1;
+    return;
+  }
+  for (const w of resolved.warnings) logger.warn(`⚠️ ${w}`);
+  // v8.3.351+: 无功能单元时——公共能力层开启则仅生成公共层，否则才视为无剧本可生成
+  const layeredCfg = testsCfg?.layered;
+  const commonOn = layeredCfg?.common !== false;
+  if (resolved.units.length === 0 && !commonOn) {
+    logger.warn('⚠️ 范围内没有可验证的功能单元（020-specs 为空或过滤后无匹配），且公共能力层已关闭');
+    process.exitCode = 1;
+    return;
+  }
+  if (resolved.units.length === 0) {
+    logger.warn('⚠️ 范围内没有功能单元（020-specs 为空或过滤后无匹配），仅生成公共能力层场景');
+  }
+
+  // 账号配置（v8.3.351+ 账号收敛）：环境内嵌 tests.accounts 为权威源；
+  // 环境文件已声明账号时不生成 accounts.yaml 占位模板（兑底源非必需，避免噪音）。
+  // 环境文件无账号且 accounts.yaml 不存在时才从模板生成示例并提醒填写（已存在不覆盖）。
+  const accountsPath = join(projectRoot, '.speccore', 'tests', 'accounts.yaml');
+  if (!envConfig.tests?.accounts && !(await pathExists(accountsPath))) {
+    const tplPath = join(__dirname, '..', '..', 'templates', 'accounts-example.yaml');
+    if (await pathExists(tplPath)) {
+      await ensureDir(dirname(accountsPath));
+      await writeFile(accountsPath, await readFile(tplPath, 'utf-8'), 'utf-8');
+      logger.warn('⚠️ 已生成账号模板 .speccore/tests/accounts.yaml（占位密码 change-me），请填写真实账号后再执行验证；或直接在 environments/{env}.yaml 的 tests.accounts 声明环境内嵌账号');
+    }
+  }
+
+  // 剧本生成（layered 分层开关透传，缺省全开）
+  const output = await generateAiVerifyPlan({
+    iteration,
+    iterDir,
+    env,
+    envConfig,
+    units: resolved.units,
+    platformFilter,
+    projectRoot,
+    accountsPath,
+    layered: layeredCfg,
+  });
+
+  // 按层统计（公共能力层 → 模块层）
+  const groupStats = output.plan.groups
+    .map((g) => `${g.label}${g.enabled ? ` ${g.scenarios.length} 场景` : '（⏭️ 已关闭）'}`)
+    .join(' | ');
+  logger.success(`✅ AI 验证剧本已生成：${output.plan.scenarios.length} 个场景（${groupStats}）`);
+  logger.info(`   剧本: ${output.planMdPath}`);
+  if (output.plan.skipped.length > 0) {
+    logger.warn(`⚠️ ${output.plan.skipped.length} 个单元被跳过（缺地址/空模板等），详见剧本「跳过项」`);
+  }
+  // 账号密码/用户名使用 ${VAR} 引用但环境变量未设置 → 提醒（不阻断，执行 AI 可按提示从环境读取）
+  for (const h of output.plan.accountEnvVars || []) {
+    if (!h.set) {
+      logger.warn(`⚠️ 账号 ${h.ref} 的 ${h.field} 引用环境变量 ${h.varName}，但当前未设置`);
+    }
+  }
+  logger.info('');
+  logger.info('🤖 执行协议（宿主 AI）:');
+  logger.info(`   1. 读剧本 ${output.planJsonPath}（accountSources 指明账号来源）取账号明文`);
+  logger.info('   2. 按层推进：先公共能力层（入口可达性/登录态/全局导航），全部通过后进模块层；enabled=false 的层跳过');
+  logger.info('   3. 层内按端分批，用 Browser 子代理逐场景视觉执行，结果写 ' + join(output.plan.outDir, 'results.json'));
+  logger.info('   4. 执行 speccore verify --ai-report ' + join(output.plan.outDir, 'results.json') + ' 生成 HTML 报告');
+  logger.info('');
+
+  // 机器可读标记（spec-verify skill 据此接管执行）；账号标记按实际来源输出（v8.3.351+ 账号收敛：
+  // 权威源环境文件 tests.accounts 优先，accounts.yaml 兑底；均无时回退指向兑底路径）
+  console.log(`[SPECCORE_AI_VERIFY: ${output.planJsonPath}]`);
+  for (const src of output.plan.accountSources || []) {
+    console.log(`[SPECCORE_AI_VERIFY_ACCOUNTS: ${src}]`);
+  }
+  if (!output.plan.accountSources || output.plan.accountSources.length === 0) {
+    console.log(`[SPECCORE_AI_VERIFY_ACCOUNTS: ${accountsPath}]`);
+  }
+}
+
+/** --ai-report：读 results.json + 同目录 plan.json → 生成 HTML 报告 */
+async function runAiReportMode(resultsPath: string): Promise<void> {
+  const { parseAiVerifyResults, buildReportContext, generateAiVerifyReport, summarizeResults } =
+    await import('../core/ai-verify/result-parser');
+
+  const results = await parseAiVerifyResults(resultsPath);
+  if (!results) {
+    logger.error(`❌ 无法解析结果文件: ${resultsPath}（需为含 results 数组的 JSON）`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // plan.json 与 results.json 同目录（均为剧本输出目录）
+  const planPath = join(dirname(resultsPath), 'plan.json');
+  if (!(await pathExists(planPath))) {
+    logger.error(`❌ 未找到剧本 plan.json（${planPath}），无法对齐场景`);
+    process.exitCode = 1;
+    return;
+  }
+  let plan: import('../core/ai-verify/types').AiVerifyPlan;
+  try {
+    plan = JSON.parse(await readFile(planPath, 'utf-8'));
+  } catch {
+    logger.error(`❌ 剧本 plan.json 解析失败（${planPath}）`);
+    process.exitCode = 1;
+    return;
+  }
+  // 以 results.json 实际位置为准落盘报告（支持相对路径调用）
+  plan.outDir = dirname(resultsPath);
+
+  const ctx = buildReportContext(plan, results);
+  const reportPath = await generateAiVerifyReport(ctx);
+  const summary = summarizeResults(ctx);
+
+  logger.info('');
+  logger.info(`📊 AI 验证结果摘要（${plan.env} · ${plan.iteration}）:`);
+  logger.info(
+    `   总场景 ${summary.total} | ✅ 通过 ${summary.passed} | ❌ 失败 ${summary.failed} | ⏭️ 跳过 ${summary.skipped} | ⬜ 未执行 ${summary.notRun}`
+  );
+  if (summary.notRun > 0) {
+    logger.warn(`⚠️ ${summary.notRun} 个场景未执行（结果中缺失），报告已标注`);
+  }
+  if (summary.failed > 0) {
+    logger.error(`❌ ${summary.failed} 个场景失败，详情见报告: ${reportPath}`);
+    process.exitCode = 1;
+  } else {
+    logger.success(`✅ 全部场景通过（或跳过），报告: ${reportPath}`);
+  }
+}
+
+/** --ai-judge：视觉判定兜底——对 judged:false 的截图用视觉模型判定，回写后生成报告 */
+async function runAiJudgeMode(resultsPath: string, options: VerifyOptions): Promise<void> {
+  const { parseAiVerifyResults, buildReportContext, generateAiVerifyReport, summarizeResults } =
+    await import('../core/ai-verify/result-parser');
+  const { runAiJudge } = await import('../core/ai-verify/visual-judge');
+
+  const results = await parseAiVerifyResults(resultsPath);
+  if (!results) {
+    logger.error(`❌ 无法解析结果文件: ${resultsPath}（需为含 results 数组的 JSON）`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // plan.json 与 results.json 同目录
+  const planPath = join(dirname(resultsPath), 'plan.json');
+  if (!(await pathExists(planPath))) {
+    logger.error(`❌ 未找到剧本 plan.json（${planPath}），无法获取场景预期结果`);
+    process.exitCode = 1;
+    return;
+  }
+  let plan: import('../core/ai-verify/types').AiVerifyPlan;
+  try {
+    plan = JSON.parse(await readFile(planPath, 'utf-8'));
+  } catch {
+    logger.error(`❌ 剧本 plan.json 解析失败（${planPath}）`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // 视觉模型配置：CLI --visual-model 优先，其次 .speccore.yml quality_gates.verify_ui.visual_model
+  let visualModel: import('../core/quality-gate').VisualModelConfig | undefined;
+  if (options.visualModel) {
+    const parsed = parseVisualModelCli(options.visualModel);
+    // 字符串形式为 provider 名（如 qwen-vl），包装为配置对象
+    visualModel = typeof parsed === 'string'
+      ? { provider: parsed as import('../core/quality-gate').VisualModelConfig['provider'] }
+      : parsed;
+  } else {
+    const cfg = await loadConfig().catch(() => null);
+    visualModel = cfg?.quality_gates?.verify_ui?.visual_model;
+  }
+
+  try {
+    const judgedCount = await runAiJudge(resultsPath, plan, visualModel);
+    if (judgedCount > 0) logger.success(`✅ 视觉判定兜底完成：${judgedCount} 个场景已判定并回写`);
+  } catch (error: any) {
+    logger.error(`❌ 视觉判定兜底失败: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // 判定后重新生成报告
+  const freshResults = await parseAiVerifyResults(resultsPath);
+  if (!freshResults) {
+    process.exitCode = 1;
+    return;
+  }
+  plan.outDir = dirname(resultsPath);
+  const ctx = buildReportContext(plan, freshResults);
+  const reportPath = await generateAiVerifyReport(ctx);
+  const summary = summarizeResults(ctx);
+  logger.info(`📊 报告: ${reportPath}（总 ${summary.total} | 通过 ${summary.passed} | 失败 ${summary.failed} | 跳过 ${summary.skipped} | 未执行 ${summary.notRun}）`);
+  if (summary.failed > 0) process.exitCode = 1;
 }

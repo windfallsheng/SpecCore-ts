@@ -60,6 +60,65 @@ export interface AIContextResult {
 const PROMPTS_DIR = join('.speccore', 'prompts');
 const INDEX_PATH = join('.speccore', 'cache', 'code-structure.json');
 
+/**
+ * 需求注入 AI 的总字符预算（v8.3.366）
+ * 此前需求原文无配额拼接，超大 PRD 会顶爆 token；
+ * 超限时按文档均分配额在段落边界截断，并生成「阅读清单」让 AI 按需 Read 原文。
+ */
+export const REQ_BUDGET_CHARS = 40000;
+
+/** 每文档保底字符数（低于此值不再细分，防止单文档被截成残句） */
+const MIN_CHARS_PER_DOC = 800;
+
+/**
+ * 需求文档预算化拼接：总额内完整拼接，超限则按文档均分配额 + 段落边界截断。
+ * 返回 { section, truncated }：truncated 为被截断文档的「Read 指引」条目。
+ */
+export function buildBudgetedReqSection(
+  reqContents: string[],
+  opts?: { budget?: number; label?: string },
+): { section: string; truncated: { source: string; totalChars: number; keptChars: number }[] } {
+  const budget = opts?.budget ?? REQ_BUDGET_CHARS;
+  const joined = reqContents.join('\n\n---\n\n');
+  if (joined.length <= budget) {
+    return { section: joined, truncated: [] };
+  }
+
+  // 按文档均分配额（每文档保底 MIN_CHARS_PER_DOC，剩余按占比分配）
+  const n = reqContents.length;
+  const reserved = n * MIN_CHARS_PER_DOC;
+  const shareable = Math.max(0, budget - reserved);
+  const perDocQuota = reqContents.map(content => {
+    const base = MIN_CHARS_PER_DOC;
+    const share = Math.floor((content.length / joined.length) * shareable);
+    return base + share;
+  });
+
+  const kept: string[] = [];
+  const truncated: { source: string; totalChars: number; keptChars: number }[] = [];
+  reqContents.forEach((content, i) => {
+    if (content.length <= perDocQuota[i]) {
+      kept.push(content);
+      return;
+    }
+    // 段落边界截断：找配额内的最后一个双换行（章节分隔）
+    let cut = perDocQuota[i];
+    const lastBreak = content.lastIndexOf('\n\n', cut);
+    if (lastBreak > Math.floor(perDocQuota[i] * 0.6)) cut = lastBreak;
+    const source = (content.match(/^## (?:来源: )?(.+)$/m) || [, content.slice(0, 40)])[1]?.trim() || `文档 ${i + 1}`;
+    kept.push(content.slice(0, cut) + `\n\n> ⚠️ 本文档超长已截断（${content.length} 字符 → 保留 ${cut} 字符），完整内容请 Read 原始文件继续分析。`);
+    truncated.push({ source, totalChars: content.length, keptChars: cut });
+  });
+
+  let section = kept.join('\n\n---\n\n');
+  if (truncated.length > 0) {
+    section += `\n\n---\n\n## 📖 需求阅读清单（v8.3.366 配额截断）\n\n`;
+    section += `以下文档超出注入预算，正文已截断，需要详细内容时用 Read 工具读取原始文件：\n\n`;
+    section += truncated.map(t => `- ${t.source}: 共 ${t.totalChars} 字符，已注入前 ${t.keptChars} 字符`).join('\n');
+  }
+  return { section, truncated };
+}
+
 // ── 主入口 ──
 
 export async function generateAIContext(input: AIContextInput): Promise<AIContextResult> {
@@ -188,7 +247,7 @@ ${platformSourceMap}
 ` : ''}
 ## 📋 需求文档
 
-${reqContents.join('\n\n---\n\n') || '_无需求文档_'}
+${buildBudgetedReqSection(reqContents).section || '_无需求文档_'}
 
 ---
 

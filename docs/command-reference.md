@@ -323,7 +323,7 @@ speccore spec-from-source --src backend/src                   # 兼容别名（�
 - `--src, --source <dirs>`：源码目录，多端用逗号分隔（如 `backend/src,admin-web/src`）
 - `--depth <depth>`：分析深度 `quick` / `normal`（默认）/ `deep`
 - `--platform <platform>`：只分析指定端
-- `--out-dir <path>`：产出目录（默认 `.speccore/GLOBAL/requirements`）
+- `--out-dir <path>`：产出目录（默认 `.speccore/GLOBAL/_reverse`，与全局分析 requirements/ 域隔离）
 
 **等价命令**：`speccore global from-source --src <dirs>`
 

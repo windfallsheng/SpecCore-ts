@@ -1,6 +1,6 @@
 /**
  * Code Knowledge Graph — 多模态解析器
- * v6.91.0: 将 API_CONTRACT + SQL Schema 纳入图谱
+ * v8.3.356: 将 API_CONTRACT + SQL Schema 纳入图谱
  */
 import { join } from 'path';
 import { readFile, pathExists } from 'fs-extra';

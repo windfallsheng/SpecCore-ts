@@ -1,6 +1,6 @@
 /**
  * Requirement ↔ Code Graph Linker
- * v6.94.0: 建立需求文档与代码节点之间的关联映射
+ * v8.3.356: 建立需求文档与代码节点之间的关联映射
  */
 import { join } from 'path';
 import { readFile, writeFile, pathExists, readdir } from 'fs-extra';
@@ -60,27 +60,34 @@ async function extractRequirements(projectRoot: string, iteration?: string): Pro
     return results;
   }
 
-  // 扫描需求文档目录
+  // 扫描需求文档目录（迭代层 + 全局层反推需求，v8.3.356+）
   const reqDirs = [
     join(iterDir, '010-requirements', 'features'),
     join(iterDir, '010-requirements', 'converted'),
     join(iterDir, '020-specs'),
+    // 全局层：from-source 反推的候选需求（REQ-*.md + REQUIREMENT.md）
+    join(projectRoot, '.speccore', 'GLOBAL', 'requirements'),
   ];
 
   for (const dir of reqDirs) {
     if (!(await pathExists(dir))) continue;
-    const files = await readdir(dir).catch(() => []);
-    for (const f of files) {
-      if (!f.endsWith('.md')) continue;
-      const filePath = join(dir, f);
-      try {
-        const content = await readFile(filePath, 'utf-8');
-        const { title, keywords } = parseRequirementDoc(content, f);
-        if (keywords.length > 0) {
-          results.push({ file: filePath, title, keywords });
-        }
-      } catch { /* 忽略读取失败 */ }
-    }
+    // 全局层需求目录可能含子目录（按端分），递归扫描
+    const walk = async (d: string): Promise<void> => {
+      const files = await readdir(d, { withFileTypes: true }).catch(() => [] as never[]);
+      for (const f of files as Array<{ name: string; isDirectory(): boolean }>) {
+        const filePath = join(d, f.name);
+        if (f.isDirectory()) { await walk(filePath); continue; }
+        if (!f.name.endsWith('.md')) continue;
+        try {
+          const content = await readFile(filePath, 'utf-8');
+          const { title, keywords } = parseRequirementDoc(content, f.name);
+          if (keywords.length > 0) {
+            results.push({ file: filePath, title, keywords });
+          }
+        } catch { /* 忽略读取失败 */ }
+      }
+    };
+    await walk(dir);
   }
 
   return results;

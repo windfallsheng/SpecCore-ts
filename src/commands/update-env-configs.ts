@@ -4,7 +4,7 @@
  * v8.3.60+
  */
 import { join } from 'path';
-import { pathExists, ensureDir, writeFile, readdir } from 'fs-extra';
+import { pathExists, ensureDir, writeFile, readdir, readFile } from 'fs-extra';
 import { logger } from '../utils/logger';
 import { envDirFor } from '../core/environment-config';
 
@@ -62,6 +62,12 @@ function generateEnvContent(t: EnvTemplate): string {
   return `# =============================================================================
 # SpecCore 环境配置 — ${t.name}（${t.purpose}）
 # =============================================================================
+# 文件作用：单环境的私有配置（分支 / 构建 / 部署 / 测试）。本文件是「项目私有笔记」，
+#   CLI 升级永不覆盖已存在的环境文件——新字段以 staging.yaml.example 为准，按需复制。
+# 字段总览：env / branch / defaults / platforms（构建部署）/
+#   tests.base_urls（端级 URL）/ tests.visual_model（视觉模型）/
+#   tests.accounts（AI 验证线账号）/ tests.auth（冒烟线自动登录）/
+#   stages（分层测试）/ pipeline.test（Pipeline 测试）
 # 支持任意数量的环境，复制本文件修改 env 和 branch 即可新建环境。
 # 典型工作流：
 #   speccore build --env ${t.name} --platform h5
@@ -225,7 +231,19 @@ platforms:
       provider: aliyun-fc               # 提供商：aliyun-fc / aws-lambda / tencent-scf
       target: ws-handler-${t.name}      # 函数名（按环境区分）
 
-# 测试相关配置（与 verify --config 联动）
+# ═════════════════════════════════════════════════════════════════
+# 验证契约（tests 段）—— 与上方部署契约（branch/platforms/stages/pipeline）边界分离
+# ═════════════════════════════════════════════════════════════════
+# 一个环境文件承载两份契约，消费方不同，勿混写：
+#   部署契约（上方）：branch / platforms.build_cmd / platforms.deploy /
+#                    stages / pipeline —— 被 build / deploy / pipeline 消费
+#   验证契约（本段）：tests.base_urls / tests.visual_model / tests.auth /
+#                    tests.accounts —— 被 verify 冒烟线与 AI 验证线消费
+# 验证契约各字段消费方：
+#   base_urls    → 冒烟线 + AI 验证线的端地址（AI 剧本按此生成入口可达性场景）
+#   visual_model → 视觉判定兑底（--ai-judge 只截图也能断言）
+#   auth         → 冒烟线自动登录（selector + credentials）
+#   accounts     → AI 验证线账号权威源（登录态/模块层场景用，v8.3.351+）
 # 键名须与上方 platforms 的端名一致（示例：h5 / admin-web / order-api）
 tests:
   base_urls:
@@ -237,6 +255,33 @@ tests:
     provider: qwen-vl
     model: qwen-vl-max
     timeout: 60000
+
+  # ── AI 验证线账号（v8.3.351+ 权威源）──
+  # 供 speccore verify --ai 生成验证剧本后，宿主 AI 取明文登录各端。
+  # 账号名即引用名（剧本只引用如 admin，不复制密码）。
+  # 选择规则（三选一，先到先得）：
+  #   1. platforms 列表包含目标端的账号（端匹配，优先）
+  #   2. 未写 platforms 的账号（不限端兜底）
+  #   3. 本段第一个账号
+  # platforms 里的端名必须与上方 platforms / base_urls 键一致（如 admin-web）。
+  # password 支持 \${ENV_VAR} 引用，明文不入库不进 git；
+  #   执行时如 ${t.name.toUpperCase()}_ADMIN_PASSWORD=xxx speccore verify --ai --env ${t.name}。
+  # 本段缺失时兑底 .speccore/tests/accounts.yaml 的 {env} 分组（全局兜底，
+  #   多环境共享账号时用；该文件建议加入 .gitignore）。
+  # 登录需二次验证时加 verification 块，只写取码通道不写码：
+  #   verification:
+  #     type: sms      # sms 短信 / totp 动态令牌 / graphic 图形码 / email 邮箱
+  #     note: 验证码发送至测试手机 138****1234，从短信网关平台读取（勿落盘）
+  accounts:
+    admin:
+      username: admin
+      password: "\${${t.name.toUpperCase()}_ADMIN_PASSWORD}"   # 环境变量引用：执行时从环境变量取明文
+      note: 管理员（全功能，admin-web 等管理端）
+      platforms: [admin-web]                    # 可选：限定该账号适用的端
+    user:
+      username: testuser
+      password: "\${${t.name.toUpperCase()}_USER_PASSWORD}"
+      note: 普通用户（下单/查询，h5 等 C 端）
 
   # ── 测试登录账号（v8.3.215+）──
   # 冒烟/视觉测试访问受保护页面（如 Admin 后台）前自动登录。
@@ -637,7 +682,9 @@ export async function initEnvironmentConfigs(projectRoot: string): Promise<strin
     const examplePath = join(envDir, 'staging.yaml.example');
     // v8.3.348+: 示例取 staging 模板（ENV_TEMPLATES[3]）——此前误用 test 模板，
     // 文件名 staging 内容却是 test，名实不符
-    const exampleContent = generateEnvContent(ENV_TEMPLATES[3]) + '\n# 本文件为示例，可复制为 staging.yaml 后修改使用\n';
+    // v8.3.367+: 尾注写明「教科书示例 / 私有笔记」定位——example 随版本刷新，
+    // 用户环境文件永不覆盖，新字段以本文件为准按需复制
+    const exampleContent = generateEnvContent(ENV_TEMPLATES[3]) + '\n# ═══════════════════════════════════════════════════════════════\n# 本文件为「教科书示例」：随版本更新，每次升级（config --upgrade）自动刷新。\n# 你自己手写的 {env}.yaml（如 staging.yaml）是「私有笔记」：升级永不覆盖，\n# 新字段以本文件为准，按需复制到你自己的环境文件中。\n# 复制使用: cp .speccore/environments/staging.yaml.example .speccore/environments/staging.yaml\n# ═══════════════════════════════════════════════════════════════\n';
     await writeFile(examplePath, exampleContent, 'utf-8');
     created.push('.speccore/environments/staging.yaml.example');
 
@@ -955,6 +1002,17 @@ export async function initTestConfigs(projectRoot: string): Promise<string[]> {
       const filePath = join(testsDir, `${t.name}.yaml`);
       await writeFile(filePath, t.content, 'utf-8');
       created.push(`.speccore/tests/${t.name}.yaml`);
+    }
+  }
+
+  // v8.3.350+: AI 浏览器验证账号配置（已存在不覆盖，保留用户填写的密码）
+  const accountsPath = join(testsDir, 'accounts.yaml');
+  if (!(await pathExists(accountsPath))) {
+    const accountsSrc = join(__dirname, '..', '..', 'templates', 'accounts-example.yaml');
+    if (await pathExists(accountsSrc)) {
+      const accountsContent = await readFile(accountsSrc, 'utf-8');
+      await writeFile(accountsPath, accountsContent, 'utf-8');
+      created.push('.speccore/tests/accounts.yaml');
     }
   }
 

@@ -75,7 +75,8 @@ export function generateSpecFromPages(
       name: scenarioName,
       description: `页面: ${page.filePath}`,
       actions: [
-        { type: 'navigate' },
+        // v8.3.353+: navigate 补 value（缺 value 时执行引擎必抛错，属历史 bug）
+        { type: 'navigate', value: options.baseUrl + page.routePath },
         { type: 'wait', delay: 1000 },
       ],
       assertions: [
@@ -110,7 +111,8 @@ function createScenarioForRoute(route: DiscoveredRoute, baseUrl: string): Scenar
     name: `${moduleName} - ${displayName}`,
     description: `路由: ${path}`,
     actions: [
-      { type: 'navigate' },
+      // v8.3.353+: navigate 补 value（缺 value 时执行引擎必抛错，属历史 bug）
+      { type: 'navigate', value: baseUrl + path },
       { type: 'wait', delay: 1000 },
     ],
     assertions: [
@@ -205,6 +207,12 @@ function specToYaml(spec: VerifySpec): string {
  * 流程步骤命中元素清单即装配真实 data-testid，页面断言优先用页面容器 testid，
  * 实现「生成阶段元素约定 → 冒烟配置自动装配」的闭环。
  */
+/**
+ * 点击类动词模式（v8.3.355+ 动作语义提取）：命中元素清单且步骤含这些动词时生成 click 动作。
+ * 刻意避开单字「点」（「重点」「地点」会误判）；输入/选择类动作需要值参数，不在此列。
+ */
+const CLICK_VERB_PATTERN = /点击|单击|点选|按下|勾选|选中|触发|提交|保存|删除|取消|关闭|确认|返回|刷新|搜索|查询/;
+
 export function generateFlowScenariosFromSpec(
   specText: string,
   _options: SpecGenerationOptions,
@@ -222,7 +230,9 @@ export function generateFlowScenariosFromSpec(
   const matchElement = (step: string): string | null => {
     // v8.3.295+: elementInfo 结构防御（elements 缺失时优雅降级，不抛 TypeError）
     if (!elementInfo || !elementInfo.elements) return null;
-    const cleaned = step.replace(/[（(][^)）]*[)）]/g, '').trim();
+    // v8.3.355+: 去括号内容后再去书名号/引号（「点击「新增」按钮」→「点击新增按钮」），
+    // 提升步骤文本与元素名（如「新增按钮」）的字面命中率
+    const cleaned = step.replace(/[（(][^)）]*[)）]/g, '').replace(/[「」『』"“”]/g, '').trim();
     let best: [number, string] | null = null;
     const consider = (name: string, tid: string) => {
       if (!best || name.length < best[0]) best = [name.length, tid];
@@ -258,6 +268,27 @@ export function generateFlowScenariosFromSpec(
 
     // v8.3.293+: 命中元素清单时装配真实 selector
     const elementTestId = matchElement(step);
+
+    // v8.3.355+: 动作语义提取——命中元素清单且步骤含点击类动词时，生成真实 click 动作。
+    // 点击后断言页面存活（body），不断言原元素可见（关闭/删除类点击后元素会消失，属误报）；
+    // 输入/选择类步骤需要值参数，不自动生成（宁可少生成，不生成错的）——维持可见性断言。
+    const isClickStep = !!elementTestId && CLICK_VERB_PATTERN.test(step);
+    if (isClickStep) {
+      scenarios.push({
+        name: `流程-${step}`,
+        description: '流程级场景（点击动作 + 元素 selector 按 UI_SPEC 元素标识清单自动装配）',
+        actions: [
+          { type: 'navigate' },
+          { type: 'wait', delay: 800 },
+          { type: 'click', selector: `[data-testid="${elementTestId}"]` },
+        ],
+        assertions: [
+          { type: 'visible', selector: 'body', description: `点击「${step}」后页面存活（未崩溃）` },
+        ],
+      });
+      return;
+    }
+
     const assertions = elementTestId
       ? [
           { type: 'visible' as const, selector: `[data-testid="${elementTestId}"]`, description: `${step}元素可见（按 UI_SPEC 元素清单装配）` },
@@ -334,7 +365,46 @@ export function generateFlowScenariosFromSpec(
     }
   }
 
+  // v8.3.353+: 验收用例表格「操作步骤」列 → 流程场景（表格是好的冒烟素材，命中元素清单即装配）
+  for (const step of extractTableOperationSteps(specText)) {
+    pushScenario(step.replace(/^[\d.、\-*>\s]+/, '').trim(), step);
+  }
+
   return scenarios;
+}
+
+/**
+ * 提取验收用例表格「操作步骤」列（v8.3.353+）
+ *
+ * TEST.md 验收表格是好的冒烟/AI 验证素材，但列语义多变，提取策略防御式收紧：
+ * 仅精确匹配列头「操作步骤/测试步骤/操作/步骤」才提取；占位单元格与分隔行自动跳过。
+ */
+export function extractTableOperationSteps(markdown: string): string[] {
+  const steps: string[] = [];
+  let opCol = -1;
+
+  const splitRow = (line: string): string[] =>
+    line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+
+  for (const rawLine of markdown.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line.startsWith('|') || /^\|[\s:\-|]+\|$/.test(line)) continue;
+
+    const cells = splitRow(line);
+    // 新表头（精确匹配操作步骤类列名）：重置列定位，兼容多表
+    const headerCol = cells.findIndex((c) => /^(操作步骤|测试步骤|操作|步骤)$/.test(c));
+    if (headerCol >= 0) {
+      opCol = headerCol;
+      continue;
+    }
+    if (opCol < 0) continue;
+
+    const cell = (cells[opCol] || '').replace(/<br\s*\/?>/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (cell && !/^[-—–]{1,3}$/.test(cell)) {
+      steps.push(cell);
+    }
+  }
+  return steps;
 }
 
 /**

@@ -156,6 +156,26 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
     }
     lockAcquired = true;
 
+    // v8.3.357+: 批次执行前源码图谱保鲜（execute 链路缺口补齐）
+    // 源码图谱此前只在 analyze 前同步 + reindex 全量重建，批次执行中源码在变，
+    // execute 拿旧图会误导实现 AI（照已删除的接口写代码）。此处按同源文件列表增量同步一次。
+    try {
+      const { buildCodeKnowledgeGraphIncremental } = await import('../core/code-graph');
+      const { collectSourceFiles, discoverCodeDirs } = await import('../core/reindex-engine');
+      const codeDirs = await discoverCodeDirs(process.cwd());
+      if (codeDirs.length > 0) {
+        const files = await collectSourceFiles(codeDirs);
+        if (files.length > 0) {
+          const cg = await buildCodeKnowledgeGraphIncremental({
+            projectRoot: process.cwd(),
+            projectName: 'Project',
+            preScannedFiles: files,
+          });
+          logger.info(`🧩 源码图谱已保鲜: ${cg.nodes.length} 节点 / ${cg.edges.length} 边`);
+        }
+      }
+    } catch { /* 图谱保鲜失败不阻断执行 */ }
+
     // ── --list-pending: 列出待执行任务清单（拓扑排序）──
     if (options.listPending) {
       await listPendingTasks(iteration, options);
@@ -402,6 +422,8 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
         }));
         const html = generatePlanHtml(htmlData, { version, iteration, planName });
         await writeFile(join(planDir, 'speccore-plan.html'), html, 'utf-8');
+        const { ensureHtmlAssets } = await import('../core/page-bundle');
+        await ensureHtmlAssets(planDir);
 
         logger.info(`📝 计划已生成: 000-overview/plans/${planId}/`);
       }

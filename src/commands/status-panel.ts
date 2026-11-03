@@ -2,7 +2,7 @@
  * status-panel — IDE 风格侧栏状态（实时项目状态一览）
  */
 import { readFile, pathExists, readdir, writeFile, ensureDir } from 'fs-extra';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { logger } from '../utils/logger';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
 import { getDefaultIteration } from '../core/context';
@@ -177,6 +177,13 @@ export async function statusPanelCommand(options: StatusPanelOptions = {}): Prom
     logger.info('│ 状态: 未初始化'.padEnd(47) + '│');
     logger.info('├──────────────────────────────────────────────┤');
     logger.info('│ 下一步: speccore init'.padEnd(47) + '│');
+  }
+
+  // v8.3.361+: 图谱入口——面板常驻 graph.html 链接（reindex 生成后才存在，随产随显）
+  const graphPage = join(process.cwd(), '.speccore', 'code-graph', 'graph.html');
+  if (await pathExists(graphPage)) {
+    logger.info('├──────────────────────────────────────────────┤');
+    logger.info(`│ 🧩 图谱: .speccore/code-graph/graph.html`.padEnd(47) + '│');
   }
   
   logger.info('└──────────────────────────────────────────────┘');
@@ -615,6 +622,8 @@ async function exportStatus(
     const outPath = join(process.cwd(), 'outputs', 'dashboard-iteration-' + projectConfig.project.name + '.html');
     await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outPath, buildHtmlDashboard(data));
+    const { ensureHtmlAssets } = await import('../core/page-bundle');
+    await ensureHtmlAssets(dirname(outPath));
     logger.info(`✅ 迭代看板已生成: ${outPath}`);
     process.stdout.write(`[SPECCORE_DASHBOARD: ${outPath}]\n`);
   }
@@ -777,7 +786,7 @@ function buildHtmlDashboard(data: any): string {
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SpecCore — ${data.project}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@font-face{font-family:"Orbitron";font-style:normal;font-weight:500 900;font-display:swap;src:url("fonts/Orbitron.woff2") format("woff2")}@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;src:url("fonts/JetBrainsMono.woff2") format("woff2")}
 [data-theme="cyber"]{--cyan:#00f0ff;--blue:#3b82f6;--green:#00ff88;--purple:#a78bfa;--orange:#f59e0b;--bg:#060b14;--card:rgba(8,16,32,.85);--border:rgba(0,240,255,.12);--text:#c4d5e7;--muted:#4a5568;--surface:rgba(17,25,40,.7);--hover:rgba(0,240,255,.02)}
 [data-theme="light"]{--cyan:#2563eb;--blue:#3b82f6;--green:#059669;--purple:#7c3aed;--orange:#d97706;--bg:#f8fafc;--card:rgba(255,255,255,.95);--border:rgba(0,0,0,.08);--text:#1e293b;--muted:#94a3b8;--surface:rgba(255,255,255,.95);--hover:rgba(37,99,235,.02)}
 [data-theme="github"]{--cyan:#2da44e;--blue:#0969da;--green:#1a7f37;--purple:#8250df;--orange:#cf222e;--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--surface:#161b22;--hover:rgba(45,164,78,.05)}

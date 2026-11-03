@@ -1,6 +1,6 @@
 /**
  * Code Knowledge Graph — GRAPH_REPORT.md 生成器
- * v6.90.0
+ * v8.3.356
  */
 import type { CodeGraph } from './types';
 
@@ -15,11 +15,15 @@ export function generateGraphReport(graph: CodeGraph): string {
   lines.push(`> Confidence: ${m.extractedEdges} EXTRACTED | ${m.inferredEdges} INFERRED`);
   lines.push('');
 
+  // v8.3.356+: id→节点 Map 索引（原实现逐边/逐成员 nodes.find，
+  // 节点数过万时全量过滤再切片浪费百亿次扫描）
+  const idToNode = new Map(graph.nodes.map(n => [n.id, n]));
+
   // 1. God Nodes
   lines.push('## 🔥 God Nodes (Most Connected)');
   lines.push('');
   const godNodeDetails = graph.godNodes
-    .map(id => graph.nodes.find(n => n.id === id))
+    .map(id => idToNode.get(id))
     .filter(Boolean);
   for (const n of godNodeDetails.slice(0, 15)) {
     lines.push(`- **${n!.name}** (${n!.type}) — degree: ${n!.degree}, file: \`${n!.filePath}\``);
@@ -33,7 +37,7 @@ export function generateGraphReport(graph: CodeGraph): string {
     lines.push(`### Community ${comm.id}: ${comm.label}`);
     lines.push(`- Nodes: ${comm.nodes.length} | Density: ${(comm.density * 100).toFixed(1)}%`);
     const sampleNodes = comm.nodes
-      .map(id => graph.nodes.find(n => n.id === id))
+      .map(id => idToNode.get(id))
       .filter(Boolean)
       .slice(0, 8);
     lines.push(`- Key members: ${sampleNodes.map(n => n!.name).join(', ')}${comm.nodes.length > 8 ? '...' : ''}`);
@@ -43,18 +47,22 @@ export function generateGraphReport(graph: CodeGraph): string {
   // 3. Cross-community Bridges
   lines.push('## 🔗 Cross-Community Bridges');
   lines.push('');
-  const bridgeEdges = graph.edges.filter(e => {
-    const s = graph.nodes.find(n => n.id === e.source);
-    const t = graph.nodes.find(n => n.id === e.target);
-    return s && t && s.community !== undefined && t.community !== undefined && s.community !== t.community;
-  }).slice(0, 15);
+  const bridgeEdges: typeof graph.edges = [];
+  for (const e of graph.edges) {
+    if (bridgeEdges.length >= 15) break; // 只取前 15 条，无需全量过滤
+    const s = idToNode.get(e.source);
+    const t = idToNode.get(e.target);
+    if (s && t && s.community !== undefined && t.community !== undefined && s.community !== t.community) {
+      bridgeEdges.push(e);
+    }
+  }
 
   if (bridgeEdges.length === 0) {
     lines.push('No significant cross-community bridges detected.');
   } else {
     for (const e of bridgeEdges) {
-      const s = graph.nodes.find(n => n.id === e.source);
-      const t = graph.nodes.find(n => n.id === e.target);
+      const s = idToNode.get(e.source);
+      const t = idToNode.get(e.target);
       lines.push(`- \`${s?.name}\` [${e.type}] → \`${t?.name}\` (${e.confidence})`);
     }
   }
@@ -68,7 +76,7 @@ export function generateGraphReport(graph: CodeGraph): string {
     lines.push(`- "How does \`${topComm.label}\` subsystem interact with other modules?"`);
   }
   if (graph.godNodes[0]) {
-    const topGod = graph.nodes.find(n => n.id === graph.godNodes[0]);
+    const topGod = idToNode.get(graph.godNodes[0]);
     lines.push(`- "What depends on \`${topGod?.name}\` and why is it a god node?"`);
   }
   const deepestDir = findDeepestDir(graph.nodes);

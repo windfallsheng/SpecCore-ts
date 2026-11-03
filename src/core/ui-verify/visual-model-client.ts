@@ -43,6 +43,8 @@ export async function callVisualModel(
     currentImageBase64: string;
     baselineImageBase64?: string;
     threshold: 'strict' | 'normal' | 'loose';
+    /** 自定义判定 prompt（v8.3.350+）：提供时替代内置 UI 质量扫描/对比 prompt（业务断言等场景） */
+    customPrompt?: string;
   }
 ): Promise<VisualModelResult> {
   const provider = config.provider || 'qwen-vl';
@@ -72,6 +74,7 @@ async function callQwenVL(
     currentImageBase64: string;
     baselineImageBase64?: string;
     threshold: 'strict' | 'normal' | 'loose';
+    customPrompt?: string;
   }
 ): Promise<VisualModelResult> {
   const apiKey = config.apiKey || process.env.DASHSCOPE_API_KEY;
@@ -83,7 +86,7 @@ async function callQwenVL(
   const endpoint = config.endpoint || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
   const timeout = config.timeout || 60000;
 
-  const prompt = buildPrompt(options.scenarioName, options.baselineImageBase64 ? 'compare' : 'single', options.threshold);
+  const prompt = options.customPrompt || buildPrompt(options.scenarioName, options.baselineImageBase64 ? 'compare' : 'single', options.threshold);
 
   const messages: any[] = [
     {
@@ -165,6 +168,7 @@ async function callOpenAI(
     currentImageBase64: string;
     baselineImageBase64?: string;
     threshold: 'strict' | 'normal' | 'loose';
+    customPrompt?: string;
   }
 ): Promise<VisualModelResult> {
   const apiKey = config.apiKey || process.env.OPENAI_API_KEY;
@@ -176,7 +180,7 @@ async function callOpenAI(
   const endpoint = config.endpoint || 'https://api.openai.com/v1/chat/completions';
   const timeout = config.timeout || 60000;
 
-  const prompt = buildPrompt(options.scenarioName, options.baselineImageBase64 ? 'compare' : 'single', options.threshold);
+  const prompt = options.customPrompt || buildPrompt(options.scenarioName, options.baselineImageBase64 ? 'compare' : 'single', options.threshold);
 
   const content: any[] = [
     { type: 'text', text: prompt },
@@ -244,6 +248,7 @@ async function callAnthropic(
     currentImageBase64: string;
     baselineImageBase64?: string;
     threshold: 'strict' | 'normal' | 'loose';
+    customPrompt?: string;
   }
 ): Promise<VisualModelResult> {
   const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY;
@@ -255,7 +260,7 @@ async function callAnthropic(
   const endpoint = config.endpoint || 'https://api.anthropic.com/v1/messages';
   const timeout = config.timeout || 60000;
 
-  const prompt = buildPrompt(options.scenarioName, options.baselineImageBase64 ? 'compare' : 'single', options.threshold);
+  const prompt = options.customPrompt || buildPrompt(options.scenarioName, options.baselineImageBase64 ? 'compare' : 'single', options.threshold);
 
   const content: any[] = [
     { type: 'text', text: prompt },
@@ -331,6 +336,7 @@ async function callLocalModel(
     currentImageBase64: string;
     baselineImageBase64?: string;
     threshold: 'strict' | 'normal' | 'loose';
+    customPrompt?: string;
   }
 ): Promise<VisualModelResult> {
   const endpoint = config.endpoint || 'http://localhost:8000/v1/chat/completions';
@@ -339,7 +345,7 @@ async function callLocalModel(
 
   logger.info(`    🤖 调用本地模型: ${endpoint}`);
 
-  const prompt = buildPrompt(options.scenarioName, options.baselineImageBase64 ? 'compare' : 'single', options.threshold);
+  const prompt = options.customPrompt || buildPrompt(options.scenarioName, options.baselineImageBase64 ? 'compare' : 'single', options.threshold);
 
   const messages: any[] = [
     {

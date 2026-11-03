@@ -87,6 +87,13 @@ outputs/*.md
 # 测试迭代目录（测试时生成，勿提交）
 Iteration-002-test-feature-module/
 Iteration-003-test-doc-trim/
+Iteration-004-clarify-check/
+
+# 代码图谱运行时产物（reindex/graph 生成）
+.speccore/code-graph/.graph-state.json
+.speccore/code-graph/REQ_CODE_LINK.json
+.speccore/code-graph/*.png
+.speccore/code-graph/vis-network.min.js
 
 # 验证/冒烟测试产物
 reports/

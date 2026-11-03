@@ -1,6 +1,6 @@
 /**
  * Code Knowledge Graph — AST 解析器
- * v6.90.0: 基于 TypeScript 编译器 API 的本地确定性解析
+ * v8.3.356: 基于 TypeScript 编译器 API 的本地确定性解析
  *
  * 零 LLM Token 消耗，代码不出本机。
  */

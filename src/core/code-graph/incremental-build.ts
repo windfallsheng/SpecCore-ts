@@ -1,6 +1,6 @@
 /**
  * Code Knowledge Graph — 增量构建引擎
- * v6.94.0: 基于文件 mtime 的增量更新，避免全量重扫
+ * v8.3.356: 基于文件 mtime 的增量更新，避免全量重扫
  */
 import { join, relative } from 'path';
 import { readFile, writeFile, pathExists, stat, ensureDir } from 'fs-extra';
@@ -127,16 +127,18 @@ function filterUnchangedGraph(
     return !changedSet.has(relPath) && !deletedSet.has(relPath);
   });
 
-  const keepNodeIds = new Set(keepNodes.map(n => n.id));
+  // v8.3.358+: id→节点 Map 索引（原嵌套 nodes.find 对每条边 O(N)，37k 边 × 17k 节点会爆炸）
+  const nodeById = new Map(existingGraph.nodes.map(n => [n.id, n]));
   const keepEdges = existingGraph.edges.filter(e => {
-    // 保留两端都在未变化文件中的边
-    const sourceNode = existingGraph.nodes.find(n => n.id === e.source);
-    const targetNode = existingGraph.nodes.find(n => n.id === e.target);
+    // 只丢「端点文件被删除」的边；变化文件的旧边保留——
+    // 新解析若替换/删除了节点，悬空边由 buildCodeGraph 统一过滤，
+    // 避免「未变文件 ↔ 变化文件」的边永久丢失（旧实现按变化文件整体丢弃）
+    const sourceNode = nodeById.get(e.source);
+    const targetNode = nodeById.get(e.target);
     if (!sourceNode || !targetNode) return false;
     const sRel = relative(projectRoot, sourceNode.filePath);
     const tRel = relative(projectRoot, targetNode.filePath);
-    return !changedSet.has(sRel) && !deletedSet.has(sRel) &&
-           !changedSet.has(tRel) && !deletedSet.has(tRel);
+    return !deletedSet.has(sRel) && !deletedSet.has(tRel);
   });
 
   return { nodes: keepNodes, edges: keepEdges };
@@ -203,20 +205,13 @@ export async function buildCodeKnowledgeGraphIncremental(
       existingGraph, changedFiles, deletedFiles, projectRoot
     );
     mergedNodes = [...keepNodes, ...newNodes, ...mmNodes];
-    mergedEdges = [...keepEdges, ...newEdges, ...mmEdges];
-    // 去重（基于节点 id）
+    // 新边在前：buildCodeGraph 去重时优先新解析的边（同 key 旧边被覆盖）
+    mergedEdges = [...newEdges, ...keepEdges, ...mmEdges];
+    // 节点去重（基于节点 id）；边去重/悬空边过滤由 buildCodeGraph 统一处理（v8.3.358+）
     const nodeIdSet = new Set<string>();
     mergedNodes = mergedNodes.filter(n => {
       if (nodeIdSet.has(n.id)) return false;
       nodeIdSet.add(n.id);
-      return true;
-    });
-    // 边去重（基于 source+target+type）
-    const edgeKeySet = new Set<string>();
-    mergedEdges = mergedEdges.filter(e => {
-      const key = `${e.source}|${e.target}|${e.type}`;
-      if (edgeKeySet.has(key)) return false;
-      edgeKeySet.add(key);
       return true;
     });
   } else {
@@ -240,7 +235,7 @@ export async function buildCodeKnowledgeGraphIncremental(
   await writeFile(join(outDir, 'GRAPH_REPORT.md'), generateGraphReport(graph));
   logger.info('   ✅ GRAPH_REPORT.md');
 
-  await writeFile(join(outDir, 'graph.html'), buildCodeGraphHtml(graph));
+  await writeFile(join(outDir, 'graph.html'), await buildCodeGraphHtml(graph, projectRoot));
   logger.info('   ✅ graph.html');
 
   // 保存状态

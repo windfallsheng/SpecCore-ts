@@ -1,6 +1,6 @@
 ---
 name: spec-unitize
-description: 切分需求专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（输入文件格式：.md 可直接切、.docx/.pdf 先 doc2spec 转换；端名须与 CONSTITUTION.md 端列表一致；重切会覆盖旧切片；支持 --titles 仅切指定标题章节、--files 批量多文档各自挂标题组 a.md=端@标题1|标题2），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。
+description: 切分需求专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（输入文件格式：.md 可直接切、.docx/.pdf 先 doc2spec 转换；端名须与 CONSTITUTION.md 端列表一致；重切会覆盖旧切片；支持 --titles 仅切指定标题章节、--files 批量多文档各自挂标题组 a.md=端@标题1|标题2），参数缺失时输出交互式提示（参数说明 + 使用示例）。不影响 speccore ask 的意图识别能力。切分后目录名必须走英译流程（auto 默认，LLM 英译优先、宿主 AI 接力、拼音仅兜底），禁止主动传 --translate-en off；CLI 输出 [SPECCORE_PROMPT] 时宿主 AI 必须逐条翻译回传续跑（Windows 用 --translate-response-file 传参）。
 ---
 ## ⛔ 铁律: 分析前必须先切分功能单元，禁止跳过
 1. 输入 .md 直接切分；.docx/.pdf 先 speccore doc2spec 转换

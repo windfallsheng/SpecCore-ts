@@ -63,6 +63,10 @@ export const SYNONYM_GROUPS: string[][] = [
   ['ui', '页面'],
   ['backend', 'server', 'service', 'services', '后端', '服务端'],
   ['interceptor', 'interceptors', 'middleware', 'guard', 'guards', 'pipe', 'pipes', 'filter', 'filters', '拦截器', '中间件', '守卫', '管道'],
+  // v8.3.366: 检索链路实测暴露的边际缺口——「分析/迭代」无英文映射，
+  // 中文 query 命中不了 analyze/iteration 代码符号与文档块
+  ['analysis', 'analyze', 'analytics', 'analyzer', '分析', '解析'],
+  ['iteration', 'iterations', '迭代', '期次'],
 ];
 
 /** 扩展关键词的同义词集合 */

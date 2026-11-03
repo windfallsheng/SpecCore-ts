@@ -12,9 +12,9 @@
  *   - 支持最大修复轮次控制（默认 2 轮）
  */
 import { readFile, writeFile, pathExists, ensureDir, readdir } from 'fs-extra';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { logger } from '../utils/logger';
-import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, parseFeatureList } from './spec-paths';
+import { GLOBAL_SPECS_DIR, GLOBAL_SPEC_FILES, readFeatureDirs } from './spec-paths';
 
 // ================================================================
 // 类型定义
@@ -338,6 +338,12 @@ export async function generateQualityAudit(
   platforms: string[],
   maxRounds: number = 2,
 ): Promise<QualityAuditResult | null> {
+  // v8.3.352+: 孤儿目录过滤——features 重切（单元改名/删除）后，020-specs 下旧单元
+  // 目录残留；analyze 已 warn 提示迁移/删除，此处不再把孤儿当功能模块审计（噪音污染报告）。
+  // 用 readFeatureDirs（只读 features/ 目录名），而非 parseFeatureList 的 .md 文件名兑底——
+  // 老项目无 features/ 时清单为空，过滤自然关闭。
+  let featureUnits: string[] = [];
+  try { featureUnits = await readFeatureDirs(join(dirname(specDir), '010-requirements', 'features')); } catch { /* 无清单则不过滤 */ }
   // 全局文档（在 overview/ 下）
   const globalDocTypes = ['REQUIREMENT.md', 'ANALYSIS.md'];
   // 端专属文档（在各端目录中）
@@ -358,8 +364,11 @@ export async function generateQualityAudit(
   try {
     const entries = await readdir(specDir, { withFileTypes: true });
     const knownSystemDirs = new Set(['sources', 'assets', 'prototypes', 'converted', 'features', 'bugs', 'refactors', 'research', 'staging', 'platforms', 'snapshots', GLOBAL_SPECS_DIR]);
+    let orphanSkipped = 0;
     for (const e of entries) {
       if (!e.isDirectory() || e.name.startsWith('_') || e.name.startsWith('.') || knownSystemDirs.has(e.name)) continue;
+      // v8.3.352+: 孤儿目录不作为功能模块审计（features 清单非空时按清单过滤）
+      if (featureUnits.length > 0 && !featureUnits.includes(e.name)) { orphanSkipped++; continue; }
       // e.name 是功能模块名
       const featureDir = join(specDir, e.name);
       const subEntries = await readdir(featureDir, { withFileTypes: true });
@@ -375,6 +384,9 @@ export async function generateQualityAudit(
           allResults.push(result);
         }
       }
+    }
+    if (orphanSkipped > 0) {
+      logger.info(`   🧹 质量审计跳过 ${orphanSkipped} 个孤儿目录（与功能单元清单不对应的旧产物，analyze 已提示）`);
     }
   } catch { /* 目录不存在，跳过 */ }
 

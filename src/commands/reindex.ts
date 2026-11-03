@@ -7,6 +7,8 @@
  *   speccore reindex --iteration Q2  # 指定迭代
  */
 
+import { join } from 'path';
+import { existsSync } from 'fs';
 import { logger, Spinner } from '../utils/logger';
 import { runReindex, ReindexResult } from '../core/reindex-engine';
 
@@ -65,6 +67,28 @@ function printReport(result: ReindexResult, checkOnly: boolean): void {
     logger.info(`   🔗 关系: ${result.knowledgeGraph.relations} 条`);
     logger.info(`   💾 图谱文件: ${result.knowledgeGraph.graphFile}`);
     logger.info(`   📄 上下文: ${result.knowledgeGraph.contextFile}`);
+  }
+
+  // ── 源码知识图谱（v8.3.356+）──
+  if (result.codeGraph && result.codeGraph.scannedFiles > 0) {
+    logger.info('');
+    logger.info('── 源码知识图谱 ──');
+    logger.info(`   📊 节点: ${result.codeGraph.nodes} 个 | 边: ${result.codeGraph.edges} 条`);
+    logger.info(`   🧩 社区: ${result.codeGraph.communities} 个 | ⭐ God nodes: ${result.codeGraph.godNodes} 个`);
+    logger.info(`   🔍 扫描源码文件: ${result.codeGraph.scannedFiles} 个`);
+    if (result.codeGraph.reqCodeLinks !== undefined) {
+      logger.info(`   🔗 需求↔代码联动: ${result.codeGraph.reqCodeLinks} 个代码节点`);
+    }
+    // v8.3.361+: 图谱页入口——stdout 输出 [SPECCORE_KNOWLEDGE] 标记，
+    // 宿主 AI 按协议 present_files 展示图谱页；纯终端用户照 logger 行直接打开。
+    // --check 只检查不重建，不弹页。
+    if (!checkOnly) {
+      const graphPage = join(process.cwd(), '.speccore', 'code-graph', 'graph.html');
+      if (existsSync(graphPage)) {
+        logger.info(`   🖼️ 图谱页面: .speccore/code-graph/graph.html`);
+        process.stdout.write(`[SPECCORE_KNOWLEDGE: ${graphPage}]\n`);
+      }
+    }
   }
 
   // ── 衰减检测 ──

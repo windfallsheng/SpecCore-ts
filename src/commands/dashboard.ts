@@ -6,7 +6,7 @@
 import { logger, Spinner } from '../utils/logger';
 import { readGlobalIndex } from '../core/global-layer';
 import { writeFile, ensureDir } from 'fs-extra';
-import { join } from 'path';
+import { join, dirname } from 'path';
 
 export interface DashboardOptions {
   output?: string;
@@ -74,6 +74,8 @@ export async function dashboardCommand(options: DashboardOptions): Promise<void>
     const outputPath = options.output || join(process.cwd(), 'outputs', 'speccore-dashboard.html');
     await ensureDir(join(process.cwd(), 'outputs'));
     await writeFile(outputPath, html);
+    const { ensureHtmlAssets } = await import('../core/page-bundle');
+    await ensureHtmlAssets(dirname(outputPath));
 
     logger.info('');
     logger.success('✅ 仪表盘已生成！');
@@ -147,7 +149,7 @@ export function generateDashboardHtml(
 <title>SpecCore — 全量仪表盘</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@font-face{font-family:"Orbitron";font-style:normal;font-weight:500 900;font-display:swap;src:url("fonts/Orbitron.woff2") format("woff2")}@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;src:url("fonts/JetBrainsMono.woff2") format("woff2")}
 [data-theme="cyber"]{--cyan:#00f0ff;--blue:#3b82f6;--green:#00ff88;--purple:#a78bfa;--orange:#f59e0b;--bg:#060b14;--card:rgba(8,16,32,.85);--border:rgba(0,240,255,.12);--text:#c4d5e7;--muted:#4a5568;--surface:rgba(17,25,40,.7);--hover:rgba(0,240,255,.02)}
 [data-theme="light"]{--cyan:#2563eb;--blue:#3b82f6;--green:#059669;--purple:#7c3aed;--orange:#d97706;--bg:#f8fafc;--card:rgba(255,255,255,.95);--border:rgba(0,0,0,.08);--text:#1e293b;--muted:#94a3b8;--surface:rgba(255,255,255,.95);--hover:rgba(37,99,235,.02)}
 [data-theme="github"]{--cyan:#2da44e;--blue:#0969da;--green:#1a7f37;--purple:#8250df;--orange:#cf222e;--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--surface:#161b22;--hover:rgba(45,164,78,.05)}

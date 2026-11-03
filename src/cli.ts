@@ -200,6 +200,9 @@ program
   .description('提示词库：预置模板 + 自定义提示词，搜索/分类/CRUD/复制')
   .option('--web', '在浏览器中打开')
   .option('-o, --output <path>', '输出路径')
+  .option('--import <file>', '导入自定义提示词 JSON，落盘到 .speccore/prompts/user/')
+  .option('--export <file>', '导出当前自定义提示词为 JSON 文件')
+  .option('--project-dir <dir>', '项目根目录（默认当前目录）')
   .action(promptsCommand);
 
 program
@@ -423,6 +426,9 @@ program
   .option('--backup', '部署前备份远端旧包（保留份数见配置 backup_keep，默认 5；不传时默认开启）')
   .option('--no-backup', '部署前不备份远端旧包（覆盖配置 backup: true 与默认开启）')
   .option('--skip-backup-for <platforms>', '本次不备份的端名列表（逗号分隔，如 h5-mobile,order-api）')
+  .option('--rollback', '回滚到部署前备份（默认最近一份，--backup-name 指定；支持 docker/ssh/k8s/helm）')
+  .option('--list-backups', '列出远端备份清单（docker .bak-* tag / ssh .bak-*.tar.gz / k8s rollout / helm release 历史）')
+  .option('--backup-name <name>', '指定回滚的备份名（配合 --rollback：docker 传 tag 名，k8s/helm 传 revision 号，ssh 传文件名）')
   .option('--all', '部署所有端')
   .action(deployCommand);
 
@@ -611,6 +617,13 @@ program
   .option('--base-url <url>', '自动发现时使用的基地址', 'http://localhost:8080')
   .option('--config <path>', '测试场景配置文件路径')
   .option('--env-file <path>', '环境配置文件（与 --config 联动）')
+  .option('--require-contract', 'API 测试缺契约时报错阻断（默认跳过仅告警，防止假通过）')
+  .option('--ai', 'AI 浏览器验证模式：从 020-specs 生成自然语言验证剧本（宿主 AI 执行浏览器交互）')
+  .option('--scope <scope>', 'AI 验证范围: all(全部功能) | deployed(本次部署功能) | modules:单元名(逗号分隔)')
+  .option('--platform <platforms>', 'AI 验证端过滤（逗号分隔，须为 CONSTITUTION 标准端名）')
+  .option('--env <env>', 'AI 验证环境名（对应 .speccore/environments/{env}.yaml）')
+  .option('--ai-report <path>', '读取 AI 验证 results.json 生成 HTML 报告')
+  .option('--ai-judge <path>', 'AI 验证视觉判定兜底：读 results.json 中 judged:false 的截图，用视觉模型判定并回写')
   .action(async (stage: string | undefined, options: any) => {
     // v8.3.290+: 位置参数直呼测试阶段（verify dev/pr/deploy/release ≡ --stage）
     if (stage) {
@@ -794,8 +807,9 @@ program
   .option("--response <response>", "接收 AI 修正内容写入文件")
   .option("--classify", "AI 智能分类 sources/ 文档 → staging/（按类型提取）")
   .option("--split", "切分功能单元 → features/（已拆出独立命令 unitize，保留兼容）")
-  .option("--translate-en <mode>", "单元标题英译: auto(默认) | host | off")
+  .option("--translate-en <mode>", "单元标题英译: auto(默认,LLM英译优先拼音兜底) | host(宿主AI接力) | off(禁用英译,目录名用拼音)")
   .option("--translate-response <json>", "接收宿主 AI 英译 JSON（配合 --translate-en host）")
+  .option("--translate-response-file <path>", "从文件读英译 JSON（绕开 shell 引号转义，Windows 推荐，v8.3.364+）")
   .option("--on-duplicate <mode>", "同名单元处理: ask(默认) | skip | overwrite | rename | abort")
   .action((file: string | undefined, options: any) => doc2specCommand({ ...options, file: options.file || file }));
 
@@ -810,9 +824,12 @@ program
   .option('--titles <names>', '仅切分指定标题的章节（逗号/顿号分隔标题名，模糊包含匹配；配合 --file/--files/--content）')
   .option('-i, --iter <name>', '目标迭代（缺省用当前活跃迭代）')
   .option('-p, --platform <name>', '平台标识（端名，缺省由 analyze 端推断）')
-  .option("--translate-en <mode>", "单元标题英译: auto(默认) | host | off")
+  .option("--translate-en <mode>", "单元标题英译: auto(默认,LLM英译优先拼音兜底) | host(宿主AI接力) | off(禁用英译,目录名用拼音)")
   .option("--translate-response <json>", "接收宿主 AI 英译 JSON（配合 --translate-en host）")
+  .option("--translate-response-file <path>", "从文件读英译 JSON（绕开 shell 引号转义，Windows 推荐，v8.3.364+）")
   .option("--on-duplicate <mode>", "同名单元处理: ask(默认) | skip | overwrite | rename | abort")
+  .option('--prune-backups [days]', '清理 features/ 下过期切分备份目录（不带参数仅列出；带天数删除 N 天前的）')
+  .option('--confirm-platforms <json>', '确认单元涉及端/依赖/API 回写（JSON 数组，v8.3.362+；宿主 AI 端判断后用）')
   .action((file: string | undefined, options: any) => unitizeCommand({ ...options, file: options.file || file }));
 
 program
@@ -877,8 +894,8 @@ program
   .option('--interactive', '交互: AI 提问 → 回答 → 优化')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--with-code', '结合 CONSTITUTION.md 配置的工程源码一起分析')
-  .option('--from-code', '从源码反推候选需求（两跳：逐模块 IR → 合成 UR，含 EARS 验收标准）')
-  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
+  .option('--from-code', '从源码反推候选需求（两跳：逐模块 IR → 合成 UR，含 EARS 验收标准）；配合 --prompt/--apply 完成全局技术文档 AI 接力（骨架→语义回填）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/_reverse）')
   .option('--no-source', '不读取源码内容（默认会读）')
   .option('--source-scope <dirs>', '指定源码扫描目录（逗号分隔，如 src/commands,src/core）')
   .option('--supplement', '补充模式：追加未覆盖的源码到现有报告（不重新生成）')
@@ -926,8 +943,10 @@ program
   .option('--src, --source <dirs>', '源码目录（逗号分隔，如 --src <端1/src>,<端2/src>）')
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--platform <platform>', '指定端（如 backend）')
-  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/_reverse）')
   .option('--verify', '验证环：只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推（宿主 AI 填完 UR 后运行）')
+  .option('--review', 'QA 环：生成 document-reviewer 语义审查剧本 + review.json 模板（--verify 后运行）')
+  .option('--revise', 'QA 环：读 review.json 做裁决门禁（有 apply findings 则生成修订剧本 + 修订轮次记录）')
   .action((options: any) => {
     // v8.3.255+: 薄别名，直接走 global from-source 引擎（屏蔽 analyze --scope global 废弃提示）
     analyzeCommand({ ...options, fromCode: true, scope: 'global', _fromGlobal: true } as never);
@@ -959,8 +978,10 @@ globalCmd
   .option('--src, --source <dirs>', '源码目录（逗号分隔，如 --src <端1/src>,<端2/src>）')
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--platform <platform>', '指定端（如 backend）')
-  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/_reverse）')
   .option('--verify', '验证环：只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推（宿主 AI 填完 UR 后运行）')
+  .option('--review', 'QA 环：生成 document-reviewer 语义审查剧本 + review.json 模板（--verify 后运行）')
+  .option('--revise', 'QA 环：读 review.json 做裁决门禁（有 apply findings 则生成修订剧本 + 修订轮次记录）')
   .action(globalFromSourceCommand);
 
 globalCmd

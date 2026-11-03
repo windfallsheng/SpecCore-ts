@@ -293,24 +293,33 @@ async function extractCodeInfo(
   content: string,
   lang: string,
 ): Promise<{ exports: string[]; apis: string[]; apiDetails: string[]; imports: string[] }> {
+  let result: { exports: string[]; apis: string[]; apiDetails: string[]; imports: string[] } | null = null;
+  let effectiveContent = content;
+  let effectiveLang = lang;
+
   if (isTreeSitterLang(lang)) {
-    const parsed = await extractWithTreeSitter(content, lang);
-    if (parsed) return parsed;
+    result = await extractWithTreeSitter(content, lang);
   } else if (lang === 'vue') {
-    const script = extractVueScript(content);
-    return {
-      exports: extractExports(script, 'javascript'),
-      apis: extractApis(script, 'javascript'),
+    effectiveContent = extractVueScript(content);
+    effectiveLang = 'javascript';
+  }
+
+  if (!result) {
+    result = {
+      exports: extractExports(effectiveContent, effectiveLang),
+      apis: extractApis(effectiveContent, effectiveLang),
       apiDetails: [],
-      imports: extractImports(script, 'javascript'),
+      imports: extractImports(effectiveContent, effectiveLang),
     };
   }
-  return {
-    exports: extractExports(content, lang),
-    apis: extractApis(content, lang),
-    apiDetails: [],
-    imports: extractImports(content, lang),
-  };
+
+  // v8.3.369: tree-sitter 分支的 apiDetails 恒空（提取器未实现 HTTP 方法），用正则提取结果回填——
+  // 修复 API_INVENTORY.md 空壳（提取器有 apis 但文档生成器只消费恒为空的 apiDetails）。
+  if (result.apiDetails.length === 0) {
+    result.apiDetails = extractApiDetails(effectiveContent, effectiveLang);
+  }
+
+  return result;
 }
 
 function extractExports(content: string, lang: string): string[] {
@@ -350,6 +359,54 @@ function extractApis(content: string, lang: string): string[] {
     }
   }
   return [...new Set(apis)];
+}
+
+/** 拼接 NestJS Controller 前缀与子路径（去重斜杠） */
+function joinHttpPath(prefix: string, sub: string): string {
+  const p = prefix.replace(/\/+$/, '');
+  const s = sub.startsWith('/') ? sub : '/' + sub;
+  if (!p) return s || '/';
+  if (!s || s === '/') return p.startsWith('/') ? p : '/' + p;
+  return p + s;
+}
+
+/**
+ * 提取「方法 + 路径」形式的 API 明细（v8.3.369: 新增强化，供 API_INVENTORY 消费）。
+ *
+ * 对标业内 AST 提取路线（ts-morph/@babel 的 Express/NestJS 路由识别）的启发式等价物：
+ *   - Express/Koa: router.get('/path') / app.post("/path")（单/双引号/模板串均支持）
+ *   - NestJS: @Controller('prefix') + @Get('sub')/@Post() 装饰器（前缀合并）
+ *   - Java: @GetMapping("/path") 等 @*Mapping 注解 → HTTP 方法
+ * 返回 "GET /path" 形式（带方法），供 CODE_INDEX.apiDetails 与 API_INVENTORY.md 消费。
+ */
+function extractApiDetails(content: string, lang: string): string[] {
+  const details: string[] = [];
+
+  if (lang === 'java') {
+    const re = /@(Get|Post|Put|Delete|Patch|Request)Mapping\s*\(\s*"(\/[^"]*)"\s*\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      const method = m[1] === 'Request' ? 'ANY' : m[1].toUpperCase();
+      details.push(`${method} ${m[2]}`);
+    }
+  } else if (lang === 'typescript' || lang === 'javascript') {
+    // Express / Koa: router.get('/path', handler) —— 三种引号均可
+    const expressRe = /(?:router|app)\.(get|post|put|delete|patch|all)\s*\(\s*(['"`])([^'"`]+)\2/g;
+    let m: RegExpExecArray | null;
+    while ((m = expressRe.exec(content)) !== null) {
+      details.push(`${m[1].toUpperCase()} ${m[3]}`);
+    }
+    // NestJS: @Controller('prefix') + @Get('sub') 装饰器（前缀合并）
+    const ctrlMatch = /@Controller\s*\(\s*(['"`])([^'"`]*)\1/.exec(content);
+    const prefix = ctrlMatch ? ctrlMatch[2] : '';
+    const nestRe = /@(Get|Post|Put|Delete|Patch)\s*\(\s*(?:['"`]([^'"`]*)['"`])?/g;
+    while ((m = nestRe.exec(content)) !== null) {
+      const path = joinHttpPath(prefix, m[2] || '');
+      details.push(`${m[1].toUpperCase()} ${path}`);
+    }
+  }
+
+  return [...new Set(details)];
 }
 
 /**
@@ -1026,13 +1083,18 @@ async function findSourceFiles(dir: string): Promise<string[]> {
 // ── 关键词提取增强: 停用词过滤 + 语义扩展 ──
 
 const STOP_WORDS = new Set([
-  // 中文停用词
+  // 中文停用词（v8.3.366: 合并 rag-engine 停用词表，关键词提取唯一真源）
   '功能', '实现', '需要', '进行', '一个', '可以', '使用', '通过', '根据', '按照',
   '对于', '关于', '以及', '或者', '并且', '但是', '如果', '然后', '最后', '如下',
+  '包括', '相关', '对应', '采用', '基于', '完成', '确保', '提供', '支持', '包含',
+  '用于', '其中', '以下', '上述', '所示', '为例',
   // 英文停用词
   'the', 'and', 'for', 'with', 'from', 'this', 'that', 'are', 'was', 'were',
   'been', 'have', 'has', 'had', 'does', 'did', 'will', 'would', 'could', 'should',
   'shall', 'may', 'might', 'must', 'can', 'need', 'used', 'using', 'based',
+  'but', 'not', 'you', 'all', 'had', 'her', 'one', 'our', 'out', 'day', 'get',
+  'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see', 'two', 'way', 'who',
+  'boy', 'its', 'let', 'put', 'say', 'she', 'too', 'use',
 ]);
 
 const SEMANTIC_MAP: Record<string, string[]> = {
@@ -1058,7 +1120,9 @@ const SEMANTIC_MAP: Record<string, string[]> = {
   '认证': ['login', 'auth', 'sso', 'oauth', 'jwt', 'token'],
 };
 
-function expandKeywords(keywords: string[]): string[] {
+// v8.3.366: export 供 rag-engine 复用（此前 rag-engine 复制了一份独立实现，
+// 语义映射各自维护导致中文 query 在文档 RAG 侧无中英映射）
+export function expandKeywords(keywords: string[]): string[] {
   const expanded = new Set(keywords);
   for (const kw of keywords) {
     const lower = kw.toLowerCase();
@@ -1081,7 +1145,10 @@ function expandKeywords(keywords: string[]): string[] {
   return [...expanded];
 }
 
-function extractKeywords(text: string): string[] {
+// v8.3.366: export 供 rag-engine / unified-retrieval 复用（唯一真源）
+// 内部已叠加 SEMANTIC_MAP 双向扩展 + utils/synonyms 中英映射（expandSynonyms），
+// 中文需求关键词（如「登录」）可映射到英文代码符号（login/auth）
+export function extractKeywords(text: string): string[] {
   // 提取中文关键词（2-4字词）和英文标识符
   const keywords: string[] = [];
   const cn = text.match(/[\u4e00-\u9fa5]{2,4}/g) || [];

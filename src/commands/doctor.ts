@@ -226,26 +226,41 @@ async function checkCodeGraph(projectRoot: string): Promise<DiagnosisResult[]> {
     return results;
   }
 
-  // 检查时效性
+  // 检查时效性（v8.3.356+: 多端源码目录 + 文件级 mtime；旧实现只看 src 目录
+  // mtime，目录 mtime 不随子目录内文件变化更新，且遗漏多端 code_path）
   try {
     const graphStat = await stat(graphPath);
-    const srcDir = join(projectRoot, 'src');
-    let srcMtime = graphStat.mtime;
 
-    if (await pathExists(srcDir)) {
-      const srcStat = await stat(srcDir);
-      srcMtime = srcStat.mtime;
-      // 简化：只检查 src 目录的修改时间
-      const isStale = graphStat.mtime < srcStat.mtime;
+    // 源码目录发现（v8.3.357+: 改走 reindex-engine 共享函数，四方口径统一）
+    const { collectSourceFiles, discoverCodeDirs } = await import('../core/reindex-engine');
+    const codeDirs = await discoverCodeDirs(projectRoot);
+    if (codeDirs.length === 0) {
       results.push({
-        ok: !isStale,
+        ok: true,
         category: '代码图谱',
-        message: isStale
-          ? `graph.json 已过期（源码在 ${formatTime(srcStat.mtime)} 后有变更）`
-          : 'graph.json 是最新的',
-        fix: isStale ? 'speccore reindex' : undefined,
+        message: '无源码目录，跳过时效检查',
       });
+      return results;
     }
+
+    // 文件级最新 mtime（与图谱扫描口径一致：只比代码文件）
+    const files = await collectSourceFiles(codeDirs);
+    let latestSrcMtime = 0;
+    for (const f of files) {
+      const m = (await stat(f)).mtime.getTime();
+      if (m > latestSrcMtime) latestSrcMtime = m;
+    }
+
+    const graphMtime = graphStat.mtime.getTime();
+    const isStale = latestSrcMtime > 0 && graphMtime < latestSrcMtime;
+    results.push({
+      ok: !isStale,
+      category: '代码图谱',
+      message: isStale
+        ? `graph.json 已过期（源码在 ${formatTime(new Date(latestSrcMtime))} 后有变更，图谱生成于 ${formatTime(graphStat.mtime)}）`
+        : 'graph.json 是最新的',
+      fix: isStale ? 'speccore reindex' : undefined,
+    });
   } catch {
     results.push({
       ok: false,

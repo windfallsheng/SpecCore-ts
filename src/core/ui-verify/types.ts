@@ -100,6 +100,8 @@ export interface UIVerifyReport {
     passed: number;
     failed: number;
     duration: number;
+    /** v8.3.352+: 跳过的检查项数（契约缺失/账号未就绪/URL 无法确定等，与 failed 区分统计） */
+    skipped?: number;
   };
 }
 
@@ -160,4 +162,28 @@ export interface AuthConfig {
   wait_after_login?: number;
   /** 登录凭据 */
   credentials: AuthCredentials;
+  /**
+   * 登录二次验证（v8.3.354+）：账号密码提交后未达成功判定时，按此块自动填码再提交。
+   * 适合固定码/可绕过场景的 selector 自动化；真实动态码应走 AI 验证线（verify --ai）。
+   */
+  verification?: AuthVerificationConfig;
+}
+
+/**
+ * 登录二次验证配置：验证码输入框 + 码来源（code_env 优先于 fixed_code）+ 提交按钮。
+ * 只落取码通道（环境变量名）不落码本身——真实码值从环境变量/密钥管理读取。
+ */
+export interface AuthVerificationConfig {
+  /** 验证码类型：sms/totp/graphic/email（报告展示与日志提示用） */
+  type?: string;
+  /** 验证码输入框选择器 */
+  code_selector: string;
+  /** 验证码提交按钮选择器（缺省复用 submit_selector） */
+  code_submit_selector?: string;
+  /** 验证码来源环境变量名（如 SIT_SMS_CODE；优先于 fixed_code，适合「动态码落环境变量」） */
+  code_env?: string;
+  /** 固定验证码（测试环境「可绕过」场景：后端固定校验码，如 888888） */
+  fixed_code?: string;
+  /** 等待验证码输入框出现的超时（毫秒，默认 10000；同时用作首次成功判定的短超时） */
+  code_timeout?: number;
 }

@@ -1,6 +1,6 @@
 /**
  * Code Knowledge Graph — 查询引擎
- * v6.90.0
+ * v8.3.356
  *
  * 支持 explain / path / query 三种查询模式
  */

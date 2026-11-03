@@ -63,6 +63,17 @@ export interface DeployEnvConfig {
   backup?: boolean;
   /** 备份保留份数（v8.3.348+，默认 5，超出自动清理最旧备份） */
   backup_keep?: number;
+  /** 部署后健康检查（v8.3.352+，部署成功后执行；失败告警不阻断，已上线不可逆） */
+  health_check?: {
+    /** HTTP/HTTPS 健康检查地址（如 https://api.example.com/health，期望 2xx/3xx） */
+    url?: string;
+    /** 远端健康检查命令（ssh/docker 类型用，在远端执行，退出码 0 视为健康） */
+    command?: string;
+    /** 重试次数（默认 5） */
+    retries?: number;
+    /** 重试间隔毫秒（默认 3000） */
+    interval_ms?: number;
+  };
 }
 
 export interface PlatformConfig {
@@ -165,6 +176,15 @@ export interface SpecConfig {
     sync: { auto_check: boolean };
     patterns: { auto_save: 'off' | 'smart' | 'aggressive' };
     review: { check_assignee: boolean };
+    /** v8.3.351+: 测试验证双线开关与剧本分层（缺省全开） */
+    tests?: {
+      /** 配置式冒烟线（质量门禁自动启用的 UI 验证）；关闭后自动触发被跳过，显式 --ui/--config/--stage 仍执行 */
+      smoke?: { enabled?: boolean };
+      /** AI 宿主验证线（verify --ai）；关闭后自动触发被跳过，显式 --ai 仍执行 */
+      ai_verify?: { enabled?: boolean };
+      /** AI 剧本分层：common=公共能力层（入口/登录/导航）| modules=模块层（逐单元场景） */
+      layered?: { common?: boolean; modules?: boolean };
+    };
     /** v8.3.174+: 模式参数收敛 — CLI 模式默认配置 */
     pipeline?: boolean;
     with_code?: boolean;
@@ -324,6 +344,12 @@ export const DEFAULT_CONFIG: SpecConfig = {
     sync: { auto_check: true },
     patterns: { auto_save: 'smart' },
     review: { check_assignee: false },
+    // v8.3.351: 测试验证双线开关（冒烟线/AI 验证线）+ AI 剧本分层，缺省全开
+    tests: {
+      smoke: { enabled: true },
+      ai_verify: { enabled: true },
+      layered: { common: true, modules: true },
+    },
     // v8.3.297: vision 补入 DEFAULT_CONFIG（此前类型/文档有、升级不产出，序列化器漏写）
     vision: {
       enabled: false,
@@ -568,6 +594,12 @@ export async function loadProjectConfigWithEnv(envFileOrName?: string): Promise<
 
   // 深拷贝项目配置，避免修改原对象
   const merged = JSON.parse(JSON.stringify(projectConfig)) as ProjectConfig;
+
+  // v8.3.352+: PROJECT.yaml 未配置任何平台（platforms 为空/null）时优雅兜底，
+  // 避免「空配置直接 TypeError」——deploy/pipeline 调用方已有空数组检查。
+  if (!Array.isArray(merged.platforms)) {
+    (merged as { platforms: PlatformConfig[] }).platforms = [];
+  }
 
   // 叠加环境配置到各端
   for (const platform of merged.platforms) {
@@ -1394,6 +1426,17 @@ function validateConfig(obj: Record<string, unknown>): ValidationResult {
     if (isObject(s.agent_dispatch) && s.agent_dispatch.mode && !['auto', 'on', 'off'].includes(s.agent_dispatch.mode as string)) {
       issues.push('settings.agent_dispatch.mode 必须是 auto/on/off 之一');
     }
+    // v8.3.351: tests 双线开关与分层开关（布尔字段校验）
+    if (isObject(s.tests)) {
+      const t = s.tests as Record<string, unknown>;
+      for (const section of ['smoke', 'ai_verify', 'layered'] as const) {
+        if (isObject(t[section])) {
+          for (const [key, val] of Object.entries(t[section] as Record<string, unknown>)) {
+            if (typeof val !== 'boolean') issues.push(`settings.tests.${section}.${key} 必须是布尔值`);
+          }
+        }
+      }
+    }
   }
 
   return { valid: issues.length === 0, issues };
@@ -1700,6 +1743,20 @@ export function toYaml(config: SpecConfig): string {
   yaml += '  review:\n';
   yaml += '    # check_assignee: 审查时是否检查指派人与执行人一致\n';
   yaml += `    check_assignee: ${config.settings.review.check_assignee}\n`;
+  // v8.3.351: tests 双线开关与剧本分层（缺省全开；关闭后自动触发被跳过，显式参数仍执行）
+  const tc = config.settings.tests;
+  yaml += '  # ── 测试验证（Tests，v8.3.351+）──\n';
+  yaml += '  tests:\n';
+  yaml += '    # smoke: 配置式冒烟线（质量门禁自动启用的 UI 验证）\n';
+  yaml += '    smoke:\n';
+  yaml += `      enabled: ${tc?.smoke?.enabled ?? true}\n`;
+  yaml += '    # ai_verify: AI 宿主验证线（verify --ai，自然语言剧本 + 视觉执行）\n';
+  yaml += '    ai_verify:\n';
+  yaml += `      enabled: ${tc?.ai_verify?.enabled ?? true}\n`;
+  yaml += '    # layered: AI 剧本分层（common=公共能力层 | modules=模块层）\n';
+  yaml += '    layered:\n';
+  yaml += `      common: ${tc?.layered?.common ?? true}\n`;
+  yaml += `      modules: ${tc?.layered?.modules ?? true}\n`;
   // v8.3.297: vision 段补写（v8.3.94 新增字段此前未序列化输出，升级假补全）
   const vis = config.settings.vision;
   yaml += '  # ── 视觉模型（Vision，v8.3.94+）──\n';

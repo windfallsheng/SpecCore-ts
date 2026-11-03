@@ -320,3 +320,108 @@ export async function inferAndPersistFeaturePlatforms(
   }
   return { map, inferred, pending };
 }
+
+// ================================================================
+// v8.3.362+: 切分后端分析（方案 A）——端与依赖分析前移到 unitize 层
+// ================================================================
+
+/**
+ * AI/人工确认后的单元矩阵回写：platforms + 可选 dependencies/apis。
+ * platforms 走 persistInferredPlatforms（source=explicit，置信度 1.0，
+ * 带「推断来源」注释可人工改）；dependencies/apis 行级替换（保留其余字段）。
+ */
+export async function persistConfirmedUnitMatrix(
+  featureDir: string,
+  platforms: string[],
+  dependencies?: string[],
+  apis?: string[],
+): Promise<boolean> {
+  const okPlatforms = await persistInferredPlatforms(featureDir, platforms, 'explicit', 1.0);
+  if (!okPlatforms) return false;
+  if (!dependencies?.length && !apis?.length) return true;
+  try {
+    const matrixPath = join(featureDir, '_matrix.md');
+    const raw = await readFile(matrixPath, 'utf-8');
+    const lines = raw.split('\n');
+    // 块级替换：从 `{key}:` 行到下一个列表项结束（支持已有值的覆盖与空值填充）
+    const replaceList = (key: string, values: string[]): void => {
+      const idx = lines.findIndex(l => l.trim().startsWith(`${key}:`));
+      if (idx === -1) return;
+      let end = idx + 1;
+      while (end < lines.length && /^\s+[-*]/.test(lines[end])) end++;
+      lines.splice(idx, end - idx, `${key}:`, ...values.map(v => `  - ${v}`));
+    };
+    if (dependencies?.length) replaceList('dependencies', dependencies);
+    if (apis?.length) replaceList('apis', apis);
+    await writeFile(matrixPath, lines.join('\n'), 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 切分后端分析结果 */
+export interface PostUnitizePlatformAnalysis {
+  /** 确定性来源自动回写的单元 */
+  autoWritten: { feature: string; platforms: string[]; source: PlatformInferenceSource; confidence: number }[];
+  /** 已声明单端、但检出额外可能端的单元（不自动覆盖，交宿主 AI 确认） */
+  expandCandidates: { feature: string; declared: string[]; extra: string[]; aiPrompt: string }[];
+  /** 前四层无果、需 AI 语义判断的单元 */
+  pending: { feature: string; aiPrompt: string }[];
+}
+
+/**
+ * v8.3.362+: 切分完成后立即分析功能单元的涉及端（方案 A 落地）。
+ * - 声明为空 → 六层推断，确定性来源（explicit/directory/keyword）自动回写 _matrix；
+ * - 声明非空 → keyword 层检出声明外的额外端 → 超集候选，不自动覆盖单端声明；
+ * - 前四层无果 → 输出 AI 判断 prompt，宿主 AI 判断后经 unitize --confirm-platforms 回写。
+ */
+export async function analyzeUnitPlatformsAfterUnitize(
+  featuresDir: string,
+  unitNames: string[],
+  allPlatforms: string[],
+): Promise<PostUnitizePlatformAnalysis> {
+  const result: PostUnitizePlatformAnalysis = { autoWritten: [], expandCandidates: [], pending: [] };
+  for (const unitName of unitNames) {
+    const featureDir = join(featuresDir, unitName);
+    let requirementContent = '';
+    try {
+      const srcPath = await resolveUnitSourcePath(featureDir);
+      if (await pathExists(srcPath)) requirementContent = await readFile(srcPath, 'utf-8');
+    } catch { /* 读不到需求切片不阻断 */ }
+    const declared = [...new Set(
+      (await readMatrixPlatforms(featureDir))
+        .map(p => normalizePlatformToken(p, allPlatforms))
+        .filter((p): p is string => !!p),
+    )];
+    if (declared.length > 0) {
+      // 已声明（切分文档所属端）→ 超集检测：直接调关键词层 + 目录层检出声明外的
+      // 额外端（不能走 inferFeaturePlatforms——其 Layer 2 会采信 matrix 声明短路
+      // 关键词层，超集永远检不出）；检出仅提示，不自动覆盖单端声明。
+      const extra = [...new Set([
+        ...inferPlatformsByKeywords(unitName, requirementContent, allPlatforms),
+        ...(await detectDirectoryPlatforms(featureDir, allPlatforms)),
+      ].filter(p => !declared.includes(p)))];
+      if (extra.length > 0) {
+        result.expandCandidates.push({
+          feature: unitName,
+          declared,
+          extra,
+          aiPrompt: buildAiInferencePrompt(unitName, requirementContent, allPlatforms),
+        });
+      }
+      continue;
+    }
+    // 声明为空 → 六层推断
+    const inference = await inferFeaturePlatforms({ featureName: unitName, featureDir, requirementContent, allPlatforms });
+    if (inference.platforms.length > 0 && ['explicit', 'directory', 'keyword'].includes(inference.source)) {
+      const ok = await persistInferredPlatforms(featureDir, inference.platforms, inference.source, inference.confidence);
+      if (ok) {
+        result.autoWritten.push({ feature: unitName, platforms: inference.platforms, source: inference.source, confidence: inference.confidence });
+        continue;
+      }
+    }
+    result.pending.push({ feature: unitName, aiPrompt: inference.aiPrompt || buildAiInferencePrompt(unitName, requirementContent, allPlatforms) });
+  }
+  return result;
+}

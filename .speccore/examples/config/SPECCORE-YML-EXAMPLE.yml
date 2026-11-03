@@ -143,6 +143,18 @@ settings:
   review:
     # check_assignee: 审查时是否检查指派人与执行人一致（不一致则警告）
     check_assignee: false
+  # ── 测试验证（Tests，v8.3.351+）──
+  tests:
+    # smoke: 配置式冒烟线（质量门禁自动启用的 UI 验证）
+    smoke:
+      enabled: true
+    # ai_verify: AI 宿主验证线（verify --ai，自然语言剧本 + 视觉执行）
+    ai_verify:
+      enabled: true
+    # layered: AI 剧本分层（common=公共能力层 | modules=模块层）
+    layered:
+      common: true
+      modules: true
   # ── 视觉模型（Vision，v8.3.94+）──
   # specs 文档图片理解（PNG/JPG/GIF/WebP 位图自动转文本注入 AI prompt）。默认关闭。
   vision:

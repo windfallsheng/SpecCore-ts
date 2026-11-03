@@ -898,6 +898,8 @@ async function writeHtmlPlan(
     : join(process.cwd(), 'outputs', 'speccore-plan.html');
   await ensureDir(dirname(htmlPath));
   await writeFile(htmlPath, html, 'utf-8');
+  const { ensureHtmlAssets } = await import('../core/page-bundle');
+  await ensureHtmlAssets(dirname(htmlPath));
   logger.success(`✅ 计划可视化: ${htmlPath}`);
   process.stdout.write(`[SPECCORE_PLAN: ${htmlPath}]\n`);
 }

@@ -153,6 +153,11 @@ export async function getCachedIntent(input: string): Promise<AskResult | null> 
     // 长度比例保护：编辑距离 ≤ 2 时，要求较短串长度 ≥ 6（避免 4 字中文短句误匹配）
     // 且编辑距离占较长串比例 ≤ 30%（避免长串被短串误匹配）
     if (dist <= FUZZY_THRESHOLD && minLen >= 6 && dist / maxLen <= 0.3) {
+      // v8.3.351+: 语义 token 集必须一致——参数化句型（如「合并到{环境}」）的
+      // 槽位词差异（测试 vs 开发）不能靠编辑距离模糊命中，否则 test 缓存结果串到 dev 上；
+      // 模糊层只服务同义改写（语气词/助词增减），不服务参数替换
+      const inputNorm = normalizeInput(input);
+      if (inputNorm && inputNorm !== entry.normalizedInput) continue;
       await touch(entry, '模糊', ` ≈ "${cachedInput.slice(0, 30)}..."`);
       return entry.result;
     }

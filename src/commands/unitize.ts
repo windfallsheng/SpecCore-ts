@@ -13,12 +13,14 @@
  * 匹配端名白名单的 {端名}.md / {端名}requirements.md），逐一切分；REQUIREMENT.md 总纲
  * 与无端文档不参与自动发现。显式指定 --file 时照旧只切点名的。
  */
-import { pathExists, readdir, ensureDir, writeFile } from 'fs-extra';
+import { pathExists, readdir, ensureDir, writeFile, remove, readFile } from 'fs-extra';
 import { join, basename } from 'path';
 import { logger } from '../utils/logger';
 import { loadProjectConfig } from '../core/unified-config';
 import { splitDocumentToUnits } from './doc2spec';
 import { detectActiveIteration } from '../core/context';
+import { isTimestampBackup } from '../utils/task-utils';
+import { analyzeUnitPlatformsAfterUnitize, persistConfirmedUnitMatrix } from '../core/platform-inference';
 
 interface UnitizeOptions {
   file?: string;
@@ -30,12 +32,80 @@ interface UnitizeOptions {
   platform?: string;
   translateEn?: string; // --translate-en: auto(默认) | host | off（单元标题英译）
   translateResponse?: string; // --translate-response: 接收宿主 AI 英译 JSON（配合 host）
+  translateResponseFile?: string; // --translate-response-file: 从文件读英译 JSON（v8.3.364+，绕开 shell 引号转义，Windows 推荐）
   onDuplicate?: string; // --on-duplicate: 同名单元处理 ask(默认) | skip | overwrite | rename | abort
+  pruneBackups?: boolean | string; // --prune-backups [days]: 清理过期切分备份（不带值仅列出）
+  confirmPlatforms?: string; // --confirm-platforms <json>: 宿主 AI 确认后的端/依赖/API 回写（v8.3.362+）
 }
 
 /** v8.3.334+: 标题列表解析——逗号/顿号/竖线/分号均可作分隔（宽松兼容手写与 ask 生成） */
 export function parseTitles(raw: string): string[] {
   return raw.split(/[,，、|;；]/).map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * v8.3.352+: 过期切分备份清理——unitize overwrite 的时间戳备份目录
+ * （xxx-20260924083058）此前只有 analyze 的堆积提示，无生命周期管理。
+ * 不带天数仅列出（dry-run）；带天数删除早于 N 天的备份（回滚价值已过期的副本）。
+ */
+async function pruneUnitBackups(iterName: string, daysRaw: boolean | string): Promise<void> {
+  const iterDir = `Iteration-${iterName.replace(/^Iteration-/, '')}`;
+  const featuresDir = join(iterDir, '010-requirements', 'features');
+  if (!(await pathExists(featuresDir))) {
+    logger.info('features/ 目录不存在，无备份可清理');
+    return;
+  }
+  const entries = await readdir(featuresDir, { withFileTypes: true });
+  const backups: { name: string; ts: number | null }[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory() || !isTimestampBackup(e.name)) continue;
+    const m = e.name.match(/-(\d{14})$/);
+    // 目录名时间戳 YYYYMMDDHHmmss → Date（目录名是本地时间语义，按本地时区解析）
+    let ts: number | null = null;
+    if (m) {
+      const s = m[1];
+      const d = new Date(
+        Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8)),
+        Number(s.slice(8, 10)), Number(s.slice(10, 12)), Number(s.slice(12, 14)),
+      );
+      ts = isNaN(d.getTime()) ? null : d.getTime();
+    }
+    backups.push({ name: e.name, ts });
+  }
+  if (backups.length === 0) {
+    logger.info('features/ 下无切分备份目录');
+    return;
+  }
+
+  // 不带天数：仅列出（dry-run），让用户看清家底再决定
+  if (daysRaw === true) {
+    logger.info(`📦 features/ 下共 ${backups.length} 个切分备份目录（unitize overwrite 的可回滚副本）:`);
+    for (const b of backups) {
+      const age = b.ts === null ? '时间戳无法解析' : `${Math.max(0, Math.round((Date.now() - b.ts) / 86400000))} 天前`;
+      logger.info(`   · ${b.name}（${age}）`);
+    }
+    logger.info(`   💡 删除过期备份: speccore unitize --prune-backups <天数>`);
+    return;
+  }
+
+  const days = Number(daysRaw);
+  if (!Number.isFinite(days) || days < 0) {
+    logger.error(`--prune-backups 天数无效: ${daysRaw}（应为非负整数，如 --prune-backups 30）`);
+    return;
+  }
+  const cutoff = Date.now() - days * 86400000;
+  const expired = backups.filter((b) => b.ts !== null && b.ts < cutoff);
+  const kept = backups.length - expired.length;
+  if (expired.length === 0) {
+    logger.info(`没有早于 ${days} 天的备份（现存 ${backups.length} 个，均未过期）`);
+    return;
+  }
+  logger.info(`🗑️  删除 ${expired.length} 个早于 ${days} 天的切分备份（保留 ${kept} 个未过期）:`);
+  for (const b of expired) {
+    await remove(join(featuresDir, b.name));
+    logger.info(`   ✓ ${b.name}`);
+  }
+  logger.info('   💡 误删可从 Git 历史恢复；未过期备份保留可回滚');
 }
 
 /**
@@ -74,7 +144,8 @@ async function unitizeContent(content: string, title: string | undefined, platfo
   logger.info(`\n🔪 切分: ${safeName}.md${platform ? `（端: ${platform}）` : ''}`);
   const titles = options.titles ? parseTitles(options.titles) : [];
   if (titles.length > 0) logger.info(`   🎯 仅切分指定标题: ${titles.join('、')}`);
-  await splitDocumentToUnits(iterDir, target, platform, basename(target), options.translateEn, options.translateResponse, options.onDuplicate, titles);
+  const units = await splitDocumentToUnits(iterDir, target, platform, basename(target), options.translateEn, options.translateResponse, options.onDuplicate, titles);
+  await runPostUnitizeAnalysis(iterName, units);
 }
 
 /** 批量参数解析（与 doc2spec --files 同格式："path1.md=平台1,path2.md=平台2"）
@@ -107,22 +178,94 @@ export function matchPlatformDoc(filename: string, platformNames: Set<string>): 
   return { matched: false };
 }
 
-async function unitizeSingle(file: string, platform: string, iterName: string, translateEn?: string, translateResponse?: string, onDuplicate?: string, titles?: string[]): Promise<void> {
+/**
+ * v8.3.362+: 切分后端分析汇总——自动回写/超集候选/待 AI 判断三类输出。
+ * 待确认单元的 AI 判断 prompt 与 --confirm-platforms 回写示例一并打印。
+ */
+async function runPostUnitizeAnalysis(iterName: string, unitNames: string[]): Promise<void> {
+  if (unitNames.length === 0) return;
+  const iterDir = `Iteration-${iterName.replace(/^Iteration-/, '')}`;
+  let allPlatforms: string[] = [];
+  try {
+    const projectConfig = await loadProjectConfig();
+    allPlatforms = projectConfig.platforms.map(p => p.name);
+  } catch { /* PROJECT.yaml 缺失时不分析 */ }
+  if (allPlatforms.length === 0) return;
+  const featuresDir = join(iterDir, '010-requirements', 'features');
+  const result = await analyzeUnitPlatformsAfterUnitize(featuresDir, unitNames, allPlatforms);
+  if (result.autoWritten.length === 0 && result.expandCandidates.length === 0 && result.pending.length === 0) return;
+  logger.info('');
+  logger.info('── 端分析（切分层 v8.3.362+）──');
+  for (const w of result.autoWritten) {
+    logger.info(`   ✅ ${w.feature}: 涉及端 [${w.platforms.join(', ')}]（${w.source} 置信度 ${w.confidence}，已写回 _matrix）`);
+  }
+  for (const e of result.expandCandidates) {
+    logger.info(`   🔍 ${e.feature}: 已声明 [${e.declared.join(', ')}]，检出额外可能端 [${e.extra.join(', ')}]（待确认，不自动覆盖）`);
+  }
+  for (const p of result.pending) {
+    logger.info(`   ❓ ${p.feature}: 无法自动推断涉及端，需 AI 判断`);
+  }
+  const confirmItems = [
+    ...result.expandCandidates.map(e => ({ feature: e.feature, platforms: [...e.declared, ...e.extra], dependencies: [] as string[], apis: [] as string[] })),
+    ...result.pending.map(p => ({ feature: p.feature, platforms: [] as string[], dependencies: [] as string[], apis: [] as string[] })),
+  ];
+  if (confirmItems.length > 0) {
+    logger.info(`   💡 宿主 AI 判断后回写: speccore unitize --confirm-platforms '<JSON>'`);
+    logger.info(`   JSON 格式: [{"feature":"单元目录名","platforms":["端1","端2"],"dependencies":["依赖单元"],"apis":["GET /api/x"]}]`);
+    logger.info(`   当前待确认清单: ${confirmItems.map(c => c.feature).join(', ')}`);
+  }
+}
+
+/** v8.3.362+: --confirm-platforms 模式——宿主 AI 语义判断后的回写入口 */
+async function confirmUnitPlatforms(raw: string, iterName: string): Promise<void> {
+  let items: { feature: string; platforms?: string[]; dependencies?: string[]; apis?: string[] }[];
+  try {
+    const parsed = JSON.parse(raw);
+    items = Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    logger.error('--confirm-platforms JSON 解析失败');
+    logger.info('  格式: [{"feature":"单元目录名","platforms":["端1"],"dependencies":[],"apis":[]}]');
+    return;
+  }
+  const iterDir = `Iteration-${iterName.replace(/^Iteration-/, '')}`;
+  const featuresDir = join(iterDir, '010-requirements', 'features');
+  let ok = 0;
+  for (const item of items) {
+    if (!item?.feature || !Array.isArray(item.platforms) || item.platforms.length === 0) {
+      logger.warn(`   ⚠️  跳过无效项: ${JSON.stringify(item)}`);
+      continue;
+    }
+    const featureDir = join(featuresDir, item.feature);
+    if (!(await pathExists(featureDir))) {
+      logger.warn(`   ⚠️  单元不存在，跳过: ${item.feature}`);
+      continue;
+    }
+    if (await persistConfirmedUnitMatrix(featureDir, item.platforms, item.dependencies, item.apis)) {
+      logger.info(`   ✅ ${item.feature}: 涉及端 [${item.platforms.join(', ')}]${item.dependencies?.length ? `，依赖 [${item.dependencies.join(', ')}]` : ''}${item.apis?.length ? `，API [${item.apis.join(', ')}]` : ''}`);
+      ok++;
+    } else {
+      logger.warn(`   ⚠️  回写失败: ${item.feature}`);
+    }
+  }
+  logger.success(`✅ 已确认 ${ok}/${items.length} 个单元的端声明`);
+}
+
+async function unitizeSingle(file: string, platform: string, iterName: string, translateEn?: string, translateResponse?: string, onDuplicate?: string, titles?: string[]): Promise<string[]> {
   if (!(await pathExists(file))) {
     logger.error(`文件不存在: ${file}`);
-    return;
+    return [];
   }
   // v8.3.232+: 非 Markdown 直接报错指路（unitize 只切 .md；docx/pdf 需先 doc2spec 转换）
   if (!/\.md$/i.test(file)) {
     logger.error(`unitize 只切分 Markdown: ${basename(file)}`);
     logger.info(`  💡 请先转换: speccore doc2spec --file=${file} --iter=${iterName}`);
-    return;
+    return [];
   }
   // v8.3.303+: REQUIREMENT.md 总纲不参与切分（切分以端命名需求文档为准）
   if (/^REQUIREMENT\.md$/i.test(basename(file))) {
     logger.error(`REQUIREMENT.md 是需求总纲，不参与切分: ${basename(file)}`);
     logger.info('  💡 请指定端级需求文档（如 admin-web.md），或直接运行 speccore unitize 自动切分全部端');
-    return;
+    return [];
   }
   // v8.3.303+: platform 未显式指定时，从文件名匹配端列表自动识别（{端名}.md 命名免传 --platform）
   if (!platform) {
@@ -136,16 +279,56 @@ async function unitizeSingle(file: string, platform: string, iterName: string, t
   const iterDir = `Iteration-${iterName.replace(/^Iteration-/, '')}`;
   if (!(await pathExists(iterDir))) {
     logger.error(`迭代目录不存在: ${iterDir}`);
-    return;
+    return [];
   }
   logger.info(`\n🔪 切分: ${basename(file)}${platform ? `（端: ${platform}）` : ''}`);
   if (titles && titles.length > 0) {
     logger.info(`   🎯 仅切分指定标题: ${titles.join('、')}`);
   }
-  await splitDocumentToUnits(iterDir, file, platform, basename(file), translateEn, translateResponse, onDuplicate, titles);
+  const units = await splitDocumentToUnits(iterDir, file, platform, basename(file), translateEn, translateResponse, onDuplicate, titles);
+  // v8.3.362+: 切分后端分析（方案 A）——涉及端与依赖前移到切分层
+  await runPostUnitizeAnalysis(iterName, units);
+  return units;
 }
 
 export async function unitizeCommand(options: UnitizeOptions): Promise<void> {
+  // ── v8.3.364: 英译 JSON 文件读取——Windows npm shim 会把命令行里含双引号的
+  // JSON 参数转义破坏（宿主接力传参被吞），文件通道绕开全部 shell 转义问题 ──
+  if (options.translateResponseFile !== undefined && options.translateResponse === undefined) {
+    try {
+      options.translateResponse = (await readFile(options.translateResponseFile, 'utf-8')).trim();
+      if (!options.translateResponse) {
+        logger.warn(`--translate-response-file 文件为空: ${options.translateResponseFile}`);
+        return;
+      }
+    } catch {
+      logger.error(`--translate-response-file 读取失败: ${options.translateResponseFile}`);
+      return;
+    }
+  }
+
+  // ── 端确认回写模式（v8.3.362+）：宿主 AI 语义判断后回写端/依赖/API ──
+  if (options.confirmPlatforms !== undefined) {
+    const iterName = options.iter || (await detectActiveIteration());
+    if (!iterName) {
+      logger.error('请指定迭代: speccore unitize --confirm-platforms "..." --iter=<迭代>');
+      return;
+    }
+    await confirmUnitPlatforms(options.confirmPlatforms, iterName);
+    return;
+  }
+
+  // ── 备份清理模式（v8.3.352+）：unitize overwrite 时间戳备份的生命周期管理 ──
+  if (options.pruneBackups !== undefined) {
+    const iterName = options.iter || (await detectActiveIteration());
+    if (!iterName) {
+      logger.error('请指定迭代: speccore unitize --prune-backups --iter=<迭代>');
+      return;
+    }
+    await pruneUnitBackups(iterName, options.pruneBackups);
+    return;
+  }
+
   // ── 内容模式（v8.3.318+）：一段文档内容直接切分 ──
   if (options.content !== undefined) {
     const iterName = options.iter || (await detectActiveIteration());

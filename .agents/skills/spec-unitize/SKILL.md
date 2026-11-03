@@ -8,6 +8,8 @@ description: >
   features/ 已有同名单元时重切会覆盖旧切片；多文档可批量 --files "a.md=端1,b.md"；
   支持 --titles 仅切指定标题章节、--files 多文档各自挂标题组 a.md=端@标题1|标题2）由 speccore ask 引擎执行；
   参数缺失时引擎输出 [SPECCORE_NEEDS_INFO] 交互式提示（参数说明 + 使用示例）。
+  切分后目录名必须走英译流程（auto 默认，LLM 英译优先、宿主 AI 接力、拼音仅兜底），
+  禁止主动传 --translate-en off；CLI 输出 [SPECCORE_PROMPT] 时宿主 AI 必须逐条翻译回传续跑。
   不处理一般性的"切分/拆分"讨论（如"帮我切一下这段文本"），只处理 speccore 上下文中的切分。
   与 spec-taskify 的区别：unitize 切需求（文档→功能单元 features/），taskify 拆任务（功能单元→开发任务 Task-*）。
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
@@ -49,4 +51,6 @@ unitize 执行时（auto 默认；v8.3.289+ auto 模式会消费 auto_host_ai �
 speccore unitize --file <文件> --iter <迭代> --translate-en host --translate-response '{"1":"booking-management","2":"meeting-room-rules"}'
 ```
 
-注意：翻译必须逐条对应序号；漏翻的条目会回退拼音。若不希望英译（接受拼音目录名），续跑时用 `--translate-en off`。
+**Windows 传参注意（v8.3.364+）**：npm shim 会把命令行中含双引号的 JSON 参数转义破坏，导致响应被吞。两种可靠解法：① 把 JSON 写入文件后用 `--translate-response-file <path>` 续跑（推荐，绕开全部 shell 转义）；② PowerShell 用单引号包裹 + 内部 `\"` 转义。
+
+**禁止主动 off**：`--translate-en off` 是显式禁用英译（目录名用拼音），仅在用户明确要求接受拼音目录名时使用；宿主 AI 不得因「传参麻烦」自行改用 off——传参问题走上面的文件通道解决。翻译必须逐条对应序号；漏翻的条目会回退拼音。

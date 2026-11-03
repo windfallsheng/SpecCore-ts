@@ -26,6 +26,9 @@ export interface GlobalAnalyzeOptions {
   auto?: boolean;
   prompt?: boolean;
   interactive?: boolean;
+  verify?: boolean;
+  review?: boolean;
+  revise?: boolean;
   [key: string]: unknown;
 }
 

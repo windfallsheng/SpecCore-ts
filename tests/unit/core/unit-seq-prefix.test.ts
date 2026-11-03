@@ -43,6 +43,16 @@ describe('stripUnitSeqPrefix', () => {
     expect(stripUnitSeqPrefix('login-flow')).toBe('login-flow');
   });
 
+  it('v8.3.363+: 纯 slug 新格式与 -2 冲突后缀均不误剥', () => {
+    // 新模板摘除 {文档}-{序号}- 前缀后目录名为纯 slug；-NN- 段不存在时原样返回
+    expect(stripUnitSeqPrefix('login-timeout')).toBe('login-timeout');
+    expect(stripUnitSeqPrefix('order-fulfillment')).toBe('order-fulfillment');
+    expect(stripUnitSeqPrefix('notification-trigger')).toBe('notification-trigger');
+    // 多文档同名章节去重后缀（-2/-3）单数字无尾连字符，不会命中 -NN- 模式
+    expect(stripUnitSeqPrefix('notification-trigger-2')).toBe('notification-trigger-2');
+    expect(stripUnitSeqPrefix('notification-trigger-12')).toBe('notification-trigger-12');
+  });
+
   it('文档名含 4 位数字（年份）：不误剥（回溯到真正的 2 位序号）', () => {
     // meeting-2024-01-yuding：序号是 01，docSlug 是 meeting-2024
     expect(stripUnitSeqPrefix('meeting-2024-01-yuding')).toBe('yuding');

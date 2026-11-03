@@ -5,14 +5,16 @@
  */
 import { execSync } from 'child_process';
 import { join, isAbsolute } from 'path';
+import { ensureDir, writeFile } from 'fs-extra';
 import { logger, Spinner } from '../utils/logger';
 import { loadProjectConfigWithEnv } from '../core/unified-config';
 import { loadEnvironmentByNameOrPath } from '../core/environment-config';
 import { resolvePlatformBranchDetailed } from '../core/deploy/branch-resolver';
 import type { ResolvedBranch } from '../core/deploy/branch-resolver';
-import { deployPlatform } from '../core/deploy/engine';
+import { deployPlatform, rollbackPlatform, listBackups } from '../core/deploy/engine';
 import type { DeployOptions as EngineDeployOptions, DeployResult } from '../core/deploy/engine';
 import type { DeployEnvConfig, PlatformConfig } from '../core/unified-config';
+import { appendDeployLedger } from '../core/deploy-ledger';
 import { findProjectRoot } from '../utils/task-utils';
 
 export interface DeployCliOptions {
@@ -27,6 +29,12 @@ export interface DeployCliOptions {
   backup?: boolean;
   /** v8.3.348+: 本次不备份的端名列表（逗号分隔，--skip-backup-for），优先级高于 --backup 与配置 backup 字段 */
   skipBackupFor?: string;
+  /** v8.3.352+: 回滚到部署前备份（--rollback，配合 --backup-name 指定，默认最近一份） */
+  rollback?: boolean;
+  /** v8.3.352+: 列出远端备份清单（--list-backups，不执行任何变更） */
+  listBackups?: boolean;
+  /** v8.3.352+: 指定回滚的备份名（配合 --rollback；docker 传 .bak-* tag 名，k8s/helm 传 revision 号，ssh 传文件名） */
+  backupName?: string;
 }
 
 /**
@@ -95,6 +103,41 @@ function runGitStep(cwd: string, cmd: string, label: string, dryRun: boolean): b
 }
 
 /**
+ * 部署清单落盘（v8.3.350+）：部署成功后写 .speccore/local/deploy-manifest.json，
+ * 供 verify --ai --scope deployed 筛出本次部署涉及的功能单元。
+ */
+async function writeDeployManifest(
+  env: string,
+  results: DeployResult[],
+  targets: PlatformConfig[],
+  dryRun: boolean
+): Promise<void> {
+  if (dryRun) return;
+  const succeeded = results.filter((r) => r.success && !r.skipped);
+  if (succeeded.length === 0) return;
+
+  const projectRoot = findProjectRoot() || process.cwd();
+  const platforms = [];
+  for (const r of succeeded) {
+    const target = targets.find((t) => t.name === r.platform);
+    const cwd = target?.code_path
+      ? (isAbsolute(target.code_path) ? target.code_path : join(projectRoot, target.code_path))
+      : process.cwd();
+    let commit: string | undefined;
+    try {
+      commit = execSync('git rev-parse --short HEAD', { cwd, stdio: 'pipe' }).toString().trim() || undefined;
+    } catch { /* 非 git 目录静默 */ }
+    platforms.push({ name: r.platform, type: r.type, git: { branch: r.branch, commit } });
+  }
+
+  const manifest = { env, time: new Date().toISOString(), platforms };
+  const localDir = join(projectRoot, '.speccore', 'local');
+  await ensureDir(localDir);
+  await writeFile(join(localDir, 'deploy-manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');
+  logger.info(`📋 部署清单已更新: .speccore/local/deploy-manifest.json（${platforms.length} 端，env: ${env}）`);
+}
+
+/**
  * 部署计划面板（v8.3.348+）：动手前把「端 → 分支 → 构建 → 部署目标」完整展示给用户。
  * 全部信息来自本次发起的实时配置读取（无缓存、不依赖记忆），用户临时改动当次生效。
  */
@@ -129,6 +172,16 @@ function printDeployPlan(
 }
 
 export async function deployCommand(options: DeployCliOptions): Promise<void> {
+  // v8.3.352+: 回滚/备份清单子命令（只读/回退操作，不走部署主流程）
+  if (options.listBackups) {
+    await listBackupsCommand(options);
+    return;
+  }
+  if (options.rollback) {
+    await rollbackCommand(options);
+    return;
+  }
+
   // 纪律（v8.3.348+）：每次发起部署都实时读磁盘配置——PROJECT.yaml 与
   // .speccore/environments/{env}.yaml 当场重读，不做任何缓存、不依赖上一次
   // 执行或记忆中的旧值，用户临时改动的 branch / build_cmd / host 当次生效。
@@ -274,7 +327,119 @@ export async function deployCommand(options: DeployCliOptions): Promise<void> {
   logger.info(`│ 总耗时: ${((totalDuration) / 1000).toFixed(1)}s`.padEnd(39) + '│');
   logger.info('└──────────────────────────────────────────┘');
 
+  // v8.3.350+: 部署成功后落盘部署清单（支撑 verify --ai --scope deployed）
+  await writeDeployManifest(env, results, targets, !!options.dryRun);
+
+  // v8.3.352+: 部署后健康检查结果汇总展示（失败告警不阻断部署，但醒目提醒 + 写入问题账本）
+  const unhealthy = results.filter((r) => r.health && !r.health.ok);
+  if (unhealthy.length > 0) {
+    logger.warn('');
+    logger.warn('💔 部署后健康检查失败（服务已上线，请尽快处理）：');
+    for (const r of unhealthy) {
+      logger.warn(`   - [${r.platform}] ${r.health!.message}`);
+      try {
+        await appendDeployLedger({
+          kind: 'health-check',
+          platform: r.platform,
+          env,
+          type: r.type,
+          message: r.health!.message,
+        });
+      } catch { /* 账本写入失败不阻断主流程 */ }
+    }
+    logger.warn(`📝 已写入部署问题账本: .speccore/local/deploy-ledger.md`);
+  }
+
   if (failCount > 0) {
     process.exitCode = 1;
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// v8.3.352+ 回滚 / 备份清单子命令
+// ═══════════════════════════════════════════════════════════
+
+/** 解析目标端列表（与部署主流程同规则：--platform 单端 / --all 全端） */
+async function resolveRollbackTargets(options: DeployCliOptions): Promise<PlatformConfig[]> {
+  const envConfig = await loadEnvironmentByNameOrPath(options.envFile || options.env || 'staging');
+  const envInput = options.envFile || envConfig?.env || options.env || 'staging';
+  const config = await loadProjectConfigWithEnv(envInput);
+  if (!config.platforms || config.platforms.length === 0) {
+    throw new Error('PROJECT.yaml 中未配置任何平台');
+  }
+  if (options.platform) {
+    const found = config.platforms.find((p) => p.name === options.platform);
+    if (!found) {
+      throw new Error(`未找到平台: "${options.platform}"，可用: ${config.platforms.map((p) => p.name).join(', ')}`);
+    }
+    return [found];
+  }
+  if (options.all) return config.platforms;
+  throw new Error('请指定目标平台: --platform <端名> 或 --all');
+}
+
+/** 列出远端备份清单（docker .bak-* tag / ssh .bak-*.tar.gz / k8s rollout history / helm release history） */
+async function listBackupsCommand(options: DeployCliOptions): Promise<void> {
+  const env = options.env || 'staging';
+  let targets: PlatformConfig[];
+  try {
+    targets = await resolveRollbackTargets(options);
+  } catch (e: any) {
+    logger.error(`❌ ${e.message || e}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  let anyFailed = false;
+  for (const platform of targets) {
+    logger.info(`\n📋 [${platform.name}] ${env} 环境备份清单:`);
+    try {
+      const { type, backups } = await listBackups(platform, env);
+      if (backups.length === 0) {
+        logger.warn(`   （${type}）无备份记录——部署时若未开启备份（--no-backup），此处为空属正常`);
+      } else {
+        for (const b of backups) {
+          logger.info(`   • ${b}`);
+        }
+      }
+    } catch (e: any) {
+      anyFailed = true;
+      logger.error(`   ❌ ${e.message || e}`);
+    }
+  }
+  if (anyFailed) process.exitCode = 1;
+}
+
+/** 回滚到部署前备份（默认最近一份，--backup-name 指定） */
+async function rollbackCommand(options: DeployCliOptions): Promise<void> {
+  const env = options.env || 'staging';
+  let targets: PlatformConfig[];
+  try {
+    targets = await resolveRollbackTargets(options);
+  } catch (e: any) {
+    logger.error(`❌ ${e.message || e}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  logger.info('\n⚠️  回滚操作将把远端恢复到部署前的备份版本，请确认:');
+  logger.info(`   环境: ${env} | 目标端: ${targets.map((t) => t.name).join(', ')}${options.backupName ? ` | 指定备份: ${options.backupName}` : ' | 备份: 最近一份'}`);
+  logger.info('');
+
+  let anyFailed = false;
+  for (const platform of targets) {
+    const result = await rollbackPlatform(platform, env, {
+      platform: platform.name,
+      env,
+      backupName: options.backupName,
+      dryRun: !!options.dryRun,
+    });
+    if (result.success) {
+      logger.success(`✅ [${result.platform}] ${result.message}`);
+    } else {
+      anyFailed = true;
+      logger.error(`❌ [${result.platform}] ${result.message}`);
+    }
+  }
+  if (anyFailed) process.exitCode = 1;
 }

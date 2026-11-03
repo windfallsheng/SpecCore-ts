@@ -1,6 +1,6 @@
 /**
  * Code Knowledge Graph — 统一导出
- * v6.90.0
+ * v8.3.356
  */
 export * from './types';
 export { parseProject } from './parser';
@@ -8,9 +8,9 @@ export { buildCodeGraph } from './builder';
 export { explainNode, findPath, queryGraph } from './query';
 export { generateGraphReport } from './reporter';
 export { buildCodeGraphHtml } from './visualizer';
-// v6.94.0+: 增量构建
+// v8.3.356+: 增量构建
 export { buildCodeKnowledgeGraphIncremental } from './incremental-build';
-// v6.94.0+: 需求↔代码联动
+// v8.3.356+: 需求↔代码联动
 export { linkRequirementsToCode } from './requirement-linker';
 
 import { join } from 'path';
@@ -63,7 +63,7 @@ export async function buildCodeKnowledgeGraph(options: BuildGraphOptions = {}): 
   const { nodes, edges, fileCount } = await parseProject(files, projectRoot);
   logger.info(`   提取 ${nodes.length} 个节点, ${edges.length} 条边`);
 
-  // 2.5. v6.91.0+: 多模态节点（API Contract + SQL Schema）
+  // 2.5. v8.3.356+: 多模态节点（API Contract + SQL Schema）
   logger.info(`🌐 扫描 API Contract & SQL Schema...`);
   const { nodes: mmNodes, edges: mmEdges } = await extractMultimodalNodes(projectRoot, nodes);
   if (mmNodes.length > 0) {
@@ -92,10 +92,10 @@ export async function buildCodeKnowledgeGraph(options: BuildGraphOptions = {}): 
 
   // graph.html
   const htmlPath = join(outDir, 'graph.html');
-  await writeFile(htmlPath, buildCodeGraphHtml(graph));
+  await writeFile(htmlPath, await buildCodeGraphHtml(graph, projectRoot));
   logger.info(`   ✅ graph.html`);
 
-  // v6.91.0+: MODULE_MAP.json — 社区检测结果映射
+  // v8.3.356+: MODULE_MAP.json — 社区检测结果映射
   const moduleMapPath = join(outDir, 'MODULE_MAP.json');
   const moduleMap = buildModuleMap(graph);
   await writeFile(moduleMapPath, JSON.stringify(moduleMap, null, 2));
@@ -110,12 +110,16 @@ export async function buildCodeKnowledgeGraph(options: BuildGraphOptions = {}): 
 
 /**
  * 从社区检测结果构建 MODULE_MAP
- * v6.91.0+
+ * v8.3.356
  */
 function buildModuleMap(graph: CodeGraph) {
+  // v8.3.356+: id→节点 Map 索引（原实现每条边嵌套 nodes.find，
+  // 节点数过万时 O(边数×N) 爆炸，reindex 全量重建卡死在此处）
+  const idToNode = new Map(graph.nodes.map(n => [n.id, n]));
+
   const communities = graph.communities.map(comm => {
     const nodeDetails = comm.nodes
-      .map(id => graph.nodes.find(n => n.id === id))
+      .map(id => idToNode.get(id))
       .filter(Boolean);
     const filePaths = [...new Set(nodeDetails.map(n => n!.filePath))];
     // 该社区内的 god nodes
@@ -124,8 +128,8 @@ function buildModuleMap(graph: CodeGraph) {
     const bridgeNodes = new Set<string>();
     for (const e of graph.edges) {
       if (e.source === e.target) continue;
-      const s = graph.nodes.find(n => n.id === e.source);
-      const t = graph.nodes.find(n => n.id === e.target);
+      const s = idToNode.get(e.source);
+      const t = idToNode.get(e.target);
       if (s && t && s.community !== t.community) {
         if (s.community === comm.id) bridgeNodes.add(s.id);
         if (t.community === comm.id) bridgeNodes.add(t.id);
@@ -143,8 +147,8 @@ function buildModuleMap(graph: CodeGraph) {
   });
 
   const crossCommunityEdges = graph.edges.filter(e => {
-    const s = graph.nodes.find(n => n.id === e.source);
-    const t = graph.nodes.find(n => n.id === e.target);
+    const s = idToNode.get(e.source);
+    const t = idToNode.get(e.target);
     return s && t && s.community !== t.community;
   }).map(e => ({
     source: e.source,
