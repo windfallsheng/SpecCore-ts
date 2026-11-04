@@ -1744,7 +1744,7 @@ Iteration-NNN-name/            ← 迭代目录
 | \`[SPECCORE_MODE: <mode>]\` | 意图模式 | 识别模式后进入对应流程 |
 | \`[SPECCORE_EXEC: <cmd>]\` | 自动执行命令 | 直接 execute_command |
 | \`[SPECCORE_CONFIRM]\` | 执行前确认 | 需用户确认后再执行（副作用命令） |
-| \`[SPECCORE_EXEC_STATUS: ok\\|fail(<code>)]\` | 命令执行结果 | 检查执行是否成功 |
+| \`[SPECCORE_EXEC_STATUS: ok\\|relay(10)\\|fail(<code>)]\` | 命令执行结果 | ok=成功；**relay(10)=宿主 AI 接力（非失败）**——子命令已输出 AI Prompt 等宿主响应落盘，按 Prompt 末尾续跑命令继续；fail(<code>)=真实失败 |
 | \`[SPECCORE_EXEC_ERROR: <msg>]\` | 命令执行异常 | 查看错误详情 |
 | \`[SPECCORE_INTENT]\` | 意图确认块 | 展示给用户确认 |
 | \`[SPECCORE_PROMPT]\` | AI Prompt 块 | 将后续内容作为 Prompt 传给宿主 AI |

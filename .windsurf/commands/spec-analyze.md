@@ -1,6 +1,6 @@
 ---
 name: spec-analyze
-description: 需求分析专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代存在性、需求文档检测、专业度评估、端列表读取），参数缺失时输出交互式提示。不影响 speccore ask 的意图识别能力。
+description: 需求分析专属 Skill。在调用 speccore ask 之前，执行参数提取、前置校验（迭代存在性、需求文档检测、专业度评估、端列表读取），参数缺失时输出交互式提示。全局层分析（源码→技术文档/反推需求）走 speccore global，不属于本 Skill；「全局分析」类表述交给 speccore global（中性句→analyze 纯技术；反推词→from-source）。不影响 speccore ask 的意图识别能力。
 ---
 
 直接执行: execute_command("speccore ask '用户原话'")

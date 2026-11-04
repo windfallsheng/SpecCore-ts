@@ -953,6 +953,7 @@ program
   .option('--verify', '验证环：只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推（宿主 AI 填完 UR 后运行）')
   .option('--review', 'QA 环：生成 document-reviewer 语义审查剧本 + review.json 模板（--verify 后运行）')
   .option('--revise', 'QA 环：读 review.json 做裁决门禁（有 apply findings 则生成修订剧本 + 修订轮次记录）')
+  .option('--migrate', '旧域迁移：把 GLOBAL/_reverse/ 与 requirements/ 根级直铺反推产物移到 _legacy-*（可逆移位）')
   .action((options: any) => {
     // v8.3.255+: 薄别名，直接走 global from-source 引擎（屏蔽 analyze --scope global 废弃提示）
     analyzeCommand({ ...options, fromCode: true, scope: 'global', _fromGlobal: true } as never);
@@ -989,6 +990,7 @@ globalCmd
   .option('--verify', '验证环：只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推（宿主 AI 填完 UR 后运行）')
   .option('--review', 'QA 环：生成 document-reviewer 语义审查剧本 + review.json 模板（--verify 后运行）')
   .option('--revise', 'QA 环：读 review.json 做裁决门禁（有 apply findings 则生成修订剧本 + 修订轮次记录）')
+  .option('--migrate', '旧域迁移：把 GLOBAL/_reverse/ 与 requirements/ 根级直铺反推产物移到 _legacy-*（可逆移位）')
   .action(globalFromSourceCommand);
 
 globalCmd

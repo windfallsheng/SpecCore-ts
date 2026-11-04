@@ -23,7 +23,7 @@ vi.mock('../../../src/core/unified-config', async (importOriginal) => {
   };
 });
 
-import { resolvePlatformFromInput, resolvePlatformsFromInput, enrichFromSourceCommand } from '../../../src/core/ask-engine';
+import { resolvePlatformFromInput, resolvePlatformsFromInput, enrichFromSourceCommand, resolveGlobalSubCommand } from '../../../src/core/ask-engine';
 
 const PLATFORMS = [
   { name: 'booking-service', type: 'backend', description: '预订订单服务', project_name: '会议预订后端', code_path: './packages/backend/booking-service', default_branch: 'main' },
@@ -59,6 +59,31 @@ describe('resolvePlatformFromInput 端名解析', () => {
 
   it('空端列表返回 null', () => {
     expect(resolvePlatformFromInput('根据 booking-service 端生成需求', [])).toBeNull();
+  });
+});
+
+describe('resolveGlobalSubCommand 技术分析 vs 反推需求分流（v8.3.393+）', () => {
+  it('中性「全局分析」句默认纯技术（analyze --no-product，不反推需求）', () => {
+    expect(resolveGlobalSubCommand('全局分析所有工程的源码')).toBe('analyze --no-product');
+    expect(resolveGlobalSubCommand('全局技术分析')).toBe('analyze --no-product');
+    expect(resolveGlobalSubCommand('全局分析项目架构')).toBe('analyze --no-product');
+    expect(resolveGlobalSubCommand('分析所有端的源码')).toBe('analyze --no-product');
+  });
+
+  it('反推词路由 from-source（反推需求文档）', () => {
+    expect(resolveGlobalSubCommand('反推需求')).toBe('from-source');
+    expect(resolveGlobalSubCommand('从源码反推需求')).toBe('from-source');
+    expect(resolveGlobalSubCommand('全局分析所有工程并生成需求文档')).toBe('from-source');
+  });
+
+  it('显式要产品层/需求文档时保留 4a（analyze 不拼 --no-product）', () => {
+    expect(resolveGlobalSubCommand('全局分析，包括产品层')).toBe('analyze');
+    expect(resolveGlobalSubCommand('全局分析并生成产品文档')).toBe('analyze');
+  });
+
+  it('extractParams.fromCode 优先级最高（无论句义）', () => {
+    expect(resolveGlobalSubCommand('全局技术分析', 'true')).toBe('from-source');
+    expect(resolveGlobalSubCommand('分析所有工程', true)).toBe('from-source');
   });
 });
 

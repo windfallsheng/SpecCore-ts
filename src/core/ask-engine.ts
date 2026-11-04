@@ -94,8 +94,8 @@ const COMMAND_KB: CommandKnowledge[] = [
     usage: 'speccore dashboard [--scope global|iteration] [--export html] [--health] [--lifecycle]', examples: ['speccore dashboard', 'speccore dashboard --scope global --export html'], related: ['analyze', 'health'], triggers: ['看板', '仪表盘', 'dashboard', '进度', '状态'] },
   { name: 'analyze', aliases: ['al'], description: '迭代层分析：需求文档+源码→分析报告（产物 020-specs/）。支持 --full 三阶段合成，--deep 单文档深度分析，--iterative 迭代式生成，--filter 按需分析指定模块，--with-code 注入代码结构化数据，--phase 单阶段合成，--feature 局部分析功能模块，--doc 局部分析类型文档，--no-source 跳过源码，--supplement 追加源码；全局层（源码→技术文档/反推需求）用 speccore global',
     usage: 'speccore analyze [--iteration <name>] [--full] [--deep <doc>] [--iterative] [--filter <keywords>] [--with-code] [--phase <n>] [--feature <module>] [--doc <type/slug>] [--no-source] [--source-scope <dirs>] [--supplement] [--dev-guide]', examples: ['speccore analyze', 'speccore analyze --full -i Q2', 'speccore analyze --deep ARCHITECTURE.md --iterative', 'speccore analyze --filter "订单,支付" --with-code', 'speccore analyze --phase 1 -i Q2', 'speccore analyze --feature 支付模块', 'speccore analyze --doc bugs/login-timeout', 'speccore analyze --with-code', 'speccore analyze --supplement --source-scope src/core', 'speccore global analyze --layer 1', 'speccore global from-source --src src/core'], related: ['dashboard', 'validate'], triggers: ['分析', 'analyze', '审计', 'audit', '检查', '结合源码', '连代码', '带代码', '源码分析', '迭代分析', '分析迭代', '分析代码', '不读源码', '不读代码', '跳过源码', '指定目录分析', '只扫描', '补充分析', '追加分析', '补充源码', '追加源码', '遗漏', '没分析到', '没覆盖', '漏掉', '再分析', '多读几个', '局部分析', '单个模块', '单独分析', 'bug分析', '重构分析', '局部回写', '回写spec', '同步spec', '合成需求', '合并需求', '需求合成', '智能合成', '需求合并', '开发指南', '生成开发指南', '带开发指南', '深度分析', '深入分析', '详细分析', '迭代生成', '逐节分析', '大纲分析', '按需分析', '只分析', '过滤分析', '聚焦分析'] },
-  { name: 'global', aliases: [], description: '全局层分析：源码→技术文档（global analyze，Layer 1→4 推进）/ 源码→需求文档（global from-source，反推）。产物 .speccore/GLOBAL/，独立于迭代层 analyze',
-    usage: 'speccore global analyze [--layer 1-4] [--with-code] [--auto] | speccore global from-source --src <dirs> [--depth <depth>]', examples: ['speccore global analyze --layer 1', 'speccore global analyze --with-code', 'speccore global from-source --src backend/src,admin-web/src'], related: ['analyze'], triggers: ['全局分析', '全局层分析', '分析全局', '全局架构', '全局代码分析', '全局技术分析', '分析所有端', '分析所有源码', '分析所有工程', '分析整体架构', '项目架构分析', '全量分析', '跨端综合', '全量合成', '多端合成', '源码反推', '从源码反推', '源码生成需求', '反推需求', '从代码生成', '倒推需求', '反推', '逆向工程', '按端反推', '按端生成需求', '根据端生成需求', '端生成需求', '生成需求文档', '需求文档反推', '代码生成需求', '从代码生成需求', '根据代码生成需求', '按模块反推', '反推文档', '从工程生成需求'] },
+  { name: 'global', aliases: [], description: '全局层分析：源码→技术文档（global analyze，Layer 1→4 推进，ask 路由默认 --no-product 纯技术）/ 源码→需求文档（global from-source，反推）。产物 .speccore/GLOBAL/，独立于迭代层 analyze',
+    usage: 'speccore global analyze [--layer 1-4] [--with-code] [--no-product] [--auto] | speccore global from-source --src <dirs> [--depth <depth>]', examples: ['speccore global analyze --layer 1', 'speccore global analyze --with-code', 'speccore global from-source --src backend/src,admin-web/src'], related: ['analyze'], triggers: ['全局分析', '全局层分析', '分析全局', '全局架构', '全局代码分析', '全局技术分析', '分析所有端', '分析所有源码', '分析所有工程', '分析整体架构', '项目架构分析', '全量分析', '跨端综合', '全量合成', '多端合成', '源码反推', '从源码反推', '源码生成需求', '反推需求', '从代码生成', '倒推需求', '反推', '逆向工程', '按端反推', '按端生成需求', '根据端生成需求', '端生成需求', '生成需求文档', '需求文档反推', '代码生成需求', '从代码生成需求', '根据代码生成需求', '按模块反推', '反推文档', '从工程生成需求'] },
   { name: 'execute', aliases: ['ex'], description: '执行开发任务：依赖排序+分批+交互引导+计划联动',
     usage: 'speccore execute [--task <id>] [--batch-size <n>] [--auto]', examples: ['speccore execute', 'speccore execute --batch-size 3'], related: ['plan', 'done'], triggers: ['执行', 'execute', '开发', '开始做', '干活'] },
   { name: 'plan', aliases: ['pl'], description: '生成执行计划+管理历史：创建/交互/列表/详情/取消',
@@ -759,9 +759,11 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     // v8.3.301+: from-source 端名自动映射的备注，等 paramNotes 声明后再 append
     let srcMapNote: string | undefined;
     // v8.3.255+: global 命令族需子命令（反推词→from-source，否则→analyze）
+    // v8.3.393+: 默认纯技术 — 中性句 analyze 默认 --no-product 跳过 4a 产品层
     if (kbMatch.name === 'global') {
-      fullCommand = params.fromCode ? `speccore global from-source` : `speccore global analyze`;
-      if (params.fromCode) {
+      const sub = resolveGlobalSubCommand(input, params.fromCode);
+      fullCommand = sub === 'from-source' ? `speccore global from-source` : `speccore global ${sub}`;
+      if (sub === 'from-source') {
         const enriched = await enrichFromSourceCommand(input, fullCommand);
         fullCommand = enriched.command;
         srcMapNote = enriched.note;
@@ -926,9 +928,10 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
   } else if (best.command === 'global') {
     // v8.3.255+: global 命令族 — 反推词→from-source，否则→analyze
     // 注：extractParams 中 fromCode 与 withCode 互斥（反推优先级高于扫描）
-    fullCommand = (params.fromCode || (params.scope === 'global' && /反推|逆向|生成需求/.test(input)))
-      ? `speccore global from-source`
-      : `speccore global analyze`;
+    // v8.3.393+: 默认纯技术 — 中性「全局分析」句 analyze 默认 --no-product 跳过 4a 产品层
+    // （不再顺手反推需求文档）；显式提「产品层/需求文档」保留 4a，反推词才走 from-source
+    const sub = resolveGlobalSubCommand(input, params.fromCode);
+    fullCommand = sub === 'from-source' ? `speccore global from-source` : `speccore global ${sub}`;
     if (params.withCode) fullCommand += ` --with-code`;
     // v8.3.301+: from-source 端名自动映射（PROJECT.yaml 端名/描述 → --platform + --src）
     if (fullCommand.includes('from-source')) {
@@ -1915,6 +1918,19 @@ export function resolvePlatformsFromInput(input: string, platforms: PlatformConf
   }
   if (/所有端|所有工程|所有项目|全部端|全部工程|全部项目/.test(input)) return platforms;
   return [];
+}
+
+/**
+ * v8.3.255+/393+: 解析 global 命令族子命令，收口「技术分析 vs 反推需求」的语义分流：
+ * - 反推词（fromCode 或句含「反推/逆向/生成需求」）→ from-source（源码反推需求文档）
+ * - 显式要产品层（产品层/产品文档/需求文档/产品视角）→ analyze（保留 4a 产品层）
+ * - 其余中性句（「全局分析…源码」等）→ analyze --no-product（纯技术文档，不再顺手反推需求）
+ * 「分析源码」本身不携带产出物信息，默认按纯技术解读，需求文档仅在明确要求时生成。
+ */
+export function resolveGlobalSubCommand(input: string, fromCode?: string | boolean): 'from-source' | 'analyze' | 'analyze --no-product' {
+  if (fromCode || /反推|逆向|生成需求/.test(input)) return 'from-source';
+  const wantProduct = /产品层|产品文档|需求文档|产品视角/.test(input);
+  return wantProduct ? 'analyze' : 'analyze --no-product';
 }
 
 /**

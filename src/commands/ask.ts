@@ -219,7 +219,7 @@ export async function askCommand(input: string, _options: any): Promise<void> {
     const { writeFile } = await import('fs-extra');
 
     // —— 统一执行函数 ——
-    async function autoExecute(command: string, args: string, confirm: boolean): Promise<{ ok: boolean; output: string }> {
+    async function autoExecute(command: string, args: string, confirm: boolean): Promise<{ ok: boolean; relay?: boolean; output: string }> {
       const fullCmd = `speccore ${command} ${args}`.trim();
       process.stdout.write(`[SPECCORE_EXEC: ${fullCmd}]\n`);
       if (confirm) process.stdout.write(`[SPECCORE_CONFIRM: 是否确认执行?]\n`);
@@ -232,6 +232,22 @@ export async function askCommand(input: string, _options: any): Promise<void> {
         });
         const output = ((r.stdout || '') + (r.stderr || '')).trim();
         const ok = r.status === 0;
+        // v8.3.392+: exit 10 是「宿主 AI 接力」协议（analyze/execute 等输出 [SPECCORE_PROMPT] 后
+        // 退出码 10 等待宿主 AI 响应落盘），不是失败。此前无条件报 fail(10) 且只打尾部 800 字符，
+        // 把 prompt 开头的 [SPECCORE_SESSION_AGENT]/[SPECCORE_PROMPT] 等标记截掉，宿主 AI 误判
+        // 命令失败后自行改道（如「全局分析源码」被拐去迭代层 analyze），自动化就此断链。
+        if (r.status === 10) {
+          process.stdout.write(`[SPECCORE_EXEC_STATUS: relay(10)]\n`);
+          process.stdout.write(`🤖 exit 10 = 宿主 AI 接力（非失败）：上方子命令已输出 AI Prompt，请按 Prompt 内容响应落盘，\n`);
+          process.stdout.write(`   完成后按 Prompt 末尾的续跑命令继续（如 speccore global analyze --prompt --pipeline）。\n`);
+          // 头部含关键标记（SESSION_AGENT/PROMPT），尾部含 Pipeline 推进与续跑命令指引——两头都留
+          if (output.length > 3000) {
+            process.stdout.write(`\n--- 子命令输出（头部） ---\n${output.slice(0, 1500)}\n... (中段省略) ...\n--- 子命令输出（尾部） ---\n${output.slice(-1200)}\n`);
+          } else {
+            process.stdout.write(output + '\n');
+          }
+          return { ok: true, relay: true, output };
+        }
         process.stdout.write(`[SPECCORE_EXEC_STATUS: ${ok ? 'ok' : `fail(${r.status})`}]\n`);
         if (ok) {
           process.stdout.write(output.slice(0, 2000) + '\n');
@@ -274,6 +290,10 @@ export async function askCommand(input: string, _options: any): Promise<void> {
         }
 
         const r = await autoExecute(step.command, argsFilled, false);
+        // v8.3.392+: exit 10 接力——停下等宿主 AI 按 Prompt 落盘后按续跑命令继续，不推进下一步
+        if (r.relay) {
+          break;
+        }
         if (!r.ok) {
           process.stdout.write(`[SPECCORE_STEP_FAIL: ${step.command}] 用户决定: [重试/跳过/停止]\n`);
           break;

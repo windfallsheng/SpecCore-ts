@@ -1,5 +1,29 @@
 # Changelog
 
+## v8.3.394 (2026-11-04) — 反推链接力协议补全：两跳填充与 QA 环不再断链，骨架态如实报告
+
+- **两跳填充接力协议**：global from-source 主路径骨架态收尾输出 [SPECCORE_PROMPT] 两跳接力（exit 10）——此前只有一句 logger.info「下一步」，宿主 AI 不知要接力，需求文档永远停在 100 多行骨架态。接力 Prompt 逐端报告骨架完成度，指示按 REVERSE_PROMPT.md 填 IR 六节 + 合成 UR，质量红线（禁编造/反翻译腔/置信度门控）与续跑命令一并下发。
+- **QA 环三阶段接力标记**：--verify/--review/--revise 收尾各输出阶段接力 Prompt + exit 10（code-verifier 填 verify.json → document-reviewer 裁决 review.json → prd-creator 有条件修订）；--revise 全部端闭环完成（无 apply findings）时不接力，如实收尾。
+- **骨架完成度自检**：countSkeletonPlaceholders 统计 `_AI 填写` 占位符——跑完 from-source 如实报告骨架态/成品态，占位符清零才宣称完成；需求↔代码联动推迟到成品态（骨架态联的是占位符而非真实需求）。
+- **--verify 前置填充检查**：骨架态跑 verify 先警告（只会得到空剧本），引导先完成两跳填充。
+- **旧域 --migrate 可逆迁移**：GLOBAL/_reverse/ 与 requirements/ 根级直铺反推产物 move 到 _legacy-*（仅移位不删除），旧域兜底继续可用。
+- **测试**：新增 countSkeletonPlaceholders 三用例（骨架态/成品态/缺文件），全量 927/927 通过；会议项目现场实测两跳接力与 verify 前置警告（exit 10 + Prompt 完整输出）。
+
+## v8.3.393 (2026-11-04) — 全局分析默认纯技术：ask 路由收口「技术分析 vs 反推需求」语义分流
+
+- **默认纯技术（--no-product）**：中性「全局分析…源码」句路由 global analyze 时默认拼 --no-product 跳过 4a 产品层——「分析源码」不携带产出物信息，此前 analyze 会顺手反推需求文档，与技术分析产物混在一起，用户分不清命令到底在干什么。现在需求文档仅在明确要求时生成。
+- **语义分流收口 resolveGlobalSubCommand**：反推词（fromCode 或句含「反推/逆向/生成需求」）→ global from-source；显式要「产品层/产品文档/需求文档」→ analyze 保留 4a；其余 → analyze --no-product。意图分支与 KB 分支共用同一纯函数，消除双处判定漂移。
+- **Skill 描述边界补强**：spec-from-source 明确「全局分析」类句的中性路由（analyze 纯技术）与反推词路由（from-source）分界；全量词（所有端/所有工程）端名映射仅在反推语境生效；spec-analyze 同步为「全局层表述一律交给 speccore global」；6 宿主通道 12 个 commands 文件同步。
+- **测试**：新增 resolveGlobalSubCommand 分流用例（中性句/反推词/产品层/fromCode 优先），全量 924/924 通过。
+
+## v8.3.392 (2026-11-04) — exit 10 接力不再误报失败：ask 引擎 relay(10) 标记与输出双向修复
+
+- **relay(10) 标记替代 fail(10)**：ask 引擎 autoExecute 此前把子命令 exit 10 无条件报 fail(10)，且失败分支只打尾部 800 字符——analyze/execute 输出 [SPECCORE_PROMPT] 后的接力退出被误判为失败，prompt 开头的 [SPECCORE_SESSION_AGENT]/[SPECCORE_PROMPT] 等关键标记被截掉，宿主 AI 自行改道（「全局分析所有工程的源码」被拐去迭代层 analyze）。现 exit 10 输出 `[SPECCORE_EXEC_STATUS: relay(10)]` + 接力说明，输出改为头部 1500 + 尾部 1200 两头都留（头部含标记、尾部含续跑命令）。
+- **pipeline 接力收口**：pipeline 模式下子命令 relay 后停止推进（此前 relay 视为成功会输出下一步标记，与「等宿主 AI 落盘」协议冲突）。
+- **宿主标记表同步**：init 引导文档的 [SPECCORE_EXEC_STATUS] 条目补 relay(10) 语义（ok=成功 / relay=接力非失败 / fail=真实失败）。
+- **Skill 路由补强**：spec-from-source 触发词补「全局分析/全局层分析/分析所有工程/分析所有端」等全局层表述，spec-analyze 明确此类句归 spec-from-source——宿主 AI 对「全局分析」句不再猜错 skill。
+- **测试**：全量 920/920 通过；会议项目现场实测（8.3.348 与 8.3.392 双版本）确认 CLI 路由本身正确，断点在宿主 AI 误读 fail(10)。
+
 ## v8.3.391 (2026-11-04) — 分支切换零询问：切换前快照提交 + execute 派单 Git 行为边界
 
 - **切换前快照提交**：`snapshotUncommittedChanges` 在 `prepareTaskBranch` 切回 base/下一任务分支前，把当前任务分支上的未提交变更自动提交（含 .speccore/.git-mapping.json 元数据），消除 checkout 失败与代码漂移到下一分支的串扰，宿主 AI 落盘代码后不必 commit 也能无缝接力。

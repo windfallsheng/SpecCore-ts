@@ -2,6 +2,30 @@
 
 ---
 
+## v8.3.394 (2026-11-04) — reverse-engineering relay protocol completed: two-hop filling and QA ring no longer dead-end, skeleton state reported honestly
+
+- **Two-hop filling relay protocol**: the from-source main path now emits a [SPECCORE_PROMPT] two-hop relay (exit 10) when the requirement docs are still skeleton state — previously only a logger.info "next step" existed, so host AIs never knew to relay and requirement docs stayed at the ~100-line skeleton forever. The relay prompt reports per-endpoint completion, instructs filling the six IR sections and synthesizing the UR per REVERSE_PROMPT.md, and ships quality red lines (no fabrication / no translation-ese / confidence gating) plus resume commands.
+- **QA ring stage relays**: --verify/--review/--revise each emit a stage relay prompt + exit 10 at the end (code-verifier fills verify.json → document-reviewer adjudicates review.json → prd-creator conditional revision); --revise skips the relay when all endpoints close out (no apply findings).
+- **Skeleton completion self-check**: countSkeletonPlaceholders counts `_AI 填写` placeholders — from-source now reports skeleton vs finished state honestly, and only claims completion at zero placeholders; requirement↔code linking is deferred to the finished state (skeletons only link placeholders, not real requirements).
+- **--verify pre-fill check**: running verify on a skeleton state warns first (it would only produce an empty playbook) and points to the two-hop filling first.
+- **Legacy domain --migrate reversible move**: GLOBAL/_reverse/ and root-level flat reverse artifacts move to _legacy-* (move only, never delete); legacy fallback stays usable.
+- **Tests**: three new countSkeletonPlaceholders cases (skeleton/finished/missing files), full suite 927/927 green; live verification on the meeting-system project (exit 10 + full relay prompt + verify pre-fill warning).
+
+## v8.3.393 (2026-11-04) — global analyze defaults to tech-only: ask routing closes the "tech analysis vs reverse-engineered requirements" ambiguity
+
+- **Tech-only by default (--no-product)**: neutral "globally analyze ... source" sentences now route to `global analyze` with `--no-product`, skipping the 4a product layer — "analyze source code" carries no artifact intent, and analyze previously reverse-engineered requirement docs on the side, mixing them with tech docs and confusing users about what the command actually did. Requirement docs are now generated only when explicitly requested.
+- **Semantic split consolidated in resolveGlobalSubCommand**: reverse-engineering words (fromCode or 「反推/逆向/生成需求」) → global from-source; explicit product-layer request (「产品层/产品文档/需求文档」) → analyze keeping 4a; everything else → analyze --no-product. Both the intent branch and the KB branch share this pure function, eliminating drift between the two dispatch sites.
+- **Skill description boundaries tightened**: spec-from-source now spells out the neutral-route (analyze, tech-only) vs reverse-route (from-source) split; the all-platform word mapping (所有端/所有工程) only applies in a reverse-engineering context; spec-analyze synced to "global-layer wording always goes to speccore global"; 12 command files across 6 host channels synced.
+- **Tests**: new resolveGlobalSubCommand cases (neutral / reverse words / product layer / fromCode priority), full suite 924/924 green.
+
+## v8.3.392 (2026-11-04) — exit 10 relay no longer reported as failure: relay(10) marker and dual-ended output in ask engine
+
+- **relay(10) marker replaces fail(10)**: ask engine autoExecute unconditionally reported child-process exit 10 as fail(10) and only printed the last 800 chars — the relay exit after analyze/execute emits [SPECCORE_PROMPT] was misread as failure, and the leading [SPECCORE_SESSION_AGENT]/[SPECCORE_PROMPT] markers were truncated, so host AIs re-routed on their own ("globally analyze all project source" got hijacked into iteration-level analyze). Now exit 10 prints `[SPECCORE_EXEC_STATUS: relay(10)]` plus relay guidance, and output keeps both ends (head 1500 with markers + tail 1200 with the resume command).
+- **Pipeline relay stop**: in pipeline mode the step loop now stops when a subcommand relays (previously relay counted as success and emitted the next-step marker, conflicting with the "wait for host AI to persist" protocol).
+- **Host marker table sync**: init onboarding doc's [SPECCORE_EXEC_STATUS] row now documents relay(10) semantics (ok=success / relay=handoff not failure / fail=real failure).
+- **Skill routing reinforcement**: spec-from-source triggers now include global-layer phrasing (全局分析/全局层分析/分析所有工程/分析所有端), and spec-analyze explicitly delegates such sentences to spec-from-source.
+- **Tests**: full suite 920/920 green; on-site reproduction in meeting-system (both 8.3.348 and 8.3.392) confirmed CLI routing was already correct — the break was host AIs misreading fail(10).
+
 ## v8.3.391 (2026-11-04) — Zero-prompt branch switching: pre-switch snapshot commit + Git behavior boundaries in execute prompts
 
 - **Snapshot commit before switching**: `snapshotUncommittedChanges` auto-commits uncommitted changes on the current task branch (incl. .speccore/.git-mapping.json metadata) before `prepareTaskBranch` checks out the base/next-task branch — eliminates checkout failures and cross-branch code drift, so the host AI no longer needs to commit before handing off.

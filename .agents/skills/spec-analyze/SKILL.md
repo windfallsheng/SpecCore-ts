@@ -5,7 +5,9 @@ description: >
   /analyze 等关键词，或明确要求通过 speccore 执行 analyze 操作时使用。
   参数提取与前置校验（迭代存在性、需求文档检测、
   专业度评估、端列表读取）由 speccore ask 引擎执行；参数缺失时引擎输出 [SPECCORE_NEEDS_INFO] 交互式提示。
-  全局层分析（源码→技术文档/反推需求）走 speccore global，不属于本 Skill。
+  全局层分析（源码→技术文档/反推需求）走 speccore global 命令族，不属于本 Skill；
+  「全局分析」「全局层分析」「分析所有工程/端」等全局层表述一律交给 speccore global
+  （中性句 → global analyze 纯技术分析，默认 --no-product 不反推需求；含「反推/生成需求」词 → global from-source）。
   不处理一般性的"分析需求"讨论（如"帮我分析一下登录功能"），只处理 speccore 上下文中的分析。
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 disable-model-invocation: false

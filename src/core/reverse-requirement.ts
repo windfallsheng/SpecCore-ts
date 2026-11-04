@@ -617,6 +617,35 @@ export function sanitize(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
+// ── v8.3.394+: 骨架完成度自检 ──
+// 两跳填充是否完成的唯一硬指标：骨架占位符 `_AI 填写` 是否清零。
+// 此前反推链无自检——骨架生成后即宣称「完成（status: candidate）」，
+// 宿主 AI 未接力时文档停留在骨架态而不自知。
+
+/** 统计端目录内 UR 与 IR 骨架的未填占位符数量 */
+export async function countSkeletonPlaceholders(
+  epDir: string,
+): Promise<{ requirement: number; irFilled: number; irTotal: number; irPlaceholders: number }> {
+  const reqPath = join(epDir, 'REQUIREMENT.md');
+  let requirement = 0;
+  if (await pathExists(reqPath)) {
+    const content = await readFile(reqPath, 'utf-8');
+    requirement = (content.match(/_AI 填写/g) || []).length;
+  }
+  const irDir = join(epDir, '_ir');
+  let irTotal = 0;
+  let irPlaceholders = 0;
+  if (await pathExists(irDir)) {
+    const files = (await readdir(irDir)).filter(f => f.endsWith('.md'));
+    irTotal = files.length;
+    for (const f of files) {
+      const content = await readFile(join(irDir, f), 'utf-8');
+      if (/_AI 填写/.test(content)) irPlaceholders++;
+    }
+  }
+  return { requirement, irFilled: irTotal - irPlaceholders, irTotal, irPlaceholders };
+}
+
 // ── 验证环：锚点一致性校验（v8.3.301+，反幻觉门禁）──
 
 /** 锚点校验结果（UR 溯源锚点 vs IR 模块清单） */

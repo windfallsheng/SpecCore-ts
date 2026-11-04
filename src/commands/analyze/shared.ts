@@ -81,6 +81,8 @@ export interface AnalyzeOptions {
   outDir?: string;
   // v8.3.386+: 跳过 4a 产品层（--no-product，只做技术文档不反推需求）
   noProduct?: boolean;
+  // v8.3.394+: 旧域反推产物迁移（--migrate，move 到 _legacy-* 可逆移位）
+  migrate?: boolean;
 }
 
 /** 解析 [DOC:xxx] 标记，提取文档名 → 内容 Map */
