@@ -1,5 +1,12 @@
 # Changelog
 
+## v8.3.389 (2026-11-04) — 类型差异化派单体系：bugfix/refactor/research 专属 Agent 贯穿澄清→分析→执行
+
+- **bugfix 工作流类型差异化派单**：ask 引擎的 bug 工作流根因分析与修复执行改派 `bug-analyzer` 缺陷诊断专家，不再用通用 `requirement-analyzer`/`code-generator`，与 execute 运行时 `resolveTaskAgents` 口径一致。
+- **任务类型注入**：verify 引擎构建 Agent 上下文时注入 `task.type`（从 .meta/type 读取），bugfix/refactor/research 质量门禁按类型差异化。
+- **类型差异化澄清视角**：analyze 澄清阶段源文档命中 `bugs/`/`refactors/`/`research/` 目录时，在通用澄清角色之上叠加对应类型的诊断/重构/调研视角（多类型多视角，路径推导口径一致）。
+- **新增三个专属 Agent**：bug-analyzer（缺陷诊断）、refactor-architect（重构架构）、research-analyst（调研分析）与任务类型解析器，模板页同步更新，测试补充。
+
 ## v8.3.388 (2026-11-04) — E2E 全链路深度检查修复：change 链路/图片提取/幽灵后端/命名乱码/闸口模式/澄清产物/短迭代名 11 项
 
 - **change 口语化链路（BUG-3/4/5）**：`change` 命令注册位置参数 `[desc]`（`speccore change "描述"` 与 ask 引擎约定一致）；意图分类正则补「加」前缀（「加一个消息通知功能」识别为新增/feature）；ask 引擎 change 分支用完整输入构造命令，触发词不再被「加(.+)」捕获组剥离。

@@ -6059,6 +6059,33 @@ async function buildClarifyPhasePrompt(iteration: string): Promise<string> {
     prompt += '\n\n';
   }
 
+  // v8.3.389+: 类型差异化澄清视角——源文档命中 bugs/refactors/research/ 目录时，
+  // 在通用澄清角色之上叠加对应类型的诊断/重构/调研视角（多类型多视角）。
+  // 类型命中从 docPaths 路径推导（源文档收集与澄清 prompt 构建跨函数，按路径推导口径一致）
+  const typeDirAgentMap: Record<string, string> = { bugs: 'bug-analyzer', refactors: 'refactor-architect', research: 'research-analyst' };
+  const typeDirHits: { dir: string; agent: string }[] = [];
+  for (const p of docPaths) {
+    const typeDir = (p.match(/\/(bugs|refactors|research)\//) || [])[1];
+    if (typeDir && typeDirAgentMap[typeDir] && !typeDirHits.some(h => h.dir === typeDir)) {
+      typeDirHits.push({ dir: typeDir, agent: typeDirAgentMap[typeDir] });
+    }
+  }
+  if (typeDirHits.length > 0) {
+    try {
+      const { loadAllAgents } = await import('../core/agents');
+      const allAgents = await loadAllAgents(projectRoot);
+      const viewpoints: string[] = [];
+      for (const hit of typeDirHits) {
+        const def = allAgents.get(hit.agent);
+        if (!def || !def.systemPrompt) continue;
+        viewpoints.push(`- **${def.title || hit.agent}**（${hit.dir}/ 类型）：${def.systemPrompt}`);
+      }
+      if (viewpoints.length > 0) {
+        prompt += `## 🎭 类型差异化澄清视角（按需求文档类型命中）\n\n${viewpoints.join('\n')}\n\n> 澄清上述类型文档时，请按对应视角切入：澄清问题、验收标准与文档产出须贴合该类型。\n\n`;
+      }
+    } catch { /* 类型视角注入失败不影响澄清主流程 */ }
+  }
+
   prompt += `## 质量评价摘要（7维度）\n\n`;
   for (const r of dedupedReports) {
     const name = r.filePath.split('/').pop() || '-';

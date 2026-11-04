@@ -1691,6 +1691,14 @@ export async function runQualityGate(
         taskDir,
         codePath,
       };
+      // v8.3.389+: 任务类型注入——task.type 条件维度（bugfix/refactor/research 质量门禁差异化）
+      try {
+        const typePath = join(taskDir, '.meta', 'type');
+        if (await pathExists(typePath)) {
+          const taskType = (await readFile(typePath, 'utf-8')).trim();
+          if (taskType) agentContext.task = { type: taskType };
+        }
+      } catch { /* ignore */ }
       const agents = await resolveAgentsForPhase('execute', 'quality-gate', agentContext, options.projectRoot);
       if (agents.length > 0) {
         agentChecks = [];

@@ -164,15 +164,19 @@ function extractCheckboxItems(content: string): string[] | undefined {
 
 function parseRegistryMarkdown(content: string): AgentRegistry {
   const phases: Record<string, AgentRegistryEntry[]> = {};
-  const phaseMatches = content.matchAll(/^##\s+(.+?)\s*\/\s*(.+?)\s*\n([\s\S]*?)(?=\n##\s|$)/gm);
+  // v8.3.389 (BUG-12 根因): 旧正则前瞻 (?=\n##\s|$) 在 m 标志下 $ 匹配每行行尾，
+  // 导致每段只取到表头一行（垃圾条目 agent='角色'），注册表引擎长期空转。
+  // 改为按标题行切分，整段送入表格解析（表头过滤见 parseRegistryTable）
+  const blocks = content.split(/^##\s/m).slice(1);
 
-  for (const match of phaseMatches) {
-    const command = match[1].trim();
-    const phase = match[2].trim();
-    const phaseKey = `${command}/${phase}`;
-    const tableContent = match[3];
-
-    phases[phaseKey] = parseRegistryTable(tableContent);
+  for (const block of blocks) {
+    const headerEnd = block.indexOf('\n');
+    const header = headerEnd === -1 ? block : block.slice(0, headerEnd);
+    const slash = header.indexOf('/');
+    if (slash === -1) continue;
+    const command = header.slice(0, slash).trim();
+    const phase = header.slice(slash + 1).trim();
+    phases[`${command}/${phase}`] = parseRegistryTable(block.slice(headerEnd + 1));
   }
 
   return { phases };
@@ -180,7 +184,16 @@ function parseRegistryMarkdown(content: string): AgentRegistry {
 
 function parseRegistryTable(content: string): AgentRegistryEntry[] {
   const entries: AgentRegistryEntry[] = [];
-  const lines = content.split('\n').filter(l => l.trim().startsWith('|') && !l.trim().match(/^\|[\s-:]+\|/));
+  // v8.3.389 (BUG-12): 过滤分隔行与表头行——此前中文表头「| 角色 | 优先级 | 条件 | 说明 |」
+  // 被误解析为垃圾条目（agent='角色'），allAgents.get 全 miss 导致注册表引擎空转、
+  // 各命令长期靠回退角色运行（条件维度 task.type 也因此永远不生效）
+  const lines = content.split('\n').filter((l) => {
+    const t = l.trim();
+    if (!t.startsWith('|')) return false;
+    if (/^\|[\s-:]+\|/.test(t)) return false;
+    const first = t.split('|').map((c) => c.trim()).filter(Boolean)[0];
+    return first !== '角色' && first.toLowerCase() !== 'agent';
+  });
 
   for (const line of lines) {
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);

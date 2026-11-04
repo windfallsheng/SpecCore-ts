@@ -39,6 +39,9 @@
 | 角色 | 优先级 | 条件 | 说明 |
 |------|--------|------|------|
 | compiler | 100 | — | 编译可行性检查（叠加 RULES/ 技术栈构建规则） |
+| bug-analyzer | 96 | task.type == 'bugfix' | 缺陷诊断视角（先诊断后动手、最小修复面、回归防护） |
+| refactor-architect | 95 | task.type == 'refactor' | 重构视角（行为保持、渐进式、兼容性） |
+| research-analyst | 94 | task.type == 'research' | 调研视角（候选对比、证据、结论边界） |
 | test-engineer | 90 | — | 单元测试执行与覆盖率（叠加 RULES/ 技术栈测试规范） |
 | security-reviewer | 80 | — | 安全漏洞扫描（叠加 RULES/ 技术栈安全规则） |
 | performance-expert | 50 | — | 性能回归检测（叠加 RULES/ 技术栈性能规范） |

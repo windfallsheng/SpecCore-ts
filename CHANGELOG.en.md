@@ -2,6 +2,13 @@
 
 ---
 
+## v8.3.389 (2026-11-04) — Type-differentiated agent dispatch: bugfix/refactor/research dedicated agents across clarify→analyze→execute
+
+- **Type-differentiated dispatch for bugfix workflow**: the ask engine's bug workflow now dispatches root-cause analysis and fix execution to the `bug-analyzer` defect-diagnosis expert instead of the generic `requirement-analyzer`/`code-generator`, aligned with execute runtime `resolveTaskAgents`.
+- **Task type injection**: the verify engine injects `task.type` (read from .meta/type) into the agent context, enabling type-differentiated quality gates for bugfix/refactor/research.
+- **Type-differentiated clarify viewpoints**: during clarify in analyze, when source docs hit `bugs/`/`refactors/`/`research/` directories, the matching diagnostic/refactor/research viewpoint is layered on top of the generic clarify role (multi-type multi-viewpoint, consistent path-derived detection).
+- **Three dedicated agents added**: bug-analyzer (defect diagnosis), refactor-architect (refactoring architecture), research-analyst (research) plus the task-type resolver; template pages synced; tests added.
+
 ## v8.3.388 (2026-11-04) — E2E full-pipeline deep check fixes: change flow / image extraction / ghost backend / slug gibberish / gate mode / clarified naming / short iteration names (11 items)
 
 - **Colloquial change flow (BUG-3/4/5)**: the `change` command now registers a positional `[desc]` argument (`speccore change "description"` matches the ask-engine convention); the intent-classification regex gains the 「加」 prefix ("add a message-notification feature" → new/feature); the ask engine builds the change command from the full input so the trigger word is no longer stripped by the "加(.+)" capture group.

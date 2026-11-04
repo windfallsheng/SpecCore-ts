@@ -241,9 +241,11 @@ const WORKFLOWS: Record<string, PipelineStep[]> = {
   ],
   'bugfix': [
     { order: 1, command: 'task', args: 'new --name "{bug}" --type bugfix', explanation: '创建 Bug 修复任务', dependsOn: undefined },
-    { order: 2, command: 'analyze', args: '--prompt --task {task}', explanation: '分析 Bug 根因和影响范围', dependsOn: 1, subagent: 'requirement-analyzer' },
+    { order: 2, command: 'analyze', args: '--prompt --task {task}', explanation: '分析 Bug 根因和影响范围', dependsOn: 1, subagent: 'bug-analyzer' },
+    // v8.3.389+: bugfix 工作流类型差异化派单——根因分析/修复执行走缺陷诊断专家，
+    // 不再用通用 requirement-analyzer/code-generator（与 execute 运行时 resolveTaskAgents 口径一致）
     { order: 3, command: 'plan', args: '--prompt --task {task}', explanation: '生成修复方案和排程', dependsOn: 2, subagent: 'schedule-planner' },
-    { order: 4, command: 'execute', args: '--prompt --task {task}', explanation: '按方案执行修复', dependsOn: 3, subagent: 'code-generator' },
+    { order: 4, command: 'execute', args: '--prompt --task {task}', explanation: '按方案执行修复', dependsOn: 3, subagent: 'bug-analyzer' },
     { order: 5, command: 'validate', args: '', explanation: '验证修复完整性', dependsOn: 4, subagent: 'code-reviewer' },
     { order: 6, command: 'pr', args: '--task {task}', explanation: '提交修复 PR', dependsOn: 5, subagent: 'code-reviewer' },
     { order: 7, command: 'done', args: '--task {task}', explanation: '归档修复记录', dependsOn: 6 },
