@@ -25,6 +25,12 @@ interface GitMapping {
     taskId: string;
     taskName: string;
     createdAt: string;
+    /**
+     * v8.3.390+: 创建分支时的子任务目录（绝对路径）。
+     * v8.3.337 起子任务 ID 不拼端名，同模块多端子任务 ID 相同；
+     * 复用判定必须精确到 taskDir，否则第二端任务会误复用第一端分支。
+     */
+    taskDir?: string;
   };
 }
 
@@ -281,6 +287,7 @@ export function createTaskBranch(
   taskDir?: string,
   taskType?: string,
   cwd?: string,
+  platform?: string,
 ): string | null {
   const gitCwd = cwd || process.cwd();
   try {
@@ -320,32 +327,45 @@ export function createTaskBranch(
     }
 
     // v8.3.337+: 分支重名兜底——子任务名不再拼端名后，多端同模块子任务的分支名相同，
-    // 已存在的同名分支若属于当前任务（重跑）则复用，否则拼 -hash4 区分（最多 3 次）。
+    // 已存在的同名分支若属于当前任务（重跑）则复用，否则拼端名/-hash4 区分。
+    // v8.3.390+: 复用判定精确到 taskDir——同模块多端子任务 ID 相同但目录不同，
+    // 仅凭 taskId 精确匹配会把第二端误判为第一端重跑，导致多端任务共用一个分支。
     let finalBranchName = branchName;
     if (branchExists(branchName, gitCwd)) {
-      const existing = findBranchByTaskId(taskId, gitCwd);
+      const existing = findBranchByTaskId(taskId, gitCwd, taskDir);
       if (existing) return existing;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const candidate = `${branchName}-${randomBytes(2).toString('hex')}`;
-        if (!branchExists(candidate, gitCwd)) {
-          finalBranchName = candidate;
-          break;
+      // 优先用端名区分（确定性、可读），端名冲突时才退 -hash4 随机兜底
+      const safePlatform = platform ? platform.replace(/[^a-zA-Z0-9_-]/g, '-') : '';
+      if (safePlatform) {
+        const platformCandidate = `${branchName}-${safePlatform}`;
+        if (!branchExists(platformCandidate, gitCwd)) {
+          finalBranchName = platformCandidate;
+        }
+      }
+      if (finalBranchName === branchName) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const candidate = `${branchName}-${randomBytes(2).toString('hex')}`;
+          if (!branchExists(candidate, gitCwd)) {
+            finalBranchName = candidate;
+            break;
+          }
         }
       }
     }
 
     execSync(`git checkout -b "${finalBranchName}"`, { cwd: gitCwd, stdio: 'pipe' });
 
-    // 记录关联
+    // 记录关联（taskDir 供复用判定精确到子任务目录，v8.3.390+）
     const mapping = loadMapping();
-    mapping[finalBranchName] = { taskId, taskName: taskName, createdAt: new Date().toISOString() };
+    mapping[finalBranchName] = { taskId, taskName: taskName, taskDir, createdAt: new Date().toISOString() };
     saveMapping(mapping);
 
     return finalBranchName;
   } catch (e: any) {
     // v8.3.6+: 分支创建失败时输出错误信息，不要静默吞掉
     if (e.message?.includes('already exists')) {
-      const existing = findBranchByTaskId(taskId, gitCwd);
+      // v8.3.390+: 复用判定同样精确到 taskDir，避免同 ID 多端任务误复用
+      const existing = findBranchByTaskId(taskId, gitCwd, taskDir);
       if (existing) return existing;
       const cfg = loadGitConfig(iteration, taskDir, taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : undefined);
       const bt = taskType ? (TASK_TYPE_TO_BRANCH_TYPE[taskType] || taskType) : cfg.branchType;
@@ -802,6 +822,34 @@ export function getCurrentTaskMapping(cwd?: string): { taskId: string; taskName:
 }
 
 /**
+ * v8.3.390+: 切换分支前把工作区未提交变更快照提交到当前任务分支。
+ *
+ * execute 接力中宿主 AI 落盘代码后未必 commit；不提交就切分支，未提交变更会
+ * 随 checkout 漂移到 base/下一任务分支（代码串扰），或让 checkout 失败、
+ * 进而触发宿主确认中断自动化。CLI 在切换前兜底快照提交，保证零摩擦、零询问。
+ *
+ * 仅当当前分支是任务分支（git-mapping 有记录）时提交——避免误提交用户在
+ * base/main 等非任务分支上的手动 WIP。返回是否执行了提交；
+ * 非 git 仓库/无变更/提交失败均静默返回 false（不阻断主流程）。
+ */
+export function snapshotUncommittedChanges(cwd?: string): boolean {
+  const gitCwd = cwd || process.cwd();
+  try {
+    // 当前分支必须是任务分支（上一任务建的分支），否则不碰用户的 WIP
+    const current = getCurrentTaskMapping(gitCwd);
+    if (!current) return false;
+    const status = execSync('git status --porcelain', { cwd: gitCwd, stdio: 'pipe', encoding: 'utf-8' }).trim();
+    if (!status) return false;
+    execSync('git add -A', { cwd: gitCwd, stdio: 'pipe' });
+    const msg = `chore(${current.taskId}): 快照提交未提交变更（SpecCore 切换分支前自动保护）`;
+    execSync(`git commit -m ${JSON.stringify(msg)}`, { cwd: gitCwd, stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 生成 Commit 消息
  * v8.3.88+: 支持 cwd 参数
  * v8.3.293+: 增加 taskType 参数，按任务类型生成符合语义的提交前缀（feature→feat/bugfix→fix/refactor→refactor/research→chore）
@@ -1037,28 +1085,34 @@ function saveMapping(mapping: GitMapping): void {
  * 查找顺序：1. git-mapping.json  2. git branch 列表
  * v8.3.88+: 支持 cwd 参数，工程目录分离场景下使用正确的 git 仓库
  */
-export function findBranchByTaskId(taskId: string, cwd?: string): string | null {
+export function findBranchByTaskId(taskId: string, cwd?: string, taskDir?: string): string | null {
   const gitCwd = cwd || process.cwd();
   // 1. 从 git-mapping.json 查找
   const mapping = loadMapping();
   for (const [branch, info] of Object.entries(mapping)) {
-    if (info.taskId === taskId) return branch;
+    // v8.3.390+: taskDir 传入时为复用判定严格模式——同 ID 不同目录（多端同名子任务）不算同一任务；
+    // 旧 mapping 条目无 taskDir 字段时视为未知，严格模式下不命中（宁建新分支不误复用）。
+    if (info.taskId === taskId && (taskDir === undefined || info.taskDir === taskDir)) return branch;
     // v8.3.291: 依赖可能以父任务 ID 引用（TASK.md「依赖任务」存父任务 ID），
-    // 父任务 ID 是子任务 ID 前缀（如 Task-002-f1-booking → Task-002-f1-booking-booking-service）
-    if (info.taskId && info.taskId.startsWith(`${taskId}-`)) return branch;
+    // 父任务 ID 是子任务 ID 前缀（如 Task-002-f1-booking → Task-002-f1-booking-booking-service）。
+    // 前缀匹配是依赖查找的宽松语义，严格模式（传了 taskDir）下跳过。
+    if (taskDir === undefined && info.taskId && info.taskId.startsWith(`${taskId}-`)) return branch;
   }
 
   // 2. 从 git branch 列表查找（匹配 feature/{taskId}-* 或 */{taskId}-*）
-  try {
-    const branches = execSync('git branch -a', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' });
-    for (const line of branches.split(/\r?\n/)) {
-      const b = line.trim().replace(/^\*?\s*/, '');
-      // 匹配本地分支：feature/Task-001-xxx / bugfix/Task-001-xxx
-      if (new RegExp(`(?:^|/)${taskId}[-_]`).test(b)) {
-        return b;
+  // v8.3.390+: 正则兜底同样只服务依赖查找的宽松场景；复用判定（传了 taskDir）不允许靠前缀猜分支。
+  if (taskDir === undefined) {
+    try {
+      const branches = execSync('git branch -a', { cwd: gitCwd, encoding: 'utf-8', stdio: 'pipe' });
+      for (const line of branches.split(/\r?\n/)) {
+        const b = line.trim().replace(/^\*?\s*/, '');
+        // 匹配本地分支：feature/Task-001-xxx / bugfix/Task-001-xxx
+        if (new RegExp(`(?:^|/)${taskId}[-_]`).test(b)) {
+          return b;
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   return null;
 }

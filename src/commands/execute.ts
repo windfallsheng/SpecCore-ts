@@ -33,7 +33,7 @@ import {
   writeContextSummaryFile,
   ExecutionState,
 } from '../core/execution-state';
-import { createTaskBranch, resolveTaskBaseBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranchAsync, loadGitConfig } from '../core/git-integration';
+import { createTaskBranch, resolveTaskBaseBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranchAsync, loadGitConfig, snapshotUncommittedChanges } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
 import { runArbitration, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
@@ -615,7 +615,8 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   // [SPECCORE_CONTINUE] 接力下一任务。
   if (executeOptions) {
     const first = tasks[0];
-    await runPromptMode(iteration, { ...executeOptions, prompt: true, task: first.id });
+    // v8.3.390+: 第一棒带 platform——同 ID 多端子任务靠端名定位正确目录/分支
+    await runPromptMode(iteration, { ...executeOptions, prompt: true, task: first.id, platform: first.platform || executeOptions.platform });
     return;
   }
 
@@ -695,7 +696,11 @@ async function executeResume(iteration: string, options?: ExecuteOptions): Promi
     return;
   }
   if (options) {
-    await runPromptMode(iteration, { ...options, prompt: true, task: currentBatchTasks[0] });
+    // v8.3.390+: 续跑第一棒从任务清单解析 platform（同 ID 多端子任务定位用）
+    const resumeFirst = currentBatchTasks[0];
+    const allResumeTasks = await scanTasks(iteration);
+    const resumeExact = allResumeTasks.find(t => t.id === resumeFirst);
+    await runPromptMode(iteration, { ...options, prompt: true, task: resumeFirst, platform: resumeExact?.platform || options.platform });
     return;
   }
 
@@ -740,7 +745,8 @@ async function executeBatchMode(tasks: TaskState[], iteration: string, batchSize
   // 不建分支、不写真实代码，却把任务标 completed（假执行）。改为对第一个任务走
   // runPromptMode（prepareTaskBranch 建分支 + prompt/SDK 派单），宿主 AI 完成后
   // 按 [SPECCORE_CONTINUE] 接力下一任务，批次推进由接力协议接管。
-  await runPromptMode(iteration, { ...options, prompt: true, task: runnable[0].id });
+  // v8.3.390+: 第一棒带 platform（同 ID 多端子任务靠端名定位正确目录/分支）
+  await runPromptMode(iteration, { ...options, prompt: true, task: runnable[0].id, platform: runnable[0].platform || options.platform });
 }
 
 // v8.3.385+: processBatch（历史批次状态机 + 骨架标记完成）已退役——
@@ -1407,7 +1413,9 @@ async function prepareTaskBranch(
   let gitCwd = process.cwd();
   try {
     const iterDir = await getIterationDir(iteration);
-    const taskDir = await resolveTaskDir(iterDir, task.id);
+    // v8.3.390+: task.path 优先——同模块多端子任务 ID 相同，resolveTaskDir 只返回第一端目录；
+    // scanTasks 扫描时的精确目录才能正确推断工程代码目录
+    const taskDir = task.path || await resolveTaskDir(iterDir, task.id);
     // 从 taskDir 子目录推断 platform（排除系统目录）
     const entries = require('fs').readdirSync(taskDir, { withFileTypes: true });
     const platformNames = entries
@@ -1449,7 +1457,8 @@ async function prepareTaskBranch(
 
   // 1. 查找任务目录 + 读取任务类型（base 解析依赖 taskType → branch_types source 映射）
   const iterDir = await getIterationDir(iteration);
-  const taskDir = await resolveTaskDir(iterDir, task.id);
+  // v8.3.390+: task.path 优先（同 ID 多端子任务的精确目录）
+  const taskDir = task.path || await resolveTaskDir(iterDir, task.id);
   let taskType: string | undefined;
   try {
     const typePath = join(taskDir, '.meta', 'type');
@@ -1486,13 +1495,20 @@ async function prepareTaskBranch(
   if (base !== 'HEAD' && await isProtectedBranchAsync(base)) {
     logger.info(`  ℹ️ base 分支 '${base}' 受保护，任务分支将独立工作`);
   }
+  // v8.3.390+: 切换前把当前任务分支的未提交变更快照提交回原分支——
+  // 宿主 AI 落盘代码后未必 commit，不提交就切分支会随 checkout 漂移到
+  // base/下一任务分支（代码串扰），或让 checkout 失败进而中断自动化。
+  if (snapshotUncommittedChanges(gitCwd)) {
+    logger.info(`  📸 上一任务的未提交变更已快照提交到原分支`);
+  }
   try { execSync(`git checkout "${base}"`, { cwd: gitCwd, stdio: 'pipe' }); } catch {
     // base 分支不存在时从 HEAD 创建
     try { execSync('git checkout -', { cwd: gitCwd, stdio: 'pipe' }); } catch {}
   }
 
-  // 5. 创建任务分支（传入解析后的 base + taskDir + taskType + cwd，保证两处 checkout 一致）
-  const branch = createTaskBranch(task.id, task.name || task.id, base !== 'HEAD' ? base : undefined, iteration, taskDir, taskType, gitCwd);
+  // 5. 创建任务分支（传入解析后的 base + taskDir + taskType + cwd + platform，保证两处 checkout 一致）
+  // v8.3.390+: platform 用于多端同名子任务的分支区分（分支重名时拼端名而非盲目复用）
+  const branch = createTaskBranch(task.id, task.name || task.id, base !== 'HEAD' ? base : undefined, iteration, taskDir, taskType, gitCwd, task.platform);
   if (!branch) return null;
   createdBranches.set(task.id, branch);
 
@@ -2198,7 +2214,24 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     return;
   }
 
-  const taskDir = await resolveTaskDir(await getIterationDir(iteration), task);
+  let taskDir = await resolveTaskDir(await getIterationDir(iteration), task);
+
+  // v8.3.390+: 同模块多端子任务 ID 相同，resolveTaskDir 只返回第一端目录；
+  // 指定 --platform 时定位到该端下的子任务目录（读对的 TASK.md/规格、建对的分支）
+  if (options.platform) {
+    try {
+      const platformBase = join(taskDir, options.platform);
+      if (await pathExists(platformBase)) {
+        const entries = await readdir(platformBase, { withFileTypes: true });
+        const subDirs = entries
+          .filter((e: any) => e.isDirectory() && !e.name.startsWith('.'))
+          .map((e: any) => e.name);
+        if (subDirs.length > 0) {
+          taskDir = join(platformBase, subDirs[0]);
+        }
+      }
+    } catch { /* 端目录扫描失败时保持原 taskDir */ }
+  }
 
   // ── 前置检查：任务必须有有效需求或分析内容 ──
   // 路径优先级: 00-specs/（标准）→ _shared/（兼容）→ 子任务目录 → 根目录（legacy）
@@ -2285,6 +2318,9 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     dependencies: [],
     priority: 'medium',
     progress: 0,
+    // v8.3.390+: 精确目录与端名——同 ID 多端子任务时复用判定/分支命名依赖它们
+    path: taskDir,
+    platform: options.platform,
   };
   // 读取任务类型
   try {
@@ -2439,7 +2475,10 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
       }
       promptText += `\n[SPECCORE_CONTINUE${summaryPath ? `: ${summaryPath}` : ''}]\n`;
       promptText += `本批次已完成。请在同一会话继续执行下一批次:\n`;
-      promptText += `speccore execute --prompt --task=${nextTask.id} -i ${iteration}\n`;
+      // v8.3.390+: 接力命令带 --platform——同模块多端子任务 ID 相同，
+      // 不带端名下一棒会误定位到第一端目录（读错规格、建错分支）
+      const nextPlatformArg = nextTask.platform ? ` --platform=${nextTask.platform}` : '';
+      promptText += `speccore execute --prompt --task=${nextTask.id}${nextPlatformArg} -i ${iteration}\n`;
       if (summaryPath) {
         promptText += `\n💡 上下文摘要文件 ${summaryPath} 已写入，可随时读取恢复上下文\n`;
       }

@@ -2,6 +2,20 @@
 
 ---
 
+## v8.3.391 (2026-11-04) — Zero-prompt branch switching: pre-switch snapshot commit + Git behavior boundaries in execute prompts
+
+- **Snapshot commit before switching**: `snapshotUncommittedChanges` auto-commits uncommitted changes on the current task branch (incl. .speccore/.git-mapping.json metadata) before `prepareTaskBranch` checks out the base/next-task branch — eliminates checkout failures and cross-branch code drift, so the host AI no longer needs to commit before handing off.
+- **Git behavior boundaries in execute prompts**: auto-mode instructions gain a new section forbidding the host AI from running `git checkout`/`git switch`/`git stash`/`git reset --hard` — branch switching is owned by the CLI; asking the user about uncommitted changes is prohibited, record to the questions list instead of interrupting.
+- **Tests**: new snapshot regression cases (uncommitted changes protected on switch, no-op when clean, non-task branch skipped, untracked files included), full suite 920/920 green.
+
+## v8.3.390 (2026-11-04) — Same-name subtasks across platforms no longer share a branch: reuse check scoped to subtask dir, platform-suffixed naming
+
+- **Reuse check scoped to taskDir**: `findBranchByTaskId` gains a taskDir parameter — in strict mode (taskDir provided) a branch is reused only when both taskId and taskDir match; prefix/regex loose matching is kept for dependency lookup only. Legacy mapping entries (no taskDir) never match in strict mode — better a new branch than a wrong reuse.
+- **Platform-suffixed naming on conflict**: `createTaskBranch` gains a platform parameter; on branch name conflict it deterministically names `${branch}-${platform}` (readable, re-runnable), with hash4 as final fallback.
+- **mapping records taskDir**: `.speccore/.git-mapping.json` entries now store taskDir for precise reuse checks.
+- **Precise task dir in execute**: `prepareTaskBranch` prefers `task.path` (exact dir from scanTasks) — same-ID subtasks no longer resolve to the first platform's directory.
+- **Platform-aware dispatch and relay**: `runPromptMode` locates the subtask dir under the platform via `--platform`; `[SPECCORE_CONTINUE]` relay commands carry `--platform`; batch/resume first legs pass platform too.
+
 ## v8.3.389 (2026-11-04) — Type-differentiated agent dispatch: bugfix/refactor/research dedicated agents across clarify→analyze→execute
 
 - **Type-differentiated dispatch for bugfix workflow**: the ask engine's bug workflow now dispatches root-cause analysis and fix execution to the `bug-analyzer` defect-diagnosis expert instead of the generic `requirement-analyzer`/`code-generator`, aligned with execute runtime `resolveTaskAgents`.

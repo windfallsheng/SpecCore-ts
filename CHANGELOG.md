@@ -1,5 +1,19 @@
 # Changelog
 
+## v8.3.391 (2026-11-04) — 分支切换零询问：切换前快照提交 + execute 派单 Git 行为边界
+
+- **切换前快照提交**：`snapshotUncommittedChanges` 在 `prepareTaskBranch` 切回 base/下一任务分支前，把当前任务分支上的未提交变更自动提交（含 .speccore/.git-mapping.json 元数据），消除 checkout 失败与代码漂移到下一分支的串扰，宿主 AI 落盘代码后不必 commit 也能无缝接力。
+- **execute 派单 Git 行为边界**：自动模式指令新增「🔀 Git 行为边界」段——禁止 AI 自行 `git checkout`/`git switch`/`git stash`/`git reset --hard` 等改变分支归属的命令，分支切换由 CLI 统一完成；禁止因未提交变更询问用户，无法自动解决时记录疑问清单不中断流程。
+- **测试**：新增快照提交回归用例（未提交变更切分支被快照保护、无变更零提交、非任务分支不提交、未跟踪文件连带提交），全量 920/920 通过。
+
+## v8.3.390 (2026-11-04) — 多端同名子任务共分支根治：复用判定精确到子任务目录，分支重名拼端名区分
+
+- **复用判定精确到 taskDir**：`findBranchByTaskId` 新增 taskDir 参数——传入时进入严格模式（同 taskId 必须同 taskDir 才算同一任务），前缀/正则宽松匹配仅保留给依赖查找；旧 mapping（无 taskDir）在严格模式下不命中，宁建新分支不误复用。
+- **分支重名优先拼端名区分**：`createTaskBranch` 新增 platform 参数，分支重名时按 `${分支名}-${端名}` 确定性命名（可读、可重跑闭环），hash4 仅作最终兜底。
+- **mapping 记录 taskDir**：`.speccore/.git-mapping.json` 条目新增 taskDir 字段，重跑复用判定精确到子任务目录。
+- **execute 精确目录**：`prepareTaskBranch` 的 taskDir 优先用 `task.path`（scanTasks 扫描时的精确路径）——同 ID 多端子任务不再串到第一端目录读配置。
+- **派单与接力带端名**：`runPromptMode` 按 `--platform` 定位端下子任务目录（读对的 TASK.md/规格）；`[SPECCORE_CONTINUE]` 接力命令带 `--platform`；批量/续跑第一棒同样传端名。
+
 ## v8.3.389 (2026-11-04) — 类型差异化派单体系：bugfix/refactor/research 专属 Agent 贯穿澄清→分析→执行
 
 - **bugfix 工作流类型差异化派单**：ask 引擎的 bug 工作流根因分析与修复执行改派 `bug-analyzer` 缺陷诊断专家，不再用通用 `requirement-analyzer`/`code-generator`，与 execute 运行时 `resolveTaskAgents` 口径一致。
