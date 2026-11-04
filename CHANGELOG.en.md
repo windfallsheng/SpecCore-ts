@@ -2,6 +2,14 @@
 
 ---
 
+## v8.3.378 (2026-11-04) — run pipeline analyze handoff window fix (full automation no longer dies at the skeleton gate)
+
+- **Handoff deadlock fixed**: `analyze --auto` exits with code 10 after printing the analysis Prompt (content must be written back by the host AI), but the run pipeline immediately ran the skeleton hard gate in the same process — at that moment the AI has not written anything yet, so empty skeletons always hit, causing exit 1 hard stop. Fully automated flows died forever at the analyze stage (Prompt printed but nobody picks it up).
+- **Handoff window prioritized**: the analyze-stage skeleton gate now checks `analyzePromptHandoff` first and exits with code 10 (handoff signal, not failure) plus an explicit "this is a normal intermediate state" notice; after the host AI responds to the Prompt and lands the content, `run --from taskify` continues, and the second skeleton gate at the taskify stage provides backstop validation (incomplete writes are still blocked).
+- **Clarify block demoted to a side note**: in handoff mode an incomplete clarification no longer preempts the block (the analyze Prompt already contains clarify instructions); it is printed as an attached reminder so the host AI clarifies first, then analyzes.
+
+---
+
 ## v8.3.377 (2026-11-03) — Aggregate sync drift eliminated + clarification coverage audit + [OPEN] 3-part format closed loop
 
 - **Aggregate sync drift eliminated (3-tier priority + mtime staleness detection)**: taskify aggregation sources upgraded to 3-tier priority — golden requirement `unit-{feature}.md` → module `CLARIFY.md` → module `REQUIREMENT.md`, so the aggregate is built from the latest clarified requirements; added mtime staleness detection (golden requirement newer than aggregate forces re-aggregation), covering the blind spot where unit-name detection cannot see same-unit content updates; aggregate output carries a `SPECCORE_AGGREGATED` marker header.

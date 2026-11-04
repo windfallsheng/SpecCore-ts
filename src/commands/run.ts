@@ -794,20 +794,35 @@ async function autoPipeline(options: RunOptions): Promise<void> {
           for (const d of emptySkeleton.slice(0, 8)) logger.error(`   ❌ ${d}`);
           if (emptySkeleton.length > 8) logger.error(`   ... 还有 ${emptySkeleton.length - 8} 个`);
 
+          if (analyzePromptHandoff) {
+            // v8.3.378: 接力窗口优先——analyze --auto 以 exit 10 输出分析 Prompt，
+            // 内容需宿主 AI 响应落盘，此刻骨架必为空模板（正常中间态而非失败态）。
+            // 硬停 exit 1 会让全自动流水线永远死在 analyze 阶段（Prompt 打了没人接），
+            // 宿主 AI 收到失败信号只能停下来问用户。改为接力退出 exit 10：
+            // 宿主 AI 响应 Prompt 落盘后 run --from taskify 继续，taskify 阶段
+            // 第二道骨架闸口兜底校验（漏填仍会拦截）。
+            logger.error('');
+            logger.error('   ℹ️  这是正常中间态：analyze --auto 刚预建骨架并输出分析 Prompt，');
+            logger.error('      分析内容由宿主 AI 接力生成，尚未落盘。');
+            if (clarifyBlocked) {
+              logger.error('');
+              logger.error('   ⚠️ 附带提醒：需求澄清未完成——上方 [SPECCORE_PROMPT] 已含澄清指令，');
+              logger.error('     宿主 AI 响应时请先完成 Phase 0 澄清，再生成 Phase 1+2 分析内容。');
+            }
+            logger.error('');
+            logger.error('   🤖 宿主 AI 接力：请响应上方 [SPECCORE_PROMPT] 输出，逐单元生成分析内容');
+            logger.error(`      并通过 speccore analyze --apply "[DOC:...]" -I ${iteration} 落盘；`);
+            logger.error(`      全部落盘后运行: speccore run --from taskify -i ${iteration}`);
+            process.exitCode = 10;
+            return;
+          }
+
           if (clarifyBlocked) {
             logger.error('');
             logger.error('   ⚠️ 根因：需求澄清未完成——需求文档质量不足且未生成澄 清产物。');
             logger.error('   请先澄清需求（二选一）:');
             logger.error(`   1. speccore req-doc --from "<需求文档>" --to ${iteration} --prompt   # 引导澄清后落盘黄金需求`);
             logger.error(`   2. speccore analyze -I ${iteration} --skip-clarify                    # 跳过澄清直接分析（不推荐）`);
-          } else if (analyzePromptHandoff) {
-            // v8.3.265: analyze 刚输出过 [SPECCORE_PROMPT]——接力棒在此，指引宿主
-            // AI 直接响应上方 Prompt 落盘，而不是再跑一次 analyze --auto（否则宿主 AI
-            // 只会重复拿到 Prompt 而不会动手生成内容）
-            logger.error('');
-            logger.error('   🤖 宿主 AI 接力：请响应上方 [SPECCORE_PROMPT] 输出，逐单元生成分析内容');
-            logger.error(`      并通过 speccore analyze --apply "[DOC:...]" -I ${iteration} 落盘；`);
-            logger.error(`      全部落盘后运行: speccore run --from taskify -i ${iteration}`);
           } else {
             logger.error('   空模板会让 taskify/execute 拿不到真实需求，生成代码质量极差。');
             logger.error(`   请先完成需求分析落盘: speccore analyze -I ${iteration} --auto`);
