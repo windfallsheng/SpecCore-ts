@@ -14,6 +14,9 @@ description: >
   引擎映射该类型全部端（v8.3.381+，如「所有前端项目」→ 全部 frontend 端的 --platform + --src，不碰后端）；
   用户未提供源码目录时输出交互式提示（示例: --src backend/src,admin-web/src）。
   两跳完成后运行 speccore global from-source --src <dirs> --verify 做锚点验证环。
+  QA 环三阶段（--verify → --review → --revise）须逐个运行、不可组合（v8.3.394+）：
+  CLI 各阶段收尾输出 [SPECCORE_PROMPT] 接力并 exit 10，宿主 AI 按剧本填写 _qa/verify.json、review.json 后运行下一阶段；
+  旧域产物（GLOBAL/_reverse/、requirements/ 根级直铺）用 --migrate 可逆迁移到 _legacy-*。
   不处理一般性的"帮我看看这段代码"讨论，只处理 speccore 上下文中的源码反推。
 allowed-tools: ["Bash", "Read", "Write", "Edit"]
 disable-model-invocation: false
@@ -27,6 +30,7 @@ disable-model-invocation: false
 ## 输出标记处理
 - `[SPECCORE_EXEC: <cmd>]` → 立即执行该命令，不要向用户复述命令文本
 - `[SPECCORE_PROMPT]` → 将后续 Prompt 内容作为你的工作指令执行
+- `[SPECCORE_EXEC_STATUS: relay(10)]` → 接力信号（非失败）：上方子命令已输出 [SPECCORE_PROMPT]（两跳填充或 QA 环阶段交棒），按 Prompt 执行落盘后按末尾续跑命令继续
 - `[SPECCORE_NEEDS_INFO]` → 用交互式提问向用户收集缺失参数，收齐后重新执行
 - `[SPECCORE_CONFIRM_NEEDED]` → 向用户展示确认项，等确认后再继续
 - `[SPECCORE_STEP_DONE]` → 告知用户本步完成，下一步请在同一会话继续执行提示中的命令；上下文紧张时才开新会话用 --resume 继续

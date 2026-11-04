@@ -87,7 +87,7 @@ function buildTwoHopRelayPrompt(statuses: EndpointStatus[], srcArgs: string): st
   lines.push('');
   lines.push('```');
   lines.push(`speccore global from-source ${srcArgs}`);
-  lines.push('speccore global from-source --verify');
+  lines.push(`speccore global from-source ${srcArgs} --verify`);
   lines.push('```');
   lines.push('');
   return lines.join('\n');
@@ -144,6 +144,15 @@ export async function analyzeFromCode(options: AnalyzeOptions): Promise<void> {
   // v8.3.367+: QA 环（对齐 recipe-reverse-engineer 五阶段）——
   // --verify 验证环（锚点门禁+完整性基线+code-verifier 剧本）/ --review 语义审查 / --revise 有条件修订
   if (options.verify || options.review || options.revise || options.migrate) {
+    // v8.3.394.1: QA 环三阶段须逐个运行（--verify → --review → --revise），
+    // 组合传入会跳过前一阶段的宿主 AI 接力（exit 10 交棒被后一分支覆盖），
+    // 下一阶段拿不到上阶段产物（如 review 剧本要求以 verify.json 为证据）。
+    const qaFlags = [options.verify, options.review, options.revise].filter(Boolean).length;
+    if (qaFlags > 1) {
+      logger.error('QA 环三阶段须逐个运行（--verify → --review → --revise），请勿组合传入多个 flag。');
+      logger.error('   组合运行会跳过前一阶段的宿主 AI 接力，下一阶段拿不到上阶段产物（如 review 需要 verify.json 证据）。');
+      return;
+    }
     const { runReverseVerify, runReverseReview, runReverseRevision } = await import('../../core/reverse-qa');
     // v8.3.379: 按端组织——反推产物落 GLOBAL/requirements/{端}/（REQUIREMENT.md + _ir/ + _qa/），
     // QA 环逐端执行；显式 --out-dir 视为单端目录直接使用。
@@ -333,7 +342,14 @@ export async function analyzeFromCode(options: AnalyzeOptions): Promise<void> {
       }
       logger.info('');
       logger.info('   ⚠️ 需求文档仍在骨架态——下方输出两跳填充接力 Prompt，宿主 AI 落盘后才算完成。');
-      const srcArgs = options.source || options.sourceScope ? `--src "${options.source || options.sourceScope}"` : '';
+      // v8.3.394.1: 完整重建续跑参数（此前只带 --src，丢失 --depth/--platform/--out-dir 致续跑行为漂移）
+      const parts: string[] = [];
+      const src = options.source || options.sourceScope;
+      if (src) parts.push(`--src "${src}"`);
+      if (options.depth) parts.push(`--depth ${options.depth}`);
+      if (options.platform) parts.push(`--platform ${options.platform}`);
+      if (options.outDir) parts.push(`--out-dir ${options.outDir}`);
+      const srcArgs = parts.join(' ');
       await emitAiPrompt('GLOBAL', buildTwoHopRelayPrompt(statuses, srcArgs), { mode: 'reverse-two-hop' });
       process.exitCode = 10;
       return;

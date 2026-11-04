@@ -2,6 +2,12 @@
 
 ---
 
+## v8.3.395 (2026-11-04) — reverse-engineering relay protocol: three cleanups (full resume args, QA flag combos rejected, host channel docs synced)
+
+- **Resume command arg loss fixed**: the two-hop relay prompt previously rebuilt the resume command with only --src, dropping the user's --depth/--platform/--out-dir and drifting resume behavior; all original args are now rebuilt, including for the --verify resume command.
+- **QA ring combo rejection**: passing multiple of --verify/--review/--revise together is now rejected with a clear error — combined runs skip the previous stage's host-AI relay (the exit 10 handoff is overwritten by the later branch), leaving the next stage without the previous stage's artifacts (e.g. the review playbook expects verify.json as evidence).
+- **Host channel doc sync**: the spec-from-source SKILL and all 6 host channel command docs now document running QA stages one at a time, responding to [SPECCORE_PROMPT] + exit 10 relays by filling and resuming, and the --migrate legacy-domain migration.
+
 ## v8.3.394 (2026-11-04) — reverse-engineering relay protocol completed: two-hop filling and QA ring no longer dead-end, skeleton state reported honestly
 
 - **Two-hop filling relay protocol**: the from-source main path now emits a [SPECCORE_PROMPT] two-hop relay (exit 10) when the requirement docs are still skeleton state — previously only a logger.info "next step" existed, so host AIs never knew to relay and requirement docs stayed at the ~100-line skeleton forever. The relay prompt reports per-endpoint completion, instructs filling the six IR sections and synthesizing the UR per REVERSE_PROMPT.md, and ships quality red lines (no fabrication / no translation-ese / confidence gating) plus resume commands.
