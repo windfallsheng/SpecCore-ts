@@ -16,7 +16,7 @@
  *      仅当 ≥1 条 apply 时才修订，decline-only 即闭环完成。
  *   3. Unit Completion Gate：无 apply findings 剩余 + 人工审查通过 → 反推闭环完成。
  *
- * 产物（.speccore/GLOBAL/_reverse/_qa/，v8.3.368 反推域与全局分析 requirements/ 域隔离）：
+ * 产物（.speccore/GLOBAL/requirements/{端}/_qa/，v8.3.379 按端组织——每端目录自包含 QA 环）：
  *   INVENTORY.md        完整性基线报告（CLI 生成）
  *   VERIFY_PLAYBOOK.md  验证剧本（code-verifier 角色） + verify.json 模板
  *   REVIEW_PLAYBOOK.md  审查剧本（document-reviewer 角色） + review.json 模板
@@ -281,7 +281,7 @@ function buildReviewPlaybook(outputDir: string): string {
   lines.push(`- 验证证据: ${join(outputDir, '_qa', 'verify.json')}（code-verifier 的验证结果）`);
   lines.push(`- 完整性基线: ${join(outputDir, '_qa', 'INVENTORY.md')}（未覆盖模块清单）`);
   lines.push('');
-  lines.push('## 审查维度（六类）');
+  lines.push('## 审查维度（八类）');
   lines.push('');
   lines.push('| 维度 | 问的问题 |');
   lines.push('| :--- | :--- |');
@@ -291,6 +291,8 @@ function buildReviewPlaybook(outputDir: string): string {
   lines.push('| translation 翻译腔 | 函数名/类名/接口名等技术词汇泄漏进需求文本了吗？ |');
   lines.push('| granularity 粒度 | 功能单元边界过大/过小/重叠/遗漏了吗？ |');
   lines.push('| traceability 可追溯性 | 锚点悬空了吗？evidence 缺失了吗？ |');
+  lines.push('| interaction 交互完整性（前端端） | 用户故事/用例场景缺失吗？页面状态矩阵/操作反馈/字段校验/组件联动记录了吗？ |');
+  lines.push('| accessibility 无障碍（前端端） | UI 特性记录无障碍要求了吗（键盘操作/读屏/对比度）？ |');
   lines.push('');
   lines.push('## 执行步骤');
   lines.push('');

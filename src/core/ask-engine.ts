@@ -982,8 +982,12 @@ async function handleMatch(input: string, isExplicit = false): Promise<AskResult
     // 仅 unitize 注册了 --iter；change 用位置参数，其余命令忽略 name 避免死参数
     if (params.name && (best.command === 'task new' || best.command === 'iteration create')) {
       fullCommand += ` -n "${params.name}"`;
-    } else if (params.name && best.command === 'change') {
-      fullCommand += ` "${params.name}"`;
+    } else if (best.command === 'change') {
+      // v8.3.386: change 用完整输入而非 pattern 捕获碎片——「加(.+)」捕获组会剥离
+      // 触发词，把「加一个消息通知功能」变成「一个消息通知功能」，CLI 端
+      // inferCategoryFromDescription 误判 unknown。整体透传保留新增/变更语义；
+      // 「把 A 改成 B」的 target 捕获组信息同样靠完整句传递，不再丢失。
+      fullCommand += ` "${(params.desc || input).slice(0, 120)}"`;
     }
     if (params.iteration) {
       fullCommand += (best.command === 'unitize' || best.command === 'doc2spec')
@@ -1884,8 +1888,37 @@ export function resolvePlatformFromInput(input: string, platforms: PlatformConfi
 }
 
 /**
+ * 从用户原话中解析端列表（多端，v8.3.381+）。优先级：
+ * 1. 精确单端命中（端名/中文描述/工程名）——最具体意图优先，
+ *    防止「会议预订后端工程」被类型词扩成所有后端；
+ * 2. 类型词命中——「前端/前端项目」→ 全部 frontend 端，「后端/后端项目」→ 全部 backend 端，
+ *    前后端同现 → 两类并集；
+ * 3. 全量词命中——「所有端/所有工程/所有项目」→ 全部端；
+ * 4. 无命中 → 空数组。
+ */
+export function resolvePlatformsFromInput(input: string, platforms: PlatformConfig[]): PlatformConfig[] {
+  if (!platforms || platforms.length === 0) return [];
+  const single = resolvePlatformFromInput(input, platforms);
+  if (single) return [single];
+  // 「前后端/全栈」两词均不包含「前端」「后端」子串，需单列，否则漏配
+  const bothTypes = /前后端|全栈|fullstack|full-stack/i.test(input);
+  const hasFrontend = bothTypes || /前端|frontend|web\s*端|h5\s*端/i.test(input);
+  const hasBackend = bothTypes || /后端|backend|服务端|server/i.test(input);
+  if (hasFrontend || hasBackend) {
+    const types = new Set<string>();
+    if (hasFrontend) types.add('frontend');
+    if (hasBackend) types.add('backend');
+    const matched = platforms.filter(p => types.has(p.type));
+    if (matched.length > 0) return matched;
+  }
+  if (/所有端|所有工程|所有项目|全部端|全部工程|全部项目/.test(input)) return platforms;
+  return [];
+}
+
+/**
  * 为 global from-source 命令自动补端参数：
- * 用户句中出现 PROJECT.yaml 端名/描述 → --platform <name> + --src <code_path>（配了才加）。
+ * 用户句中出现 PROJECT.yaml 端名/描述或「前端/后端/所有端」类型词 →
+ * --platform <name1,name2> + --src <code_path1,code_path2>（配了才加）。
  * 配置加载失败时静默返回原命令，不影响主流程。
  */
 export async function enrichFromSourceCommand(
@@ -1899,13 +1932,17 @@ export async function enrichFromSourceCommand(
   } catch {
     return { command: fullCommand };
   }
-  const matched = resolvePlatformFromInput(input, platforms);
-  if (!matched) return { command: fullCommand };
+  // v8.3.381: 多端解析——「所有前端项目」这类类型词此前漏配 --src/--platform，
+  // CLI 空 src 走 DEFAULT_SCOPE 全扫，把后端也反推了；此处按类型词过滤端列表。
+  const matched = resolvePlatformsFromInput(input, platforms);
+  if (matched.length === 0) return { command: fullCommand };
   let command = fullCommand;
-  if (matched.code_path) command += ` --src "${matched.code_path}"`;
-  command += ` --platform "${matched.name}"`;
-  const note = matched.code_path
-    ? `📍 端映射: ${matched.name} → 源码 ${matched.code_path}`
-    : `📍 端映射: ${matched.name}（PROJECT.yaml 未配 code_path，仅按端过滤，需手动 --src）`;
+  const srcs = matched.map(p => p.code_path).filter((s): s is string => !!s);
+  if (srcs.length > 0) command += ` --src "${srcs.join(',')}"`;
+  command += ` --platform "${matched.map(p => p.name).join(',')}"`;
+  const names = matched.map(p => p.name).join(',');
+  const note = srcs.length > 0
+    ? `📍 端映射: ${names} → 源码 ${srcs.join(',')}`
+    : `📍 端映射: ${names}（PROJECT.yaml 未配 code_path，仅按端过滤，需手动 --src）`;
   return { command, note };
 }

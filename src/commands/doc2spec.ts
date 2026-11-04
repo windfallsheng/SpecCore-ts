@@ -102,6 +102,64 @@ export function fixImageRefs(content: string, mdDir: string, imageDir: string): 
     .replace(/(!\[[^\]]*\]\()([^)]+)(\))/g, (_m, pre: string, path: string, post: string) => pre + fixPath(path) + post);
 }
 
+/**
+ * v8.3.386: 提取 .md 文档引用的本地图片到 assets/extracted/（BUG-1 修复）
+ *
+ * 此前 .md 直接导入只做 fixImageRefs（仅处理 pandoc media/ 形态），原始相对路径
+ * （./order-list.png、assets/x.png）原样保留 → converted 引用断链、图片 0 张。
+ * 现扫描 markdown/HTML 图片引用：本地存在的文件复制到 imageDir，引用统一改写为
+ * 「MD 文件 → assets/extracted」的相对路径；外链（http/https/data:）、锚点不动；
+ * 重名文件加 -2/-3 序号；复制失败保持原引用（doc-validator 兜底提示）。
+ */
+export async function extractLocalImages(
+  content: string,
+  sourceMdDir: string,  // 源 MD 文件所在目录（解析相对引用的基准）
+  imageDir: string,     // 目标图片目录 assets/extracted
+  mdDir: string,        // 输出 MD 文件所在目录（生成相对引用路径的基准）
+): Promise<{ content: string; extracted: number }> {
+  const relAssets = relative(mdDir, imageDir).replace(/\\/g, '/');
+  const isExternal = (p: string): boolean => /^(https?:|data:|#|\/)/i.test(p.replace(/\\/g, '/'));
+  const copied = new Map<string, string>();
+  const pending: { absPath: string; destName: string }[] = [];
+
+  const rewrite = (raw: string): string => {
+    const posix = raw.replace(/\\/g, '/');
+    if (isExternal(posix)) return posix;
+    const clean = posix.split(/[?#]/)[0];
+    if (!clean) return posix;
+    let absPath: string;
+    try { absPath = resolve(sourceMdDir, decodeURIComponent(clean)); } catch { return posix; }
+    if (!existsSync(absPath)) return posix;
+    const existing = copied.get(absPath);
+    if (existing) return `${relAssets}/${existing}`;
+    let destName = basename(clean);
+    if (existsSync(join(imageDir, destName))) {
+      const base = destName.replace(/\.[^.]+$/, '');
+      const ext = extname(destName) || '';
+      let i = 2;
+      while (existsSync(join(imageDir, `${base}-${i}${ext}`))) i++;
+      destName = `${base}-${i}${ext}`;
+    }
+    copied.set(absPath, destName);
+    pending.push({ absPath, destName });
+    return `${relAssets}/${destName}`;
+  };
+
+  // 先替换引用（同步收集），再统一复制文件（异步 IO 集中处理）
+  const updated = content
+    .replace(/(<img\b[^>]*?\bsrc=")([^"]+)(")/g, (_m, pre: string, path: string, post: string) => pre + rewrite(path) + post)
+    .replace(/(!\[[^\]]*\]\()([^)]+)(\))/g, (_m, pre: string, path: string, post: string) => pre + rewrite(path) + post);
+
+  let extracted = 0;
+  for (const p of pending) {
+    try {
+      await copy(p.absPath, join(imageDir, p.destName));
+      extracted++;
+    } catch { /* 复制失败（权限/已删）保持原引用，validator 兜底提示 */ }
+  }
+  return { content: updated, extracted };
+}
+
 function detectPlatform(): 'macos' | 'linux' | 'win' {
   if (process.platform === 'darwin') return 'macos';
   if (process.platform === 'win32') return 'win';
@@ -350,11 +408,17 @@ async function processSingle(options: Word2SpecOptions): Promise<void> {
     // .md 文件直接复制导入，也需要后处理图片路径
     if (ext === 'md') {
       let converted = await readFile(sourceFile, 'utf-8');
-      // 修正图片引用路径（pandoc 完整路径 / 简写 media/ / Windows 反斜杠 统一归一化）
       const mdDir = dirname(outputPath);
-      converted = imgTagsToMarkdown(fixImageRefs(converted, mdDir, join(iterDir, '010-requirements', 'assets', 'extracted')));
+      const imageDir = join(iterDir, '010-requirements', 'assets', 'extracted');
+      // v8.3.386: 先提取本地图片（BUG-1）——原始相对路径图片复制到 assets/extracted/，
+      // 引用改写为相对 converted/ 的路径；再 fixImageRefs 处理 pandoc media/ 形态
+      const srcMdDir = dirname(resolve(sourceFile));
+      const imgResult = await extractLocalImages(converted, srcMdDir, imageDir, mdDir);
+      converted = imgTagsToMarkdown(fixImageRefs(imgResult.content, mdDir, imageDir));
       await writeFile(outputPath, converted);
-      spinner.stop('📝 .md 直接导入');
+      spinner.stop(imgResult.extracted > 0
+        ? `📝 .md 直接导入（提取 ${imgResult.extracted} 张本地图片）`
+        : '📝 .md 直接导入');
     } else if (ext === 'doc') {
       // .doc 格式 → LibreOffice 转 .docx
       try {

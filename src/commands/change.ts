@@ -1431,8 +1431,41 @@ async function processChangeV2(options: ChangeOptions): Promise<void> {
   const taskBase = await resolveTaskBase(iterDir);
   const allTasks = await scanTasks(iteration);
 
+  // v8.3.386: --dry-run 变更驱动工作流只预览不落盘（BUG-10）——此前新增/变更分支
+  // 均无视 dry-run 直接创建任务/写入 Spec，违反「Preview impact without modifying」语义
+  if (options.dryRun) {
+    logger.info(`🔍 变更预览（--dry-run 模式，未实际修改）：`);
+    logger.info('');
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      logger.info(`   [${i + 1}/${entries.length}] ${entry.name}`);
+      try {
+        const changeRequest = parseChangeFile(entry.name, entry.content);
+        if (changeRequest.type === 'unknown' || changeRequest.category === 'unknown') {
+          const inferred = inferCategoryFromDescription(changeRequest.description);
+          changeRequest.type = options.newFlag ? 'new' : inferred.type;
+          changeRequest.category = inferred.category;
+        }
+        if (options.newFlag) changeRequest.type = 'new';
+        logger.info(`      🔍 意图: ${changeRequest.type === 'new' ? '🆕 新增' : '🔄 变更'} / ${changeRequest.category}`);
+        logger.info(`      📝 描述: ${changeRequest.description.slice(0, 80)}`);
+        if (changeRequest.type === 'new') {
+          logger.info(`      ➕ 将创建新任务（类型 ${changeRequest.category}）`);
+        } else {
+          logger.info(`      🔄 将联动更新受影响任务的 Spec（影响分析 + CHANGE_TODO）`);
+        }
+      } catch (e: any) {
+        logger.error(`      ❌ 解析失败: ${e.message}`);
+      }
+      logger.info('');
+    }
+    return;
+  }
+
   logger.info(`📋 共 ${entries.length} 个变更项待处理`);
   logger.info('');
+
+
 
   const processedEntries: ChangeInboxFileEntry[] = [];
   const allAffectedIds: string[] = [];

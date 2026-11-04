@@ -2,6 +2,93 @@
 
 ---
 
+## v8.3.388 (2026-11-04) — E2E full-pipeline deep check fixes: change flow / image extraction / ghost backend / slug gibberish / gate mode / clarified naming / short iteration names (11 items)
+
+- **Colloquial change flow (BUG-3/4/5)**: the `change` command now registers a positional `[desc]` argument (`speccore change "description"` matches the ask-engine convention); the intent-classification regex gains the 「加」 prefix ("add a message-notification feature" → new/feature); the ask engine builds the change command from the full input so the trigger word is no longer stripped by the "加(.+)" capture group.
+- **doc2spec local image extraction (BUG-1)**: direct .md import gains `extractLocalImages` — scans markdown/HTML image references, collects then copies them to assets/extracted/, dedupes by content, appends -2 on name collisions, leaves external links/anchors untouched; references rewritten to relative paths.
+- **doc-validator comment stripping (BUG-2)**: checkImages strips HTML comments (`<!-- ... -->`) before validation, so example image references inside comments no longer trigger the false "image reference may be broken" error.
+- **taskify ghost backend + slug gibberish (BUG-7b/8)**: when the platform list has no backend platform, no hard-coded `backend` ghost subdirectory is created (fallbackBackend match failure now skips); 5 `slugify` call sites replaced with `toSlug` pinyin fallback, so Task directory names recover from hash gibberish (decadi etc.) to pinyin (ding-dan-lie-biao-cha-xu).
+- **run --auto full-auto gates (BUG-9)**: `--auto` now explicitly switches gateMode='auto', auto-skipping all three gates (A/B/C), equivalent to `--gate auto`.
+- **Clarified doc naming (BUG-6)**: writeClarifiedDoc gains a unitHint — when the source filename is generic (source/readme/requirement/index), the clarified doc is named after the feature-unit directory, so multiple unit clarifications no longer overwrite each other.
+- **change --dry-run writes nothing (BUG-10)**: the change-driven workflow dry-run branch now only previews intent and actions (new/change), creating no tasks, writing no Spec, and archiving nothing.
+- **run short iteration name resolution (BUG-11)**: run previously concatenated `Iteration-${iteration}` directly, so a short name (without the numeric prefix, e.g. ding-dan-guan-li-xi-tong) produced a nonexistent directory, all iterDir-based precondition checks read empty paths and failed with a false "stage preconditions unmet" error while the remedy text still told users to retry with the same short name — self-contradictory. Now unified through getIterationDir fuzzy resolution (exact/suffix match, fallback concatenation when not found), consistent with all other commands.
+- **Tests**: 21 new cases (change-category-infer 5 / clarified-doc-naming 5 / doc2spec-image-paths 4 / validator-image-refs 2 / iteration-dir-fuzzy 5); workflow platform-contract assertion updated to "no ghost backend + .meta exists"; full suite 891/891 green.
+
+## v8.3.387 (2026-11-04) — execute intent hardening: default semantics for high-frequency phrases + mandatory clarification on ambiguity
+
+- **Default semantic mapping for high-frequency phrases (spec-execute SKILL.md)**: expressions like "execute all development tasks" / "fully automatic" / "unattended" now bind to an explicit default meaning — run the execute AI relay task by task until the `[SPECCORE_CONTINUE]` chain ends. Three degradation behaviors are explicitly forbidden: stopping after a single execute call, only flipping task status without generating code, and pausing to ask "task volume is large, continue?" mid-run. "Fully automatic" is now a behavioral constraint, not a modifier.
+- **Mandatory clarification on ambiguity**: when scope / iteration / constraints are unclear (no iteration given and context.json has no currentIteration, task range unspecified, fuzzy constraints), ask first via AskUserQuestion or intent block before executing — no guessing. Ask everything in one round; after confirmation, run to completion without re-confirming.
+- **Synced in three places**: speccore-router SKILL.md execute mapping table gains the relay semantics and clarification section; AGENTS.md rule 13 synced with the semantic mapping and confirmation constraint; init.ts TOOL_COMMANDS spec-execute template updated (6 host command copies refreshed).
+
+## v8.3.386 (2026-11-04) — Semantic global-analysis quality gate: architecture decisions / ADR / code evidence / API column completeness + skippable 4a product layer
+
+- **Quality gate upgraded from quantitative to semantic checks**: the gate previously only checked line counts / Mermaid presence / section titles, so AI could pad with feature lists and score 100, letting hollow tech docs through. `doc-quality-gate` now adds four semantic checks: ① ARCHITECTURE.md must contain ≥ 3 architecture decisions (headed like "### Decision N:"), each with a rationale (理由/原因/权衡/背景 keywords) and a code-evidence path — any missing one blocks; ② API_INVENTORY.md interface tables must have non-empty 鉴权 (auth) / 幂等 (idempotency) / 版本 (version) columns in every row ("无" is a legal value for the auth column; `-`/N/A/待定 count as empty); ③ technical docs (DATA_FLOW/DATA_MODEL/API_CALL_MAP/STATE_MANAGEMENT/DEPLOYMENT/BUSINESS_RULES/PERFORMANCE/SECURITY) must cite ≥ 3 source paths for key conclusions; ④ ADR gate: when ARCHITECTURE.md has decisions, `overview/decisions/` must exist with each ADR containing all three sections.
+- **ADR subdirectory introduced**: `.speccore/GLOBAL/overview/decisions/` holds the context-decision-consequences three-part records for architecture-level decisions (ADR-NNN.md); the Layer 4b prompt mandates a synced ADR per architecture decision; the apply router already supports the `overview/decisions/` prefix natively.
+- **Layer 4 prompt semantic standards injected**: the decision section requirements (choice / rationale / evidence triad + ADR sync template), API_INVENTORY column completeness, and source-path citation requirements are all written into the Layer 4 generation instructions — AI writes to standard at generation time instead of relying on post-hoc gate interception.
+- **4a product layer now configurable (--no-product)**: `speccore global analyze --no-product` skips 4a (no requirements/ docs reverse-engineered, technical docs only) — progress detection treats 4a as completed, the Layer 4 prompt omits product-layer tasks, LAYER_ROLES switches to the "tech lead" role, and the auto-advance command preserves the option. Users asking for "tech only" no longer get the full product layer.
+- **Tests**: new doc-quality-gate-semantic.test.ts (24 cases covering decision extraction / table parsing / evidence counting / full ADR gate paths); full suite 870/870 green.
+
+---
+
+## v8.3.385 (2026-11-04) — execute fake-run eradicated (status-only updates no longer masquerade as development)
+
+- **Fake-run root cause fixed**: `execute --all` (when task count > batchSize) used to take the legacy demo path in `executeBatchMode` — only generating skeleton stubs and marking tasks completed, with no branch creation and no real code; the `executeWithProgress` fallback did the same (skeleton + mark completed). All three paths (batch / progress / resume) now delegate the first task to `runPromptMode`: prepareTaskBranch creates the Git branch + sub-agent SDK dispatch (falls back to prompt output + exitCode 10), and the host AI relays to the next task via [SPECCORE_CONTINUE]; batch progression is driven by the relay protocol.
+- **Batch mode --skip/--only filtering restored**: previously --skip/--only only applied in executeWithProgress and was fully ignored in batch mode; executeBatchMode now filters through matchesTaskAlias with the same semantics as the single-task path.
+- **executeResume aligned**: resume also delegates through runPromptMode relay (the legacy processBatch "skeleton + mark completed" is retired, processBatchLegacy dead code removed); without an execution context it only lists pending tasks — no progression, no fake marking.
+- **Git cwd existence guard**: when PROJECT.yaml is missing or code_path/code_scope points to a non-existent directory, prepareTaskBranch/runApplyMode now fall back to process.cwd() — previously execSync on a non-existent cwd raised a puzzling "spawnSync /bin/sh ENOENT" and branch creation failed silently.
+
+---
+
+## v8.3.384 (2026-11-04) — execute no longer reads stale task names after directory rename (directory name is the source of truth)
+
+- **scanTasks: subtask ID prefers the directory name**: after a user manually renames a subtask directory, the stale "子任务 ID" field inside TASK.md used to override the actual directory name, so `execute --skip/--task` with the new name failed to match ("still using the old task name"). Extracted `resolveSubtaskId`: in the new layout (subtask dir under platform dir) the directory name IS the subtask ID and the TASK.md field no longer overrides it; only the legacy layout (TASK.md directly under platform dir) falls back to the field.
+- **findTaskDir: exact directory-name recursive fallback**: the old step 3 inferred the parent dir from the subtask ID prefix, which breaks when the user renames only the subtask dir, only the module dir, or both; and with legacy module dirs named identically to the subtask ID (with the `Task-` prefix), prefix matching wrongly resolved the module dir instead of the subtask dir. Now the subtask lookup runs before module prefix matching, `taskId` itself is the first module candidate, and a new step 4 does an exact directory-name recursive lookup (depth 3: module/{platform}/{subtask}), so any rename combination resolves the subtask directory.
+- **--skip/--only alias matching**: new `matchesTaskAlias` accepts the full ID (= directory name), the path tail, and the module name without the `Task-` prefix, so skipping by module name or unprefixed directory name no longer falls through.
+- **Knowledge graph in sync**: standard platform-flat subtask entities now use the directory name as the source of truth too (TASK.md field fallback only for legacy non-`Task-` directory names), so the index no longer keeps stale names.
+
+---
+
+## v8.3.383 (2026-11-04) — temp files get one home and immediate cleanup (.temp-iter-req* no longer clutters the root)
+
+- **Recognition patterns expanded**: the cleanup temp-file predicate (TEMP_FILE_PATTERNS) grows from `.tmp_.*` only to full coverage of `.tmp-*` / `.temp_*` / `.temp-*` — handoff relay files the host AI creates (.temp-iter-req-*.md etc.) are now recognized, so the auto-cleanup at the end of analyze/execute/taskify and `speccore cleanup` can both sweep them.
+- **spec2doc temp file normalized**: the export relay file `.tmp_export*.md` moves from the `.speccore/` root into `.speccore/cache/tmp/`, and both success and failure paths unlink it immediately in a finally block — no leftovers waiting for cleanup.
+- **.gitignore gains file-level globs**: `.temp-*` / `.tmp-*` added (previously only the `.temp/` / `.tmp/` directories were ignored), so stray files no longer pollute git status and the normal directory view.
+- **Subtask naming locked in (v8.3.340 behavior confirmed)**: `generateSubtaskId` exported with regression tests — subtask ID = `Task-{module name}` (no endpoint name appended; same-named subtasks across endpoints live under separate endpoint dirs, one task per endpoint by default); git branch body = subtask ID (composeBranchName), with -hash4 appended by createTaskBranch only on name collision; three stale "Task-{num}-{platform}" comments/examples corrected.
+
+---
+
+## v8.3.382 (2026-11-04) — taskify task dir names deterministically aligned with feature unit names (Task-NNN counter naming retired)
+
+- **Three-tier deterministic lookup**: new `resolveFeatureUnitDir` — when the AI split path returns a Chinese/missing functionalUnit and sourceFile carries no features/ path, the task name is resolved against `010-requirements/features/` by enumeration: `_matrix.md` feature field → `SOURCE.md` H1 title → directory-tail slug vs task-name pinyin comparison (hyphenated word-segmented pinyin from toSlug vs concatenated directory pinyin, normalized by stripping hyphens). Exact hits return immediately; substring/pinyin hits serve as fallback candidates.
+- **Root cause fixed**: previously an empty `resolveModuleDirName` result fell back to the `nextTaskId` chain, producing `Task-NNN-gibberish` counter names; now `resolveTaskModuleDirName` (direct dir name > functionalUnit lookup > task name lookup) takes over both pre-allocation call sites, so the dir name reuses the feature unit name (e.g. `admin-web-01-yudingguanli`), aligned across features/, 020-specs/, and 030-tasks/.
+
+---
+
+## v8.3.381 (2026-11-04) — ask category-word multi-endpoint mapping fix ("all frontend projects" no longer reverse-engineers the backend too)
+
+- **Category-word multi-endpoint resolution**: new `resolvePlatformsFromInput` — type words in the user's phrase (frontend/backend/full-stack) map to all endpoints of that type (joined --platform + --src); total-coverage words (all endpoints/all projects) map to every endpoint. An exact single-endpoint hit (name/description/project name) still takes priority over type words, so "会议预订后端工程" is not expanded into every backend.
+- **Root cause fixed**: previously "分析所有前端项目反推需求文档" matched no endpoint name → no --src/--platform was appended → the CLI with empty src fell back to DEFAULT_SCOPE and scanned everything → the backend was reverse-engineered too; now a type-word hit reverse-engineers frontend endpoints only.
+
+---
+
+## v8.3.380 (2026-11-04) — reverse-engineered requirements aligned with the recipe PRD template (feature list → business + interaction depth)
+
+- **UR skeleton aligned with the PRD template**: the reverse-derived UR expands from four blocks (unit table + EARS) to eight sections — Overview (summary + target personas), User Stories & Scenarios (As a/I want/So that + use cases + Mermaid user journey), Functional Requirements (requirement details + EARS acceptance criteria), Interaction & UX (frontend endpoints), Non-Functional Requirements, Success Criteria, Undetermined Items, and the CLI-determined module list.
+- **Frontend interaction depth**: frontend UR enforces an Interaction & UX section — page/UI state matrix (loading/empty/error/unauthorized/success), operation feedback, field validation, component linkage; the non-functional section includes accessibility; backend endpoints stay business-rule oriented (endpoint type resolved via resolvePlatformType).
+- **Three-level confidence gating**: every semantic entry in IR/UR is tagged Verified/Inferred/Unverified; Unverified entries may only go into Undetermined Items, never into the body — closing the loophole where the AI invents interactions.
+- **Hardened investigation boundary**: the IR skeleton gains Permission & Boundary and Data Constraints sections; the two-hop guide mandates that business rules, permissions, observable error behavior, and data constraints must be traced to code evidence before being written.
+- **Review dimensions expanded to eight**: --review adds Interaction Completeness and Accessibility to the previous six dimensions — feature-list-style output can no longer pass the review gate.
+
+---
+
+## v8.3.379 (2026-11-04) — reverse-derived requirements organized by endpoint (GLOBAL/requirements/{endpoint}/, _reverse domain deprecated)
+
+- **Per-endpoint output layout**: reverse-derived requirements (REQUIREMENT.md / REVERSE_PROMPT.md / _ir / _qa) move from the flat GLOBAL/_reverse/ domain to GLOBAL/requirements/{endpoint}/ — they now coexist with the global-analysis master requirement (requirements/REQUIREMENT.md) without file-level conflict (master at root, reverse artifacts in endpoint subdirectories), mirror the platforms/{endpoint}/ tech-asset layout, and read semantically clearly.
+- **Legacy domains still supported**: existing artifacts in GLOBAL/_reverse/ (v8.3.368-378) and the pre-v8.3.368 flat requirements/ root are auto-adopted by the QA loop (--verify/--review/--revise) when --out-dir is omitted, with a migration hint — no breakage for existing projects.
+- **Per-endpoint QA loop**: with multiple endpoints reversed, --verify/--review/--revise auto-discover every self-contained endpoint unit under requirements/ (REQUIREMENT.md + _ir) and run verify/review/revise per endpoint independently.
+
+---
+
 ## v8.3.378 (2026-11-04) — run pipeline analyze handoff window fix (full automation no longer dies at the skeleton gate)
 
 - **Handoff deadlock fixed**: `analyze --auto` exits with code 10 after printing the analysis Prompt (content must be written back by the host AI), but the run pipeline immediately ran the skeleton hard gate in the same process — at that moment the AI has not written anything yet, so empty skeletons always hit, causing exit 1 hard stop. Fully automated flows died forever at the analyze stage (Prompt printed but nobody picks it up).

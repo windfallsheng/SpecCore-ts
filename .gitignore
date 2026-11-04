@@ -45,6 +45,9 @@ coverage/
 
 .temp/
 .tmp/
+# v8.3.383+: 宿主 AI 接力中转/临时散落文件（.temp-iter-req-*.md 等）
+.temp-*
+.tmp-*
 
 verify-project/
 # E2E test artifacts

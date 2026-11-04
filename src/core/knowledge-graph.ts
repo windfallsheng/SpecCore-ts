@@ -609,7 +609,8 @@ async function scanTasks(iterDir: string): Promise<{
           const subtaskTaskMd = join(subtaskPath, 'TASK.md');
           let subTitle = `${title} — ${platformLabel}`;
           let subStatus = 'pending';
-          let subTaskId = `${taskId}-${de.name}-${sub.name}`;
+          // v8.3.384+: 标准结构子任务目录名即事实源（用户改名后 TASK.md 字段仍是旧名，不能覆盖）
+          let subTaskId = sub.name.startsWith('Task-') ? sub.name : `${taskId}-${de.name}-${sub.name}`;
 
           if (await pathExists(subtaskTaskMd)) {
             const subContent = await readFile(subtaskTaskMd, 'utf-8');
@@ -622,7 +623,8 @@ async function scanTasks(iterDir: string): Promise<{
               else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
             }
             const subIdMatch = subContent.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
-            if (subIdMatch) subTaskId = subIdMatch[1];
+            // 仅目录名非 Task- 开头（存量旧格式）时才回退 TASK.md 字段
+            if (subIdMatch && !sub.name.startsWith('Task-')) subTaskId = subIdMatch[1];
           }
 
           // hash 回退：TASK.md → .meta/status → src/ → 空

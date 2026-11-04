@@ -30,6 +30,7 @@ import {
 import { summarizeCode, isTreeSitterLang } from './multi-lang-parser';
 // v8.3.365+: 业务切片——从导出符号提取带函数体的切片（结构摘要丢弃方法体，业务语义藏在函数体里）
 import { sliceCodeFile } from './unified-retrieval';
+import { resolvePlatformType } from './spec-paths';
 import { logger } from '../utils/logger';
 
 // ── v8.3.365: 反推深度三档（depth 参数此前为死参数，本轮激活）──
@@ -50,7 +51,7 @@ export interface ReverseRequirementOptions {
   sources?: string[];
   /** 分析深度 quick/normal/deep，影响读文件数与摘要粒度 */
   depth?: string;
-  /** 输出根目录，默认 .speccore/GLOBAL/_reverse（v8.3.368: 与全局分析 requirements/ 域隔离，避免 REQUIREMENT.md 被两条管线抢用） */
+  /** 输出根目录，默认 .speccore/GLOBAL/requirements（v8.3.379: 按端组织——产物落 requirements/{端}/，根级 REQUIREMENT.md 留给全局分析总纲） */
   outputDir?: string;
   /** 只反推指定端（frontend/backend/mobile/cli/shared），缺省全端 */
   platforms?: string[];
@@ -95,10 +96,12 @@ export interface IRCodeSlice {
 
 export interface ReverseResult {
   outputDir: string;
+  /** v8.3.379: 按端输出目录清单（GLOBAL/requirements/{端}/），单端时为一项 */
+  outputDirs: string[];
   irDir: string;
   irCount: number;
   modules: IRModule[];
-  /** 两跳执行 prompt 路径（宿主 AI 据此完成语义抽象） */
+  /** 两跳执行 prompt 路径（宿主 AI 据此完成语义抽象；多端时各端目录内各一份） */
   promptPath: string;
 }
 
@@ -273,25 +276,35 @@ function buildIRSkeleton(m: IRModule): string {
   lines.push(`## 业务语义（宿主 AI 填写）`);
   lines.push('');
   lines.push(`> ⚠️ 以下由宿主 AI 基于「代码事实 + 结构摘要 + 业务切片」做语义抽象，勿编造代码中不存在的逻辑。`);
+  lines.push(`> 置信度三级门控（对齐 recipe-reverse-engineer）：每条语义标注 [置信度: Verified/Inferred/Unverified]——`);
+  lines.push(`> Verified=直接代码证据；Inferred=间接推断（须注明依据）；Unverified=无证据，只能记入「待确认项」，禁止写进正文需求。`);
   lines.push('');
   lines.push(`### 模块职责`);
   lines.push('');
-  lines.push(`_AI 填写：这个模块在业务上做什么？_`);
+  lines.push(`_AI 填写：这个模块在业务上做什么？[置信度: Verified/Inferred]_`);
   lines.push('');
   lines.push(`### 关键业务规则`);
   lines.push('');
-  lines.push(`- _AI 填写：从代码逻辑中抽象出的规则（如「密码错误 5 次锁定」）_`);
+  lines.push(`- _AI 填写：从代码逻辑中抽象出的规则（如「密码错误 5 次锁定」）[置信度: Verified/Inferred]_`);
+  lines.push('');
+  lines.push(`### 权限与边界`);
+  lines.push('');
+  lines.push(`- _AI 填写：谁能执行什么操作、什么行为被拒绝（角色/条件）[置信度: Verified/Inferred]_`);
+  lines.push('');
+  lines.push(`### 数据约束`);
+  lines.push('');
+  lines.push(`- _AI 填写：字段格式、取值范围、枚举值、唯一性等（代码中有证据的）[置信度: Verified/Inferred]_`);
   lines.push('');
   lines.push(`### 输入 / 输出`);
   lines.push('');
-  lines.push(`| 项 | 说明 |`);
-  lines.push(`| :--- | :--- |`);
-  lines.push(`| 输入 | _AI 填写_ |`);
-  lines.push(`| 输出 | _AI 填写_ |`);
+  lines.push(`| 项 | 说明 | 置信度 |`);
+  lines.push(`| :--- | :--- | :--- |`);
+  lines.push(`| 输入 | _AI 填写_ | Verified/Inferred |`);
+  lines.push(`| 输出 | _AI 填写_ | Verified/Inferred |`);
   lines.push('');
-  lines.push(`### 异常与边界`);
+  lines.push(`### 异常与边界（可观测的失败行为）`);
   lines.push('');
-  lines.push(`- _AI 填写_`);
+  lines.push(`- _AI 填写：错误码/提示/回滚等可观测的失败行为 [置信度: Verified/Inferred]_`);
   lines.push('');
   lines.push(`### 溯源锚点`);
   lines.push('');
@@ -305,36 +318,63 @@ function buildIRSkeleton(m: IRModule): string {
 }
 
 // ── 阶段 4：第二跳 —— 合成 UR 骨架 + EARS ──
+// v8.3.379: 单端化——按端组织（GLOBAL/requirements/{端}/），跨端功能单元合成
+// 留给迭代层 taskify（全局层只产出端级候选需求）
 
-function buildURSkeleton(modules: IRModule[]): string {
+function buildURSkeleton(modules: IRModule[], endpoint: string, isFrontend: boolean): string {
   const lines: string[] = [];
-  lines.push(`# 用户需求（UR）—— 从源码反推`);
+  lines.push(`# 用户需求（UR）—— ${endpoint} 端源码反推`);
   lines.push('');
-  lines.push(`> 状态: candidate | 层级: 用户级需求 | 反推时间: ${new Date().toISOString().split('T')[0]}`);
-  lines.push(`> 说明: 本文件由 CLI 从 ${modules.length} 个技术模块的 IR 合成骨架，功能单元划分与 EARS 验收标准由宿主 AI 完成。`);
+  lines.push(`> 状态: candidate | 层级: 用户级需求 | 端: \`${endpoint}\` | 反推时间: ${new Date().toISOString().split('T')[0]}`);
+  lines.push(`> 说明: 本文件由 CLI 从 ${modules.length} 个技术模块的 IR 合成骨架，语义内容由宿主 AI 完成。`);
+  lines.push(`> 置信度三级门控：Verified=直接代码证据；Inferred=间接推断（注明依据）；Unverified=只能进「七、待确认项」。`);
   lines.push('');
-  lines.push(`## 功能单元清单（宿主 AI 抽象）`);
+  lines.push(`## 一、概述（Overview）`);
   lines.push('');
-  lines.push(`> 把下面 ${modules.length} 个技术模块按业务语义合并为「功能单元」（一个功能单元可对应多个技术模块，如「用户认证」对应 auth 后端模块 + login 前端模块）。`);
-  lines.push(`> 每个功能单元必须带「溯源锚点」：列出支撑它的 IR 模块 id（格式 \`{端}/{模块}\`），保证需求可追溯到代码。`);
+  lines.push(`### 一句话摘要`);
   lines.push('');
-  lines.push(`| 功能单元 | 涉及技术模块 | 涉及端 | 溯源锚点 |`);
-  lines.push(`| :--- | :--- | :--- | :--- |`);
-  lines.push('| _AI 填写_ | _AI 填写_ | _AI 填写_ | _AI 填写：如 `booking-service/order-service`_ |');
+  lines.push(`_AI 填写：本端在业务上解决什么问题（1-2 句，业务语言）_`);
   lines.push('');
-  lines.push(`## 端覆盖矩阵（CLI 确定）`);
+  lines.push(`### 目标用户与背景`);
   lines.push('');
-  const endpoints = dedupe(modules.map(m => m.endpoint));
-  lines.push(`| 端 | 模块数 | 模块清单 |`);
+  lines.push(`| 角色 | 特征 | 核心诉求 |`);
   lines.push(`| :--- | :--- | :--- |`);
-  for (const ep of endpoints) {
-    const ms = modules.filter(m => m.endpoint === ep);
-    lines.push(`| \`${ep}\` | ${ms.length} | ${ms.map(m => m.module).join(', ')} |`);
-  }
+  lines.push(`| _AI 填写_ | _AI 填写_ | _AI 填写_ |`);
   lines.push('');
-  lines.push(`## 验收标准（EARS 五句式，宿主 AI 撰写）`);
+  lines.push(`## 二、用户故事与场景（User Stories）`);
   lines.push('');
-  lines.push(`> 每个功能单元至少 3 条验收标准，按场景从 EARS 五种句式选择（v8.3.301+）：`);
+  lines.push(`### 用户故事`);
+  lines.push('');
+  lines.push(`> 按业务语义至少 3 条，模板「作为 {角色}，我想要 {目标}，以便 {价值}」。`);
+  lines.push(`- 作为 **{角色}**，我想要 **{目标}**，以便 **{价值}**。`);
+  lines.push('');
+  lines.push(`### 用例场景`);
+  lines.push('');
+  lines.push(`1. _AI 填写：具体使用场景（谁在什么情况下做什么、期望什么结果）_`);
+  lines.push('');
+  lines.push(`### 用户旅程（关键流程用 Mermaid，无关键流程可删本节）`);
+  lines.push('');
+  lines.push('```mermaid');
+  lines.push(`journey`);
+  lines.push(`  title {流程名}`);
+  lines.push(`  section 触发`);
+  lines.push(`    {步骤}: {分数}: {角色}`);
+  lines.push('```');
+  lines.push('');
+  lines.push(`## 三、功能需求（Functional Requirements）`);
+  lines.push('');
+  lines.push(`> 把下面 ${modules.length} 个技术模块按业务语义合并为「功能单元」（一个功能单元可对应多个技术模块，如「支付管理」对应 payment 模块 + wallet 模块）。`);
+  lines.push(`> 每个功能单元必须带「溯源锚点」（引用真实 IR 模块 id，格式 \`${endpoint}/{模块}\`）与置信度。`);
+  lines.push('');
+  lines.push(`### 功能单元清单（宿主 AI 抽象）`);
+  lines.push('');
+  lines.push(`| 功能单元 | 涉及技术模块 | 溯源锚点 | 置信度 |`);
+  lines.push(`| :--- | :--- | :--- | :--- |`);
+  lines.push(`| _AI 填写_ | _AI 填写_ | _AI 填写：如 \`${endpoint}/payment-service\`_ | Verified/Inferred |`);
+  lines.push('');
+  lines.push(`### EARS 句式速查（v8.3.301+）`);
+  lines.push('');
+  lines.push(`> 每个功能单元至少 3 条验收标准，按场景从 EARS 五种句式选择：`);
   lines.push('');
   lines.push(`| 句式 | 适用场景 | 模板 |`);
   lines.push(`| :--- | :--- | :--- |`);
@@ -348,29 +388,105 @@ function buildURSkeleton(modules: IRModule[]): string {
   lines.push(`> 1. 主语必须是「用户」或业务对象，禁止函数名/类名/接口名（把「调用 XService.createOrder」写成「用户提交订单」）；`);
   lines.push(`> 2. 每条必须带用户价值或系统责任，禁止把「输出 JSON / 返回 200」当验收标准。`);
   lines.push('');
-  lines.push(`### _功能单元名_`);
+  lines.push(`### _功能单元名_（模板，逐个单元重复）`);
   lines.push('');
-  lines.push(`- **AC-01**：当 _触发事件_ 时，系统应 _期望行为_。[溯源: \`_AI 填写模块id\`]`);
-  lines.push(`- **AC-02**：如果 _非预期条件_，则系统应 _容错行为_。[溯源: \`_AI 填写模块id\`]`);
+  lines.push(`**需求详述**：_AI 填写（业务语言 2-4 句：做什么、给谁、解决什么）_`);
   lines.push('');
-  lines.push(`## 待确认项（人工确认）`);
+  lines.push(`**验收标准**：`);
+  lines.push('');
+  lines.push(`- **AC-01**：当 _触发事件_ 时，系统应 _期望行为_。[溯源: \`_AI 填写模块id\`] [置信度: Verified]`);
+  lines.push(`- **AC-02**：如果 _非预期条件_，则系统应 _容错行为_。[溯源: \`_AI 填写模块id\`] [置信度: Verified]`);
+  lines.push(`- **AC-03**：在 _状态下_ 期间，系统应 _期望行为_。[溯源: \`_AI 填写模块id\`] [置信度: Inferred]`);
+  lines.push('');
+  if (isFrontend) {
+    lines.push(`## 四、交互与场景（Interaction & UX）`);
+    lines.push('');
+    lines.push(`> 本节仅前端端生成。从 IR 的「业务切片 + 异常与边界」抽象交互细节，禁止编造代码中不存在的交互。`);
+    lines.push('');
+    lines.push(`### 页面/界面状态矩阵`);
+    lines.push('');
+    lines.push(`| 状态 | 触发条件 | 界面呈现 |`);
+    lines.push(`| :--- | :--- | :--- |`);
+    lines.push(`| 加载中 | _AI 填写_ | _AI 填写_ |`);
+    lines.push(`| 空态 | _AI 填写_ | _AI 填写_ |`);
+    lines.push(`| 异常 | _AI 填写_ | _AI 填写_ |`);
+    lines.push(`| 无权限 | _AI 填写_ | _AI 填写_ |`);
+    lines.push(`| 成功 | _AI 填写_ | _AI 填写_ |`);
+    lines.push('');
+    lines.push(`### 操作反馈`);
+    lines.push('');
+    lines.push(`| 操作 | 成功反馈 | 失败反馈 |`);
+    lines.push(`| :--- | :--- | :--- |`);
+    lines.push(`| _AI 填写_ | _AI 填写_ | _AI 填写（含失败原因提示）_ |`);
+    lines.push('');
+    lines.push(`### 字段与校验规则`);
+    lines.push('');
+    lines.push(`| 字段 | 校验规则 | 错误提示 |`);
+    lines.push(`| :--- | :--- | :--- |`);
+    lines.push(`| _AI 填写_ | _AI 填写_ | _AI 填写_ |`);
+    lines.push('');
+    lines.push(`### 组件联动规则`);
+    lines.push('');
+    lines.push(`- _AI 填写：A 操作如何影响 B（如筛选条件变化联动表格刷新、状态变化联动按钮可用性）_`);
+    lines.push('');
+  }
+  lines.push(`## 五、非功能需求（Non-Functional）`);
+  lines.push('');
+  lines.push(`> 只写代码/配置中有证据的项；无证据标注「待定」。`);
+  lines.push('');
+  lines.push(`### 性能`);
+  lines.push('');
+  lines.push(`- _AI 填写：响应时间/吞吐量目标（如有观测依据，否则「待定」）_`);
+  lines.push('');
+  lines.push(`### 可靠性`);
+  lines.push('');
+  lines.push(`- _AI 填写：可用性/错误处理策略_`);
+  lines.push('');
+  lines.push(`### 安全`);
+  lines.push('');
+  lines.push(`- _AI 填写：认证/授权/数据保护要求（如有）_`);
+  lines.push('');
+  if (isFrontend) {
+    lines.push(`### 无障碍（UI）`);
+    lines.push('');
+    lines.push(`- _AI 填写：键盘操作/读屏/对比度要求（如有，否则「待定」）_`);
+    lines.push('');
+  }
+  lines.push(`## 六、成功指标（Success Criteria）`);
+  lines.push('');
+  lines.push(`> 只写代码/测试中有观测依据的指标；无证据的写「待定」，禁止为凑数编造。`);
+  lines.push('');
+  lines.push(`1. _AI 填写：指标名：目标值（测量方式）——或「待定」_`);
+  lines.push('');
+  lines.push(`## 七、待确认项（Undetermined Items）`);
+  lines.push('');
+  lines.push(`> Unverified 条目与无法从代码确定的业务意图进这里，禁止写进正文需求。`);
   lines.push('');
   lines.push(`- [ ] 功能单元边界是否正确（有无遗漏/重复/需拆分合并）`);
   lines.push(`- [ ] 端覆盖矩阵是否正确`);
   lines.push(`- [ ] 验收标准是否与代码实现一致、可测试`);
   lines.push(`- [ ] 溯源锚点是否真实存在（完成后运行 \`speccore global from-source --src <dirs> --verify\` 校验）`);
   lines.push(`- [ ] 是否有代码中未体现、但业务上存在的规则需补充`);
+  lines.push(`- [ ] 置信度 Unverified 的条目（如有）：_AI 填写_`);
+  lines.push('');
+  lines.push(`## 模块清单（CLI 确定）`);
+  lines.push('');
+  for (const m of modules) {
+    lines.push(`- \`${m.module}\` — ${m.files.length} 个文件，${m.lines} 行${m.apis.length ? `，API ${m.apis.length} 个` : ''}`);
+  }
   lines.push('');
   return lines.join('\n');
 }
 
 // ── 阶段 5：两跳执行 prompt（宿主 AI 据此完成语义抽象）──
+// v8.3.379: 端级指引——每端目录自包含（REQUIREMENT.md + _ir/ + 本指引 + _qa/）
 
-function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[]): string {
+function buildReversePrompt(endpoint: string, outputDir: string, irDir: string, modules: IRModule[]): string {
   const lines: string[] = [];
-  lines.push(`# 源码反推需求 · 两跳执行指引`);
+  lines.push(`# 源码反推需求 · 两跳执行指引（${endpoint} 端）`);
   lines.push('');
-  lines.push(`> 目标：从源码恢复「候选需求」（status: candidate），澄清后才成为 Spec。`);
+  lines.push(`> 目标：从 ${endpoint} 端源码恢复「候选需求」（status: candidate），澄清后才成为 Spec。`);
+  lines.push(`> 本指引只覆盖 ${endpoint} 端；多端反推时各端目录内均有独立指引，逐端完成两跳即可。`);
   lines.push('');
   lines.push(`## 第一跳：逐模块填充 IR`);
   lines.push('');
@@ -380,15 +496,23 @@ function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[
   lines.push(`1. 读该 IR 的「代码事实 + 源码结构摘要 + 业务切片」（CLI 已预提取）；`);
   lines.push(`2. 业务切片不足以确认的规则 / 分支 / 交互，用 Read 工具按需深读锚点文件的函数体原文——`);
   lines.push(`   业务语义藏在函数体里，只读签名写不出真实需求；`);
-  lines.push(`3. 填写「模块职责 / 关键业务规则 / 输入输出 / 异常边界」；`);
-  lines.push(`4. 禁止编造代码中不存在的逻辑；不确定处标注 \`待确认\`。`);
+  lines.push(`3. 填写「模块职责 / 关键业务规则 / 权限与边界 / 数据约束 / 输入输出 / 异常与边界」六节；`);
+  lines.push(`4. 调查边界（硬性）：业务规则、权限、可观测的错误行为、数据约束四类必须追踪到代码证据后才落笔；`);
+  lines.push(`5. 每条语义标注置信度：Verified=直接代码证据；Inferred=间接推断（注明依据）；Unverified=无证据，只能记入「待确认项」；`);
+  lines.push(`6. 禁止编造代码中不存在的逻辑；不确定处标注 \`待确认\`。`);
   lines.push('');
   lines.push(`## 第二跳：合成 UR`);
   lines.push('');
-  lines.push(`1. 读完所有 IR 后，按业务语义把技术模块合并为「功能单元」；`);
-  lines.push(`2. 在 \`${outputDir}/REQUIREMENT.md\` 填写功能单元清单 + EARS 验收标准；`);
-  lines.push(`3. 每条验收标准必须带「溯源锚点」（引用真实 IR 模块 id），功能单元表必须填「溯源锚点」列；`);
-  lines.push(`4. 端覆盖矩阵已由 CLI 确定，勿改动。`);
+  lines.push(`1. 读完本端所有 IR 后，按业务语义把技术模块合并为「功能单元」；`);
+  lines.push(`2. 在 \`${outputDir}/REQUIREMENT.md\` 按章填写：`);
+  lines.push(`   - 一、概述：一句话摘要 + 目标用户画像；`);
+  lines.push(`   - 二、用户故事与场景：至少 3 条用户故事（作为/想要/以便）+ 用例场景 + 关键流程用户旅程图；`);
+  lines.push(`   - 三、功能需求：每个功能单元写「需求详述」（业务语言 2-4 句）+ 至少 3 条 EARS 验收标准；`);
+  lines.push(`   - 四、交互与场景（仅前端端）：页面状态矩阵 / 操作反馈 / 字段校验 / 组件联动；`);
+  lines.push(`   - 五、非功能需求：只写代码/配置中有证据的项，无证据标「待定」；`);
+  lines.push(`   - 六、成功指标：只写代码/测试中有观测依据的指标，禁止为凑数编造；`);
+  lines.push(`3. 每条验收标准必须带「溯源锚点」（引用真实 IR 模块 id）与置信度；功能单元表必填「溯源锚点」与「置信度」两列；`);
+  lines.push(`4. 模块清单已由 CLI 确定，勿改动。`);
   lines.push('');
   lines.push(`## 第三跳起：QA 环（v8.3.367+，对齐 recipe-reverse-engineer 五阶段）`);
   lines.push('');
@@ -400,7 +524,7 @@ function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[
   lines.push('');
   lines.push(`### 2. 审查（--review）：document-reviewer 语义审查`);
   lines.push(`运行 \`speccore global from-source --src <dirs> --review\`：CLI 生成 \`_qa/REVIEW_PLAYBOOK.md\` 与 \`_qa/review.json\` 模板。`);
-  lines.push(`宿主 AI 按剧本扮演 document-reviewer：拿 verify.json 作证据，从完整性/正确性/可测试性/翻译腔/粒度/可追溯性六维审查「写得如何」，逐条 finding 做 Review Resolution 裁决（apply=必须修订 / decline=拒绝），填 review.json。`);
+  lines.push(`宿主 AI 按剧本扮演 document-reviewer：拿 verify.json 作证据，从完整性/正确性/可测试性/翻译腔/粒度/可追溯性/交互完整性/无障碍八维审查「写得如何」，逐条 finding 做 Review Resolution 裁决（apply=必须修订 / decline=拒绝），填 review.json。`);
   lines.push('');
   lines.push(`### 3. 修订（--revise）：有条件修订 + re-validation`);
   lines.push(`运行 \`speccore global from-source --src <dirs> --revise\`：CLI 读 review.json 做裁决门禁——无 apply findings 即闭环完成；有 apply findings 则生成 \`_qa/REVISION_PLAYBOOK.md\`（apply findings 全文作修订范围）并记入 \`_qa/REVISION_LOG.md\`。`);
@@ -409,8 +533,8 @@ function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[
   lines.push(`## 约束`);
   lines.push('');
   lines.push(`- 产出物一律标 \`status: candidate\`；`);
-  lines.push(`- 需求只从前端反推「用户能做什么」，后端只产出「技术约束」（接口/数据模型/规则）；`);
-  lines.push(`- 验收标准必须 EARS 五句式、无歧义、可测试、带溯源锚点；`);
+  lines.push(`- 前端端反推「用户场景与交互」（页面状态、操作反馈、字段校验、组件联动），后端端反推「业务规则与约束」（权限、数据约束、错误行为）；`);
+  lines.push(`- 验收标准必须 EARS 五句式、无歧义、可测试、带溯源锚点与置信度；`);
   lines.push(`- 禁止把 IR 骨架当需求直译交差——先抽象再落笔，函数名/类名不得出现在需求文本里。`);
   lines.push('');
   return lines.join('\n');
@@ -421,9 +545,10 @@ function buildReversePrompt(outputDir: string, irDir: string, modules: IRModule[
 export async function reverseRequirementsFromCode(
   options: ReverseRequirementOptions,
 ): Promise<ReverseResult> {
-  const outputDir = options.outputDir || join('.speccore', 'GLOBAL', '_reverse');
-  const irDir = join(outputDir, '_ir');
-  await ensureDir(irDir);
+  // v8.3.379: 按端组织——产物落 GLOBAL/requirements/{端}/（与 platforms/{端}/ 对称），
+  // 根级 REQUIREMENT.md 留给全局分析总纲，两条管线各居其位不再抢用；
+  // 旧域 GLOBAL/_reverse/（v8.3.368-378）废弃，存量产物保留不动。
+  const requirementsBase = options.outputDir || join('.speccore', 'GLOBAL', 'requirements');
 
   const depthLabel = options.depth === 'deep'
     ? 'deep（每模块 ≤20 文件 × 5 切片）'
@@ -437,32 +562,54 @@ export async function reverseRequirementsFromCode(
   }
   logger.info(`   📦 识别到 ${modules.length} 个技术模块（按端分组 + 依赖排序）`);
 
-  // 第一跳：逐模块 IR 骨架
-  logger.info('   🧩 第一跳：生成逐模块 IR 骨架...');
+  // v8.3.379: 按端分组——每端一个子目录（REQUIREMENT.md + _ir/ + REVERSE_PROMPT.md + 后续 _qa/）
+  const byEndpoint = new Map<string, IRModule[]>();
   for (const m of modules) {
-    const irPath = join(irDir, `${sanitize(m.id)}.md`);
-    await writeFile(irPath, buildIRSkeleton(m));
+    const ep = sanitize(m.endpoint || 'unknown');
+    if (!byEndpoint.has(ep)) byEndpoint.set(ep, []);
+    byEndpoint.get(ep)!.push(m);
   }
 
-  // 第二跳：合成 UR 骨架
-  logger.info('   🧬 第二跳：合成 UR 骨架 + EARS 模板...');
-  const urPath = join(outputDir, 'REQUIREMENT.md');
-  await writeFile(urPath, buildURSkeleton(modules));
+  const outputDirs: string[] = [];
+  let totalIR = 0;
+  for (const [ep, mods] of byEndpoint) {
+    const epDir = join(requirementsBase, ep);
+    const irDir = join(epDir, '_ir');
+    await ensureDir(irDir);
 
-  // 两跳执行 prompt
-  const promptPath = join(outputDir, 'REVERSE_PROMPT.md');
-  await writeFile(promptPath, buildReversePrompt(outputDir, irDir, modules));
+    // 第一跳：逐模块 IR 骨架
+    logger.info(`   🧩 [${ep}] 第一跳：生成逐模块 IR 骨架...`);
+    for (const m of mods) {
+      const irPath = join(irDir, `${sanitize(m.id)}.md`);
+      await writeFile(irPath, buildIRSkeleton(m));
+      totalIR++;
+    }
 
-  logger.info(`   ✅ IR: ${modules.length} 个 → ${irDir}`);
-  logger.info(`   ✅ UR 骨架: ${urPath}`);
-  logger.info(`   ✅ 两跳指引: ${promptPath}`);
+    // 第二跳：合成 UR 骨架（端级；前端端附加交互与场景节）
+    logger.info(`   🧬 [${ep}] 第二跳：合成 UR 骨架 + EARS 模板...`);
+    const epLabel = mods[0]?.endpoint || ep;
+    const isFrontend = (await resolvePlatformType(epLabel)) === 'frontend';
+    const urPath = join(epDir, 'REQUIREMENT.md');
+    await writeFile(urPath, buildURSkeleton(mods, epLabel, isFrontend));
 
+    // 两跳执行 prompt（端级自包含）
+    const promptPath = join(epDir, 'REVERSE_PROMPT.md');
+    await writeFile(promptPath, buildReversePrompt(epLabel, epDir, irDir, mods));
+
+    logger.info(`   ✅ [${ep}] IR ${mods.length} 个 → ${irDir}`);
+    logger.info(`   ✅ [${ep}] UR 骨架: ${urPath}`);
+    logger.info(`   ✅ [${ep}] 两跳指引: ${promptPath}`);
+    outputDirs.push(epDir);
+  }
+
+  const firstDir = outputDirs[0];
   return {
-    outputDir,
-    irDir,
-    irCount: modules.length,
+    outputDir: firstDir,
+    outputDirs,
+    irDir: join(firstDir, '_ir'),
+    irCount: totalIR,
     modules,
-    promptPath,
+    promptPath: join(firstDir, 'REVERSE_PROMPT.md'),
   };
 }
 
@@ -555,7 +702,7 @@ function buildVerifyReport(total: number, dangling: string[]): string {
   lines.push('# 反推需求验证报告（VERIFY）');
   lines.push('');
   lines.push(`> 生成时间: ${new Date().toISOString()}`);
-  lines.push(`> 校验规则: REQUIREMENT.md 中每条「溯源锚点」必须能回溯到真实存在的 IR 模块（\`.speccore/GLOBAL/_reverse/_ir/\`）。`);
+  lines.push(`> 校验规则: REQUIREMENT.md 中每条「溯源锚点」必须能回溯到真实存在的 IR 模块（见本目录 _ir/ 下文件名）。`);
   lines.push('');
   lines.push('## 统计');
   lines.push('');

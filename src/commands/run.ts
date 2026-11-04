@@ -6,7 +6,7 @@ import { pathExists, readdir, writeFile, ensureDir, readFile } from 'fs-extra';
 import { join, basename } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
-import { getDefaultIteration } from '../core/context';
+import { getDefaultIteration, getIterationDir } from '../core/context';
 import { collectQuestionFiles } from '../core/questions';
 import { generateHandoff, type HandoffStage } from '../core/handoff-generator';
 import { loadConfigWithMeta } from '../core/unified-config';
@@ -238,14 +238,19 @@ async function autoPipeline(options: RunOptions): Promise<void> {
 
   // v8.3.262: 迭代名归一化——context.json 的 currentIteration 可能带 Iteration- 前缀
   // （历史版本写入），不归一化会拼出 Iteration-Iteration-xxx 双前缀，导致前置依赖误判
-  const iteration = (await getDefaultIteration(options.iteration)).replace(/^Iteration-/, '');
-  if (!iteration) {
+  const rawIteration = (await getDefaultIteration(options.iteration)).replace(/^Iteration-/, '');
+  if (!rawIteration) {
     logger.info('🤖 Auto-pipeline: 未找到迭代，先初始化...');
     execSync('speccore init', { stdio: 'inherit' });
     return;
   }
 
-  const iterDir = `Iteration-${iteration}`;
+  // v8.3.388: 目录名模糊解析（BUG-11）——此前直接拼 `Iteration-${iteration}`，短名
+  // （无序号前缀，如 ding-dan-guan-li-xi-tong）拼出不存在目录，基于 iterDir 的前置
+  // 依赖检查读空路径全部失败，报「阶段前置依赖未满足」且 remedy 仍让用户用短名重试，
+  // 自相矛盾。统一走 getIterationDir（精确/后缀匹配，找不到时回退拼接，向后兼容）
+  const iterDir = await getIterationDir(rawIteration);
+  const iteration = basename(iterDir).replace(/^Iteration-/, '');
   logger.info(`\n🤖 Auto-pipeline: ${iteration}\n`);
 
   // v8.3.223+: 阶段前置依赖表——上游依赖未满足时阻断流水线，防止下游空跑产出垃圾产物。
@@ -338,6 +343,10 @@ async function autoPipeline(options: RunOptions): Promise<void> {
   } catch { /* 配置读取失败用默认 */ }
   if (options.gate) gateMode = options.gate;  // 命令 flag 最高优先级
   if (options.demo) gateMode = 'auto';        // --demo 兼容：等价于 --gate auto
+  // v8.3.386: --auto 切换全自动闸口（BUG-9）——此前 options.auto 逻辑上零消费，
+  // `run --auto --from taskify` 仍在闸口 A 软停，与「全自动流水线」文档承诺矛盾；
+  // 续跑命令 `speccore run --auto --from <阶段>` 现可无人干预跨闸口级联执行
+  if (options.auto) gateMode = 'auto';
 
   // v8.3.217+: 冒烟范围解析（命令 --scope > 按环境 scope_by_env > 默认 scope）
   const resolveSmokeScope = (env?: string): 'full' | 'module' => {

@@ -272,15 +272,18 @@ async function checkImages(
   iterDir: string,
   issues: ValidationIssue[]
 ): Promise<number> {
+  // v8.3.386: 先剥离 HTML 注释再提取引用——doc2spec 写入的模板注释里含
+  // ../assets/extracted/xxx.png 等示例路径，此前被误报为「图片引用可能失效」（BUG-2）
+  const effective = content.replace(/<!--[\s\S]*?-->/g, '');
   const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
   const images: { alt: string; path: string }[] = [];
   let match;
 
-  while ((match = imgRegex.exec(content)) !== null) {
+  while ((match = imgRegex.exec(effective)) !== null) {
     images.push({ alt: match[1], path: match[2] });
   }
   // 兼容 HTML <img src="..."> 形态（旧 doc2spec 产物 / 手写文档），v8.3.331+
-  content.replace(/<img\b([^>]*)\/?>/g, (_tag, attrs: string) => {
+  effective.replace(/<img\b([^>]*)\/?>/g, (_tag, attrs: string) => {
     const src = /src="([^"]+)"/.exec(attrs)?.[1];
     const alt = /alt="([^"]*)"/.exec(attrs)?.[1] ?? '';
     if (src) images.push({ alt, path: src });

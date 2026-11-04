@@ -105,6 +105,16 @@ describe('composeBranchName — 分支名主体 = taskId（与子任务 ID 一�
     const name = composeBranchName(cfg, 'hotfix', 'Task-001', '');
     expect(name).toBe('hotfix/api-Task-001-urgent');
   });
+
+  it('v8.3.340+: 新式子任务 ID（模块目录名）作分支主体，不拼端名', () => {
+    // 子任务 ID = Task-{模块名}（generateSubtaskId），多端同名分处不同端目录，
+    // 分支名主体 = 子任务 ID，端名不再拼入；重名时由 createTaskBranch 拼 -hash4 兜底
+    const cfg = baseGitConfig();
+    const moduleSubtaskId = 'Task-admin-web-01-yudingguanli';
+    const name = composeBranchName(cfg, 'feature', moduleSubtaskId, '');
+    expect(name).toBe(`feature/${moduleSubtaskId}`);
+    expect(name).not.toMatch(/-h5-mobile$|-booking-service$|-admin-web$/);
+  });
 });
 
 describe('端到端：CONSTITUTION + 存量 git-config → loadGitConfig → composeBranchName', () => {

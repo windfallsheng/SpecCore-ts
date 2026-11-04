@@ -94,7 +94,7 @@ SpecCore 规范驱动开发项目。
 10. **步骤隔离模式** — v8.3.160+ 默认步骤隔离，每步完成后输出 `[SPECCORE_STEP_DONE]` + `[SPECCORE_NEXT_STEP]`，新会话通过 `--resume` 继续。看到 `[SPECCORE_EXEC]` 后自动执行
 11. **质量门禁拦截后必须修复所有 error** — 不能跳过质量门禁继续推进
 12. **PATTERNS 只提取真正独特且可复用的模式** — 严禁为每个项目都生成 JWT/Redis/拦截器等框架自带的标准用法说明
-13. **多任务执行用批次** — `speccore execute --list-pending --batch-size 3` 获取清单，每批完成后优先在同一会话继续下一批（CLI 会输出 `[SPECCORE_CONTINUE]` 与下一任务命令）；仅当上下文紧张时开新对话，先读摘要文件再续跑
+13. **多任务执行用批次** — `speccore execute --list-pending --batch-size 3` 获取清单，每批完成后优先在同一会话继续下一批（CLI 会输出 `[SPECCORE_CONTINUE]` 与下一任务命令）；仅当上下文紧张时开新对话，先读摘要文件再续跑。**「执行所有/全部开发任务」「全自动执行」= AI 接力逐个执行直到 `[SPECCORE_CONTINUE]` 链结束**，禁止单次调用冒充完成、禁止只改任务状态不生成代码、禁止以「任务量较大」为由中途停下来问用户；**范围/迭代/约束任一不清时必须先确认**（AskUserQuestion 或意图块），禁止猜测执行，确认后立即执行到底
 14. **失败时读取 .issues.md 并按流程处理** — 读取问题清单 → 分析根因 → 修复 → 更新 .issues.md 状态 → 重新执行
 15. **续跑用 --resume** — `speccore execute --resume`
 16. **配置变更用 --upgrade** — `speccore config --upgrade`（`.speccore.yml` / `PROJECT.yaml` 结构升级）

@@ -4,7 +4,7 @@ import { createInterface } from 'readline';
 import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
 import { getDefaultIteration, updateContext, recordHistory, startHotfix, getIterationDir } from '../core/context';
-import { scanTasks, topologicalSort, TaskState, filterTasksByModule } from '../core/state';
+import { scanTasks, topologicalSort, TaskState, filterTasksByModule, matchesTaskAlias } from '../core/state';
 import { acquireLock, releaseLock } from '../core/lock-manager';
 import { sendNotification } from '../core/notification';
 import { resolveTask, formatResolveResult } from '../core/resolver';
@@ -26,16 +26,12 @@ import { nextPlanId } from '../core/global-counters';
 import { generateReport as generateRetroReport } from './retro';
 import { version } from '../../package.json';
 import {
-  initExecutionState,
   loadExecutionState,
-  completeBatch,
   clearExecutionState,
   getCurrentBatchTasks,
   canResume,
-  addTaskSummary,
   writeContextSummaryFile,
   ExecutionState,
-  TaskSummary,
 } from '../core/execution-state';
 import { createTaskBranch, resolveTaskBaseBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranchAsync, loadGitConfig } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
@@ -462,7 +458,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
 
     // === Resume mode ===
     if (options.resume) {
-      await executeResume(iteration);
+      await executeResume(iteration, options);
       return;
     }
 
@@ -474,7 +470,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
 
     // === Execute with progress (existing flow) ===
     const skipList = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
-    await executeWithProgress(sortedTasks, iteration, options.base, skipList, { only: options.only });
+    await executeWithProgress(sortedTasks, iteration, options.base, skipList, { only: options.only }, options);
 
     // === Verify loop: 代码生成后自动检查 → 修复 → 重试 ===
     await executionVerifyLoop(sortedTasks, iteration, options);
@@ -547,7 +543,7 @@ async function interactiveSelect(tasks: TaskState[], iteration: string, options:
   if (batchSize > 0 && selectedTasks.length > batchSize) {
     await executeBatchMode(selectedTasks, iteration, batchSize, options);
   } else {
-    await executeWithProgress(selectedTasks, iteration, options.base, [], {});
+    await executeWithProgress(selectedTasks, iteration, options.base, [], {}, options);
   }
 }
 
@@ -572,16 +568,15 @@ async function loadInquirer() {
 // ============================================================
 // Progress feedback execution
 // ============================================================
-async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string, skip?: string[], options?: { only?: string; agent?: string; verify?: boolean }): Promise<void> {
+async function executeWithProgress(tasks: TaskState[], iteration: string, base?: string, skip?: string[], options?: { only?: string; agent?: string; verify?: boolean }, executeOptions?: ExecuteOptions): Promise<void> {
   const total = tasks.length;
   const startTime = Date.now();
-  const completed: string[] = [];
 
   // Filter whitelist (--only)
   if (options?.only) {
     const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
     const before = tasks.length;
-    tasks = tasks.filter(t => onlyList.includes(t.id));
+    tasks = tasks.filter(t => matchesTaskAlias(t, onlyList));
     if (tasks.length < before) {
       logger.info(`  🎯 仅执行 ${tasks.length}/${before} 个指定任务`);
     }
@@ -590,7 +585,7 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
   // Filter skipped tasks
   if (skip && skip.length > 0) {
     const before = tasks.length;
-    tasks = tasks.filter(t => !skip.includes(t.id));
+    tasks = tasks.filter(t => !matchesTaskAlias(t, skip));
     logger.info(`  ⏭️  跳过 ${before - tasks.length} 个任务: ${skip.join(', ')}`);
   }
 
@@ -598,14 +593,6 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     logger.info('  ✅ 没有需要执行的任务');
     return;
   }
-
-  // ── 分支策略：懒创建 + 依赖合并 ──
-  // 每个任务的分支在执行前才创建，确保依赖任务的代码已存在
-  // 有依赖的任务会 merge 依赖分支，拿到前序任务的代码
-  // v8.3.304: base 解析链（任务级 git-config > 迭代级 > PROJECT.yaml source/default_base > git 检测）
-  // 下沉到 prepareTaskBranch 内按任务类型解析，此处仅保留显式 --base
-  const defaultBase = base;
-  const createdBranches: Map<string, string> = new Map(); // taskId → branchName
 
   // ── Agent mode: output optimized context for external AI ──
   if (options?.agent) {
@@ -621,106 +608,36 @@ async function executeWithProgress(tasks: TaskState[], iteration: string, base?:
     return;
   }
 
-  logOperation('speccore execute', `${total} tasks`);
+  // ── v8.3.385+: 真实执行 = AI 接力 ──
+  // 「骨架生成 + 标记完成」是历史 demo 遗留：不建分支、不写真实代码，
+  // 却把任务标 completed（假执行）。改为对第一个任务走 runPromptMode
+  // （prepareTaskBranch 建分支 + prompt/SDK 派单），宿主 AI 完成后按
+  // [SPECCORE_CONTINUE] 接力下一任务。
+  if (executeOptions) {
+    const first = tasks[0];
+    await runPromptMode(iteration, { ...executeOptions, prompt: true, task: first.id });
+    return;
+  }
 
+  // v8.3.385+: 无 executeOptions 的兑底（所有调用点均会传入；保留旧骨架路径
+  // 仅为兼容任何遗漏的调用方——骨架生成不再标记 completed，避免假执行）
   logger.info('');
   logger.info(`⏳ Executing ${total} task(s) in iteration: ${iteration}`);
   logger.info('');
-
   for (let i = 0; i < total; i++) {
     const task = tasks[i];
-    const progress = Math.round(((i) / total) * 100);
-    const bar = createBar(progress, 20);
-
-    // Report current batch
-    logger.info(`[${String(i + 1).padStart(2, '0')}/${total}] ${bar} ${progress}%`);
     logger.info(`  🔄 ${task.id} ${task.name || ''} (${task.type || 'feature'})`);
-
-    // ── 横向依赖检查（增强策略四）──
-    await checkCrossTaskDependencies(task, iteration, completed.map(c => c.split(' - ')[0]));
-
-    // ── 懒创建分支 + 合并依赖 ──
-    const branchName = await prepareTaskBranch(task, iteration, defaultBase, createdBranches);
-    if (branchName) {
-      logger.info(`  🌿 ${task.id}: ${branchName}`);
-    }
-
     await generateTaskSkeleton(task, iteration);
-
-    // v8.3.337+: 直接执行路径同样跑完成收尾（标记 completed + 骨架体检兑底）
-    try {
-      const tDir = await resolveTaskDir(await getIterationDir(iteration), task.id);
-      await finalizeTaskCompletion(iteration, task.id, tDir);
-    } catch { /* 收尾失败不阻断 */ }
-
-    completed.push(`${task.id} - ${task.name || ''}`);
-    logger.info(`  ✅ ${task.id} completed`);
-    logger.info('');
-
-    // Report pending
-    const pending = tasks.slice(i + 1);
-    if (pending.length > 0) {
-      logger.info(`  Pending: ${pending.map(t => t.id).join(', ')}`);
-    }
-
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    const avgPerTask = elapsed / (i + 1);
-    const remaining = Math.round(avgPerTask * (total - i - 1));
-    logger.info(`  Elapsed: ${elapsed}s | Est. remaining: ${remaining}s`);
+    // 只生成骨架，不标记 completed——真实执行必须走 runPromptMode 接力
+    logger.info(`  ⚠️ ${task.id} 骨架已生成（未标记完成）；真实代码请用 --prompt 接力执行`);
     logger.info('');
   }
-
-  // Update context
-  await updateContext({
-    currentTask: tasks[tasks.length - 1]?.id || '',
-    currentIteration: iteration,
-    lastUpdated: new Date().toISOString()
-  });
-  await recordHistory('execute', iteration, tasks[tasks.length - 1]?.id);
-
-  // Summary
-  const totalElapsed = Math.round((Date.now() - startTime) / 1000);
-  logger.success(`Execution complete! ${total} tasks in ${totalElapsed}s`);
-  // Post-execution question review
-  const postQs = await extractQuestions(await getIterationDir(iteration));
-  if (postQs.length > 0) showQuestionChecklist(postQs, '执行后审查');
-
-  // 自动生成任务回顾报告
-  const iterDirForRetro = await getIterationDir(iteration);
-  for (const task of tasks) {
-    try {
-      await generateRetroReport(task.id, iterDirForRetro);
-      logger.info(`  📝 回顾报告已生成: ${task.id}/RETRO.md`);
-    } catch {}
-  }
-
-  // 质量门禁已移至 executionVerifyLoop（Pipeline 化）
-  
-  // 自动刷新知识图谱（v6.49.10+）
-  try {
-    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
-    await refreshKnowledgeGraph(process.cwd(), iteration);
-    logger.info('🧠 知识图谱已刷新');
-  } catch {}
-
-  // v6.95.0+: 发送成功通知
-  try {
-    await sendNotification(process.cwd(), {
-      type: 'code_executed',
-      title: `Execute 完成: ${total} 个任务`,
-      message: `耗时 ${totalElapsed}s`,
-      iteration,
-      task: tasks.map(t => t.id).join(', '),
-    });
-  } catch { /* 忽略通知失败 */ }
-
-  logOperation('speccore execute done', `completed ${total} tasks in ${totalElapsed}s`);
 }
 
 // ============================================================
 // Resume from interruption
 // ============================================================
-async function executeResume(iteration: string): Promise<void> {
+async function executeResume(iteration: string, options?: ExecuteOptions): Promise<void> {
   if (!canResume()) {
     logger.warn('No interrupted execution found. Use --all to start a new one.');
     return;
@@ -766,206 +683,68 @@ async function executeResume(iteration: string): Promise<void> {
     logger.info(`      ${state.contextSummary}`);
   }
 
-  const currentBatchTasks = getCurrentBatchTasks(state);
-  if (currentBatchTasks.length > 0) {
-    logger.info('');
-    logger.info(`   🔄 当前批次 (${state.currentBatch}/${state.totalBatches}) 待执行任务:`);
-    for (const taskId of currentBatchTasks) {
-      logger.info(`      • ${taskId}`);
-    }
-  }
-
   logger.info('');
 
-  // Continue from current batch
-  while (state.currentBatch <= state.totalBatches) {
-    // Convert string IDs to TaskState objects for processBatch
-    const batchTasks = getCurrentBatchTasks(state);
-    if (batchTasks.length === 0) break;
-    const taskObjs: TaskState[] = batchTasks.map(id => ({
-      id, name: id, 
-      type: 'pending' as any, status: 'pending' as const, 
-      assignee: '', dependencies: [], priority: 'medium' as const, progress: 0 
-    }));
-
-    await processBatch(taskObjs, state, iteration);
-    state = loadExecutionState()!;
+  // v8.3.385+: 真实执行 = AI 接力——原 processBatch「骨架+标记完成」是假执行
+  // （不建分支、不写真实代码却标 completed）。续跑同样对第一个待执行任务走
+  // runPromptMode（prepareTaskBranch 建分支 + prompt/SDK 派单），后续由接力协议接管。
+  const currentBatchTasks = getCurrentBatchTasks(state);
+  if (currentBatchTasks.length === 0) {
+    logger.info('  ✅ 没有待执行任务');
+    clearExecutionState();
+    return;
+  }
+  if (options) {
+    await runPromptMode(iteration, { ...options, prompt: true, task: currentBatchTasks[0] });
+    return;
   }
 
-  logger.success('All batches completed!');
-
-  // 自动生成任务回顾报告
-  const iterDirForRetro = await getIterationDir(iteration);
-  for (const taskId of state.completedTasks) {
-    try {
-      await generateRetroReport(taskId, iterDirForRetro);
-    } catch {}
+  // 无 options 兑底：仅展示待执行任务，不推进（避免假执行）
+  logger.warn('  ⚠️ 续跑需要执行上下文，请由 AI 助手代为执行 speccore execute --resume');
+  for (const taskId of currentBatchTasks) {
+    logger.info(`      • ${taskId}`);
   }
-  if (state.completedTasks.length > 0) {
-    logger.info(`📝 已生成 ${state.completedTasks.length} 份回顾报告`);
-  }
-
-  // 自动刷新知识图谱（v6.49.10+）
-  try {
-    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
-    await refreshKnowledgeGraph(process.cwd(), iteration);
-    logger.info('🧠 知识图谱已刷新');
-  } catch {}
-
-  clearExecutionState();
 }
 
 // ============================================================
 // Batch execution mode
 // ============================================================
 async function executeBatchMode(tasks: TaskState[], iteration: string, batchSize: number, options: ExecuteOptions): Promise<void> {
-  const taskIds = tasks.map((t: TaskState) => t.id);
-  const state = initExecutionState(taskIds, iteration, batchSize);
-
-  logger.info('');
-  logger.info(`📦 Batch mode: ${state.totalBatches} batches of up to ${batchSize} tasks`);
-  logger.info('');
-
-  while (state.currentBatch <= state.totalBatches) {
-    const batchTasks = getCurrentBatchTasks(state);
-    if (batchTasks.length === 0) break;
-
-    // Find actual task objects
-    const taskObjs = batchTasks
-      .map((id: string) => tasks.find(t => t.id === id))
-      .filter((t): t is TaskState => t !== undefined);
-
-    await processBatch(taskObjs, state, iteration);
-
-    // Reload state (completedBatch updated it)
-    const updated = loadExecutionState()!;
-    if (updated.currentBatch > updated.totalBatches) break;
-    if (updated.pendingTasks.length === 0) break;    // 所有任务完成
+  // v8.3.385+: --skip/--only 在批量路径同样生效（此前只在 executeWithProgress 过滤，批量模式假执行时完全忽略）
+  const skipList = options.skip ? options.skip.split(',').map(s => s.trim()).filter(Boolean) : [];
+  let runnable = tasks;
+  if (skipList.length > 0) {
+    const before = runnable.length;
+    runnable = runnable.filter(t => !matchesTaskAlias(t, skipList));
+    logger.info(`  ⏭️  跳过 ${before - runnable.length} 个任务: ${skipList.join(', ')}`);
+  }
+  if (options.only) {
+    const onlyList = options.only.split(',').map(s => s.trim()).filter(Boolean);
+    const before = runnable.length;
+    runnable = runnable.filter(t => matchesTaskAlias(t, onlyList));
+    if (runnable.length < before) {
+      logger.info(`  🎯 仅执行 ${runnable.length}/${before} 个指定任务`);
+    }
   }
 
-  logger.success('All batches completed!');
-  logOperation('speccore execute --batch-size', `${tasks.length} tasks in ${state.totalBatches} batches`);
+  logger.info('');
+  logger.info(`📦 Batch mode: ${runnable.length} tasks（AI 接力执行）`);
+  logger.info('');
 
-  // 自动生成任务回顾报告
-  const iterDirForRetro = await getIterationDir(iteration);
-  for (const task of tasks) {
-    try {
-      await generateRetroReport(task.id, iterDirForRetro);
-    } catch {}
+  if (runnable.length === 0) {
+    logger.info('  ✅ 没有需要执行的任务');
+    return;
   }
-  logger.info(`📝 已生成 ${tasks.length} 份回顾报告`);
 
-  // 自动刷新知识图谱（v6.49.10+）
-  try {
-    const { refreshKnowledgeGraph } = await import('../core/knowledge-graph');
-    await refreshKnowledgeGraph(process.cwd(), iteration);
-    logger.info('🧠 知识图谱已刷新');
-  } catch {}
-
-  clearExecutionState();
+  // v8.3.385+: 真实执行 = AI 接力——原「骨架生成 + 标记完成」是历史 demo 遗留：
+  // 不建分支、不写真实代码，却把任务标 completed（假执行）。改为对第一个任务走
+  // runPromptMode（prepareTaskBranch 建分支 + prompt/SDK 派单），宿主 AI 完成后
+  // 按 [SPECCORE_CONTINUE] 接力下一任务，批次推进由接力协议接管。
+  await runPromptMode(iteration, { ...options, prompt: true, task: runnable[0].id });
 }
 
-// ============================================================
-// Process one batch with context isolation
-// ============================================================
-async function processBatch(tasks: TaskState[], state: ExecutionState, iteration: string): Promise<void> {
-  const batchNum = state.currentBatch;
-  const startTime = Date.now();
-
-  logger.info(``);
-  logger.info(`━━━ Batch ${batchNum}/${state.totalBatches} ━━━`);
-  logger.info(``);
-
-  // Context isolation: load task-specific files
-  logger.info(`📖 加载上下文 (Batch ${batchNum})...`);
-  
-  // 显示项目级文件
-  for (const f of ['CONSTITUTION.md', 'PROJECT_GRAPH.md']) {
-    if (await pathExists(join('.speccore', f))) {
-      logger.info(`   .speccore/${f} → 已加载`);
-    }
-  }
-  
-  // 显示每个任务的 Spec 文件
-  const iterDir = await getIterationDir(iteration);
-  for (const task of tasks) {
-    logger.info(`   ${task.id}:`);
-    const tDir = await resolveTaskDir(iterDir, task.id);
-    for (const specPath of ['00-specs/REQ.md', '00-specs/TECH.md', '00-specs/DEV_GUIDE.md', '00-specs/CONTEXT.md', '_shared/REQ.md', '_shared/TECH.md']) {
-      const p = join(tDir, specPath);
-      if (await pathExists(p)) {
-        const content = await readFile(p, 'utf-8');
-        const summary = content.slice(0, 80).replace(/\n/g, ' ');
-        const fname = specPath.split('/').pop()!;
-        logger.info(`     📄 ${fname} → ${summary}...`);
-      }
-    }
-  }
-  logger.info('');
-
-  // Execute tasks in batch
-  const completed: string[] = [];
-  const total = tasks.length;
-
-  for (let i = 0; i < total; i++) {
-    const task = tasks[i];
-    const progress = Math.round(((i + 1) / total) * 100);
-    const bar = createBar(progress, 20);
-
-    logger.info(``);
-    logger.info(`  ${bar} ${(i + 1)}/${total} — ${task.id}  ${task.name || ''}`);
-    logger.info(`  📊 优先级: ${task.priority}  |  类型: ${task.type || 'feature'}`);
-    if (task.dependencies?.length) {
-      logger.info(`  🔗 依赖: ${task.dependencies.join(', ')}`);
-    }
-    logger.info(`  🔄 执行中...`);
-
-    await generateTaskSkeleton(task, iteration);
-
-    // v8.3.337+: 批次路径同样跑完成收尾（标记 completed + 骨架体检兑底）
-    try {
-      const tDir = await resolveTaskDir(await getIterationDir(iteration), task.id);
-      await finalizeTaskCompletion(iteration, task.id, tDir);
-    } catch { /* 收尾失败不阻断 */ }
-
-    completed.push(task.id);
-
-    // 写入任务摘要到 execution-state（文件即记忆）
-    // v8.3.166+: 包含 agent 角色，供跨 Agent 状态共享
-    const taskSummary: TaskSummary = {
-      taskId: task.id,
-      taskName: task.name || task.id,
-      type: task.type || 'feature',
-      status: 'completed',
-      summary: `${task.name || task.id} 骨架已生成`,
-      outputs: ['00-specs/', '{platform}/(子任务)/'],
-      dependencies: task.dependencies || [],
-      completedAt: new Date().toISOString(),
-      agent: 'code-generator',
-    };
-    addTaskSummary(state, taskSummary);
-
-    logger.info(`  ✅ ${task.id || task} completed`);
-
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    const estRemaining = Math.round((elapsed / (i + 1)) * (total - i - 1));
-    logger.info(`  Elapsed: ${elapsed}s | Est. remaining: ${estRemaining}s`);
-  }
-
-  // Mark batch complete
-  completeBatch(state, batchNum, completed);
-
-  // 写入上下文摘要文件（供新会话快速恢复）
-  const summaryPath = await writeContextSummaryFile(state);
-
-  logger.info(``);
-  logger.info(`✅ Batch ${batchNum} complete (${completed.length} tasks)`);
-  logger.info(`📄 上下文摘要: ${summaryPath}`);
-
-  // Context reset note
-  logger.info(`🔄 Resetting context for next batch...`);
-  logger.info(``);
-}
+// v8.3.385+: processBatch（历史批次状态机 + 骨架标记完成）已退役——
+// 批次推进改由 runPromptMode 接力协议接管，避免假执行（不建分支、无真实代码却标 completed）。
 
 function createBar(pct: number, width: number): string {
   const filled = Math.round(width * (pct / 100));
@@ -1660,6 +1439,14 @@ async function prepareTaskBranch(
     // 推断失败时使用 process.cwd()
   }
 
+  // v8.3.385+: code_path/code_scope 指向不存在的目录时回退 process.cwd()。
+  // 否则 execSync 在不存在 cwd 下报「spawnSync /bin/sh ENOENT」，
+  // 分支创建静默失败且错误信息令人费解。
+  if (gitCwd !== process.cwd() && !(await pathExists(gitCwd))) {
+    logger.warn(`  ⚠️ 工程代码目录不存在 (${gitCwd})，Git 操作回退到项目根目录`);
+    gitCwd = process.cwd();
+  }
+
   // 1. 查找任务目录 + 读取任务类型（base 解析依赖 taskType → branch_types source 映射）
   const iterDir = await getIterationDir(iteration);
   const taskDir = await resolveTaskDir(iterDir, task.id);
@@ -2316,7 +2103,7 @@ async function executeByPlan(planId: string, iteration: string, options: Execute
   if (plan.batchSize > 0 && planTasks.length > plan.batchSize) {
     await executeBatchMode(planTasks, iteration, plan.batchSize, options);
   } else {
-    await executeWithProgress(planTasks, iteration, options.base, [], {});
+    await executeWithProgress(planTasks, iteration, options.base, [], {}, options);
   }
   await markPlanExecuted(plan.id, 'Completed ' + planTasks.length + ' tasks');
 }
@@ -2664,15 +2451,30 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
   }
 
   // v8.3.166+: 推断任务平台（端），输出端级 subagent 标记
+  // v8.3.389+: 类型 × 内容 × 意图综合选角——bugfix/refactor/research 匹配差异化主角色
+  // （bug-analyzer/refactor-architect/research-analyst），内容关键词命中附加辅助角色
+  // （安全/性能/契约/数据/回归），不再一律 code-generator
   let platformSubagent = 'code-generator';
+  let assistantAgents: string[] = [];
   try {
     const entries = await readdir(taskDir, { withFileTypes: true });
     const platformNames = entries
       .filter((e: any) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '00-specs' && e.name !== '_shared')
       .map((e: any) => e.name);
-    if (platformNames.length === 1) {
-      platformSubagent = `code-generator-${platformNames[0]}`;
-    }
+    // v8.3.389+: 读取任务类型（.meta/type，与 prepareTaskBranch 同源口径）
+    let taskType: string | undefined;
+    try {
+      const typePath = join(taskDir, '.meta', 'type');
+      if (await pathExists(typePath)) taskType = (await readFile(typePath, 'utf-8')).trim();
+    } catch { /* ignore */ }
+    const { resolveTaskAgents } = await import('../core/agents');
+    const resolution = resolveTaskAgents({
+      taskType,
+      taskName: task,
+      platform: platformNames.length === 1 ? platformNames[0] : undefined,
+    });
+    platformSubagent = resolution.primary;
+    assistantAgents = resolution.assistants;
   } catch { /* ignore */ }
 
   // v8.3.196+: provider=llm 时用自配 LLM 生成代码，复用 runApplyMode 落盘
@@ -2782,15 +2584,38 @@ async function runPromptMode(iteration: string, options: ExecuteOptions): Promis
     sdkFallbackReason = '终端交互模式（TTY）：SDK 自动派单仅在宿主 AI 子进程调用（非 TTY）时触发，建议由 AI 助手代为执行本命令';
   }
 
+  // v8.3.389+: 辅助角色视角注入（内容关键词命中时）——把辅助角色的 systemPrompt
+  // 作为交叉审查视角并入 prompt，宿主 AI 按主角色产出、按辅助视角自查
+  if (assistantAgents.length > 0) {
+    try {
+      const { loadAllAgents } = await import('../core/agents');
+      const allAgents = await loadAllAgents(process.cwd());
+      const viewpoints: string[] = [];
+      for (const name of assistantAgents) {
+        const def = allAgents.get(name);
+        if (!def || !def.systemPrompt) continue;
+        viewpoints.push(`- **${def.title || name}**：${def.systemPrompt}`);
+      }
+      if (viewpoints.length > 0) {
+        promptText += `\n\n## 🎭 辅助审查视角（按任务内容命中）\n\n${viewpoints.join('\n')}\n`;
+        promptText += `\n> 请按上述辅助视角交叉自查产出：涉及安全/性能/契约/数据/回归的内容须逐项确认。\n`;
+      }
+    } catch { /* ignore */ }
+  }
+  
   // 输出到 stdout（Skill 通过 execute_command 捕获）
   // v8.3.166+: 在 prompt 前输出 subagent 标记
   // v8.3.281+: 降级原因上主通道，外层 AI 必读，防止 prompt 无人消费的 exitCode 10 死锁
   const fallbackHeader = sdkFallbackReason
-    ? `[SPECCORE_SDK_FALLBACK] ${sdkFallbackReason}\n→ 请按下方 prompt 生成代码，完成后用 speccore execute --apply / --response 落盘\n\n`
+    ? `[SPECCORE_SDK_FALLBACK] ${sdkFallbackReason}\n→ 请按下方 prompt 生成代码 ，完成后用 speccore execute --apply / --response 落盘\n\n`
+    : '';
+  const assistantHeader = assistantAgents.length > 0
+    ? `[SPECCORE_ASSISTANT_AGENTS: ${assistantAgents.join(', ')}]\n`
     : '';
   const finalOutput = [
     fallbackHeader,
     `[SPECCORE_SESSION_AGENT: ${platformSubagent}]`,
+    assistantHeader,
     `[SPECCORE_CONTEXT_BUDGET: 12000]`,
     `[SPECCORE_CONTEXT_TYPE: ${options.platform ? 'platform-only' : 'full'}]`,
     ``,
@@ -2895,6 +2720,13 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
         : join(process.cwd(), pc.code_scope[0]);
     }
   } catch {}
+
+  // v8.3.385+: code_path/code_scope 指向不存在的目录时回退 process.cwd()，
+  // 避免 execSync 报「spawnSync /bin/sh ENOENT」这类令人费解的错误。
+  if (gitCwd !== process.cwd() && !(await pathExists(gitCwd))) {
+    logger.warn(`  ⚠️ 工程代码目录不存在 (${gitCwd})，Git 操作回退到项目根目录`);
+    gitCwd = process.cwd();
+  }
 
   // 检查是否有活跃的 Pipeline（在 Pipeline 模式下应用响应）
   if (options.pipeline) {

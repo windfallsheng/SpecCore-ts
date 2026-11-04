@@ -327,11 +327,10 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
             else if (raw.includes('进行中') || raw.includes('in_progress')) subStatus = 'in_progress';
           }
 
-          // 提取子任务 ID：新结构下目录名即 subtaskId（如 Task-001-booking-service）
+          // 提取子任务 ID（v8.3.384+: 目录名事实源优先，见 resolveSubtaskId）
           const dirName = subtaskPath.split('/').pop() || '';
-          let subTaskId = dirName.startsWith('Task-') ? dirName : `${taskId}-${platform}`;
-          const subIdMatch = subTaskMd.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
-          if (subIdMatch) subTaskId = subIdMatch[1];
+          const isSubtaskDir = subtaskPath !== platformDirPath;
+          const subTaskId = resolveSubtaskId(dirName, taskId, platform, subTaskMd, isSubtaskDir);
 
           // 提取子任务名称
           let subName = `${name} — ${platform}`;
@@ -402,6 +401,44 @@ export async function scanTasks(iteration: string): Promise<TaskState[]> {
   }
   
   return tasks;
+}
+
+/**
+ * 解析子任务 ID（v8.3.384+: 目录名事实源优先）
+ * - 新结构（isSubtaskDir=true，端目录下有子任务目录）：目录名即 subtaskId。
+ *   用户手动改名后，TASK.md 内「子任务 ID」字段仍是旧名，不能覆盖实际目录名，
+ *   否则 execute --skip/--task 用新目录名匹配不上，报「还在用旧任务名」。
+ * - 旧结构（端目录直铺 TASK.md，目录名是端名）：回退 TASK.md 字段兜底。
+ */
+export function resolveSubtaskId(
+  dirName: string,
+  taskId: string,
+  platform: string,
+  taskMdContent: string,
+  isSubtaskDir: boolean,
+): string {
+  if (isSubtaskDir && dirName.startsWith('Task-')) {
+    return dirName;
+  }
+  let subTaskId = dirName.startsWith('Task-') ? dirName : `${taskId}-${platform}`;
+  const subIdMatch = taskMdContent.match(/子任务 ID\*\*[:\s]*`(Task-[^`]+)`/);
+  if (subIdMatch) subTaskId = subIdMatch[1];
+  return subTaskId;
+}
+
+/**
+ * 任务别名匹配（v8.3.384+）：--skip/--only 输入与任务比对时，
+ * 除完整 ID（=目录名）外，还接受 path 尾段与去 Task- 前缀的模块名，
+ * 避免用户用「模块名」或「目录名不带 Task- 前缀」时匹配落空。
+ */
+export function matchesTaskAlias(t: TaskState, specs: string[]): boolean {
+  const names = new Set<string>([t.id]);
+  if (t.path) {
+    const tail = t.path.split(/[\\/]/).pop() || '';
+    if (tail) names.add(tail);
+  }
+  if (t.id.startsWith('Task-')) names.add(t.id.slice(5));
+  return specs.some(s => names.has(s));
 }
 
 export function calculateCompletionRate(tasks: TaskState[]): number {

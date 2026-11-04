@@ -79,6 +79,8 @@ export interface AnalyzeOptions {
   revise?: boolean;        // --revise: 读 review.json 做裁决门禁（有 apply findings 则生成修订剧本）
   // v8.3.191+: 反推需求产出目录（--out-dir，默认 .speccore/GLOBAL/requirements ）
   outDir?: string;
+  // v8.3.386+: 跳过 4a 产品层（--no-product，只做技术文档不反推需求）
+  noProduct?: boolean;
 }
 
 /** 解析 [DOC:xxx] 标记，提取文档名 → 内容 Map */

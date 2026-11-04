@@ -3,7 +3,7 @@
  * v8.3.359+: 从 analyze.ts 拆分（渐进重构批次 B，逻辑不搬家、行为不变）
  */
 import { join } from 'path';
-import { pathExists } from 'fs-extra';
+import { pathExists, readdir } from 'fs-extra';
 import { logger } from '../../utils/logger';
 import { emitAiPrompt, type AnalyzeOptions } from './shared';
 
@@ -12,35 +12,65 @@ export async function analyzeFromCode(options: AnalyzeOptions): Promise<void> {
   // --verify 验证环（锚点门禁+完整性基线+code-verifier 剧本）/ --review 语义审查 / --revise 有条件修订
   if (options.verify || options.review || options.revise) {
     const { runReverseVerify, runReverseReview, runReverseRevision } = await import('../../core/reverse-qa');
-    // v8.3.368: 反推域默认 .speccore/GLOBAL/_reverse（与全局分析 requirements/ 域隔离，避免 REQUIREMENT.md 被两条管线抢用）
-    let outDir = options.outDir || join('.speccore', 'GLOBAL', '_reverse');
-    // 旧域兜底：v8.3.368 前的反推产物在 requirements/（REVERSE_PROMPT.md / _ir），未指定 --out-dir 时自动接管并提示
-    if (!options.outDir) {
-      const legacyDir = join('.speccore', 'GLOBAL', 'requirements');
-      const reverseInNew = await pathExists(join(outDir, '_ir'));
-      const reverseInLegacy = await pathExists(join(legacyDir, '_ir')) || await pathExists(join(legacyDir, 'REVERSE_PROMPT.md'));
-      if (!reverseInNew && reverseInLegacy) {
-        outDir = legacyDir;
-        logger.warn(`⚠️  检测到旧域反推产物（v8.3.368 前）位于 GLOBAL/requirements/，本次继续使用旧域；`);
-        logger.warn(`   建议迁移到 GLOBAL/_reverse/（新域）以与全局分析 requirements/ 域隔离。`);
+    // v8.3.379: 按端组织——反推产物落 GLOBAL/requirements/{端}/（REQUIREMENT.md + _ir/ + _qa/），
+    // QA 环逐端执行；显式 --out-dir 视为单端目录直接使用。
+    const baseDir = options.outDir || join('.speccore', 'GLOBAL', 'requirements');
+    const units: string[] = [];
+    if (options.outDir) {
+      units.push(baseDir);
+    } else {
+      // 1) 新域：requirements/ 下自包含的端级单元（REQUIREMENT.md + _ir 或 REVERSE_PROMPT.md）
+      const children = await readdir(baseDir, { withFileTypes: true }).catch(() => [] as never[]);
+      for (const c of children as Array<{ name: string; isDirectory(): boolean }>) {
+        if (!c.isDirectory()) continue;
+        const d = join(baseDir, c.name);
+        const hasReq = await pathExists(join(d, 'REQUIREMENT.md'));
+        const hasIr = await pathExists(join(d, '_ir'));
+        const hasPrompt = await pathExists(join(d, 'REVERSE_PROMPT.md'));
+        if (hasReq && (hasIr || hasPrompt)) units.push(d);
+      }
+      // 2) 旧域兜底（v8.3.368-378）：GLOBAL/_reverse/ 单目录域，存量项目继续可用
+      if (units.length === 0) {
+        const reverseDir = join('.speccore', 'GLOBAL', '_reverse');
+        if (await pathExists(join(reverseDir, '_ir'))) {
+          units.push(reverseDir);
+          logger.warn('⚠️  检测到旧域反推产物（GLOBAL/_reverse/），本次继续使用旧域；');
+          logger.warn('   建议迁移到 GLOBAL/requirements/{端}/（新域，按端组织，语义更清晰）。');
+        }
+      }
+      // 3) 旧域兜底（v8.3.368 前）：requirements/ 根级直铺（_ir + REVERSE_PROMPT.md）
+      if (units.length === 0) {
+        const hasIr = await pathExists(join(baseDir, '_ir'));
+        const hasPrompt = await pathExists(join(baseDir, 'REVERSE_PROMPT.md'));
+        if (hasIr || hasPrompt) {
+          units.push(baseDir);
+          logger.warn('⚠️  检测到 v8.3.368 前旧域反推产物（GLOBAL/requirements/ 根级直铺），本次继续使用旧域。');
+        }
       }
     }
-    try {
-      if (options.verify) {
-        logger.info('');
-        logger.info('🔍 验证环（--verify）：锚点门禁 + 完整性基线 + code-verifier 剧本');
-        await runReverseVerify(outDir);
+    if (units.length === 0) {
+      logger.warn(`未找到反推产物（GLOBAL/requirements/{端}/ 下无 REQUIREMENT.md/_ir），请先运行 speccore global from-source --src <dirs> 完成反推。`);
+      return;
+    }
+    for (const unit of units) {
+      const unitLabel = units.length > 1 ? ` [${unit.split('/').pop()}]` : '';
+      try {
+        if (options.verify) {
+          logger.info('');
+          logger.info(`🔍 验证环（--verify）${unitLabel}：锚点门禁 + 完整性基线 + code-verifier 剧本`);
+          await runReverseVerify(unit);
+        }
+        if (options.review) {
+          logger.info('');
+          logger.info(`📖 语义审查（--review）${unitLabel}：document-reviewer 审查剧本`);
+          await runReverseReview(unit);
+        }
+        if (options.revise) {
+          await runReverseRevision(unit);
+        }
+      } catch (e: any) {
+        logger.error(`QA 环失败${unitLabel}: ${e?.message || e}`);
       }
-      if (options.review) {
-        logger.info('');
-        logger.info('📖 语义审查（--review）：document-reviewer 审查剧本');
-        await runReverseReview(outDir);
-      }
-      if (options.revise) {
-        await runReverseRevision(outDir);
-      }
-    } catch (e: any) {
-      logger.error(`QA 环失败: ${e?.message || e}`);
     }
     return;
   }
@@ -89,11 +119,13 @@ export async function analyzeFromCode(options: AnalyzeOptions): Promise<void> {
     });
     logger.info('');
     logger.info(`🎯 源码反推需求完成（status: candidate，澄清后才成 Spec）`);
-    logger.info(`   📄 UR 骨架: ${join(result.outputDir, 'REQUIREMENT.md')}`);
-    logger.info(`   🧩 IR 目录: ${result.irDir}（${result.irCount} 个模块）`);
-    logger.info(`   📝 两跳指引: ${result.promptPath}`);
+    logger.info(`   🗂️ 按端组织: .speccore/GLOBAL/requirements/{端}/（共 ${result.outputDirs.length} 端）`);
+    for (const d of result.outputDirs) {
+      logger.info(`      - ${d.replace(process.cwd() + '/', '')}/（REQUIREMENT.md + _ir/ + REVERSE_PROMPT.md）`);
+    }
+    logger.info(`   🧩 IR 总数: ${result.irCount} 个模块`);
     logger.info('');
-    logger.info(`   下一步：让宿主 AI 按 REVERSE_PROMPT.md 完成两跳语义抽象，再人工确认功能单元边界。`);
+    logger.info(`   下一步：让宿主 AI 按各端 REVERSE_PROMPT.md 完成两跳语义抽象，再人工确认功能单元边界。`);
 
     // v8.3.356+: 需求↔代码联动（requirement-linker 从零接入变为链上消费）——
     // 反推需求落盘后立即与源码图谱建立关联（REQ_CODE_LINK.json），

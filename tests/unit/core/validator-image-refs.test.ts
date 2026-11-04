@@ -62,3 +62,33 @@ describe('Validator — 图片引用校验（反斜杠归一化）', () => {
     expect(issues[0]).not.toContain('\\');
   });
 });
+
+// ═══════════════════════════════════════════════════════════
+// HTML 注释剥离（v8.3.386，BUG-2 修复）
+// bug：doc2spec 写入的模板注释含 ../assets/extracted/xxx.png 示例路径，
+// 此前被误报为「图片引用可能失效」（每个导入文档 3 个假错误）。
+// ═══════════════════════════════════════════════════════════
+describe('Validator — 图片引用校验（HTML 注释剥离，v8.3.386）', () => {
+  it('模板注释中的示例图片路径不误报', async () => {
+    const content = `# 测试需求
+
+<!--
+  原型图片路径: 010-requirements/assets/extracted/
+  converted/ 引用方式: ![原型](../assets/extracted/xxx.png)
+  Task 引用方式: ![原型](../../../010-requirements/assets/extracted/xxx.png)
+-->
+
+# 正文
+`;
+    const issues = await imageIssues(content);
+    expect(issues).toHaveLength(0);
+  });
+
+  it('注释外真实缺失的图片引用仍报错（不误剥离）', async () => {
+    const content = '<!-- ![x](./commented.png) -->\n\n正文 ![真实](./really-gone.png)';
+    const issues = await imageIssues(content);
+    expect(issues.length).toBe(1);
+    expect(issues[0]).toContain('really-gone.png');
+    expect(issues[0]).not.toContain('commented.png');
+  });
+});

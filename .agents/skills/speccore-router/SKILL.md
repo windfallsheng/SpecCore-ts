@@ -246,11 +246,16 @@ allowed-tools: ["Bash", "Read", "Write", "Edit"]
 | 用户说法 | 提取参数 | AI 上下文（需宿主AI交互） |
 | :--- | :--- | :--- |
 | 执行 {task}/开发 {task} | task | `speccore execute -t {task} --force` |
-| 执行全部/全部开发 | - | `speccore execute --all --force` |
+| 执行全部/全部开发/执行所有开发任务 | - | `speccore execute --all --force` + **AI 接力**：收到 `[SPECCORE_CONTINUE]` 必须继续下一批，直到接力链结束。❌ 禁止单次调用冒充完成；❌ 禁止只改任务状态不生成代码；❌ 禁止以「任务量较大」为由中途停下问用户 |
+| 全自动执行/无人值守执行/全部自动化完成 | - | 同上（「全自动」= 接力到底，不是修饰词） |
 | 继续执行/断点续跑 | - | `speccore execute --resume` |
 | 重试失败的任务 | - | `speccore execute --resume` |
 | 执行 {task} 并自动修复 | task | `speccore execute -t {task} --force --auto-fix` |
 | 批量执行 {iter} | iter | `speccore execute -i {iter} --all --force` |
+
+> **⛔ 执行类意图的歧义必须确认（v8.3.387+）**：范围/迭代/约束任一不清时，先 AskUserQuestion 或意图块确认再执行，禁止猜测。
+> 迭代未指明（context.json 无 currentIteration）→ 列迭代选项；任务范围未指明（全部？部分？排除哪些？）→ 确认范围；约束模糊（分支命名、跳过规则等）→ 追问具体规则或说明采用默认规则。
+> 确认原则：一次问清（合并提问），确认后立即执行到底，不再反复确认。
 
 ### PR / 代码提交
 | 用户说法 | 提取参数 | CLI 命令 |

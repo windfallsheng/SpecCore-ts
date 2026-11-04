@@ -234,13 +234,78 @@ function resolveModuleDirName(sec: any): string {
 }
 
 /**
+ * v8.3.382+: 确定性反查功能单元目录名——AI 拆分路径 functionalUnit 给中文/缺失、
+ * sourceFile 未携带 features/ 路径时，目录名回退到 Task-NNN 链（用户可见的
+ * 「Task-数字」命名）。此处用任务名/中文名到 010-requirements/features/ 枚举匹配：
+ * 1) _matrix.md 的 feature 字段（中文显示名，unitize/doc2spec 写入）
+ * 2) SOURCE.md 一级标题（中文显示名）
+ * 3) 目录名尾段 slug 与任务名拼音比对（最弱，仅作候选）
+ * 精确命中立即返回；子串命中/拼音命中收集为候选，扫描完无精确才采用。
+ * 导出供单测锁定反查行为（与 stripUnitSeqPrefix 同）。
+ */
+export async function resolveFeatureUnitDir(iterationDir: string, featureName: string): Promise<string> {
+  if (!featureName) return '';
+  const featuresDir = join(iterationDir, '010-requirements', 'features');
+  if (!(await pathExists(featuresDir))) return '';
+  const name = featureName.trim();
+  const nameSlug = toSlug(name);
+  let subMatch = '';
+  let slugMatch = '';
+  try {
+    const entries = await readdir(featuresDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || e.name.startsWith('overview-') || isTimestampBackup(e.name)) continue;
+      const dir = join(featuresDir, e.name);
+      // 1) _matrix.md feature 字段
+      const matrixPath = join(dir, '_matrix.md');
+      if (await pathExists(matrixPath)) {
+        const mc = await readFile(matrixPath, 'utf-8');
+        const fm = mc.match(/^feature:\s*(.+)$/m);
+        const mf = fm ? fm[1].trim() : '';
+        if (mf === name) return e.name;
+        if (mf && !subMatch && (mf.includes(name) || name.includes(mf))) subMatch = e.name;
+      }
+      // 2) SOURCE.md 一级标题
+      const srcPath = await resolveUnitSourcePath(dir);
+      if (srcPath && (await pathExists(srcPath))) {
+        const sc = await readFile(srcPath, 'utf-8');
+        const sm = sc.match(/^#\s+(.+)$/m);
+        const title = sm ? sm[1].trim() : '';
+        if (title === name) return e.name;
+        if (title && !subMatch && (title.includes(name) || name.includes(title))) subMatch = e.name;
+      }
+      // 3) 目录名尾段拼音比对（toSlug 分词带连字符，目录名尾段连写，去连字符归一化）
+      const tail = stripUnitSeqPrefix(e.name);
+      const nameSlugCompact = nameSlug.replace(/-/g, '');
+      const tailCompact = tail.replace(/-/g, '');
+      if (nameSlugCompact && tailCompact && tailCompact === nameSlugCompact && !slugMatch) slugMatch = e.name;
+    }
+  } catch { /* 反查失败回退原链 */ }
+  return subMatch || slugMatch;
+}
+
+/**
+ * v8.3.382+: 任务模块目录名统一解析——
+ * AI 直接给合法功能单元目录名 > features/ 确定性反查（中文名/任务名 → 目录名）> 空。
+ * 空时调用方回退 nextTaskId（Task-NNN-slug）链。
+ * 导出供单测锁定解析优先级（与 stripUnitSeqPrefix 同）。
+ */
+export async function resolveTaskModuleDirName(iterationDir: string, sec: any): Promise<string> {
+  const direct = resolveModuleDirName(sec);
+  if (direct) return direct;
+  const byUnit = await resolveFeatureUnitDir(iterationDir, (sec as any)?.functionalUnit || '');
+  if (byUnit) return byUnit;
+  return resolveFeatureUnitDir(iterationDir, (sec as any)?.name || '');
+}
+
+/**
  * 生成子任务目录名（v8.3.337+ 改造）
  * 格式: Task-{模块名}——与模块目录名（功能单元名）一致，不再拼端名。
  * 端名已由目录层级承载（{模块}/{端}/{子任务}），拼入子任务 ID 是冗余；
  * 多端同名子任务分处不同端目录无目录冲突，Git 分支重名由 createTaskBranch hash 兜底。
  * 例: 模块 admin-web-01-yudingguanli → 子任务 Task-admin-web-01-yudingguanli
  */
-function generateSubtaskId(moduleDirName: string): string {
+export function generateSubtaskId(moduleDirName: string): string {
   return `Task-${moduleDirName}`;
 }
 
@@ -588,9 +653,35 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
       }
     } catch { /* 忽略功能模块检测失败 */ }
 
+    // v8.3.389+: 按拆分源类型注入拆分视角——bugs/ → 缺陷分诊、refactors/ → 重构边界、
+    // research/ → 调研主题，让 task-decomposer 拆分时带类型差异化切入点（一个批次只注
+    // 入一个主类型视角，辅助角色注入由任务创建后 execute 阶段按任务名/类型解析）
+    let typeViewHint = '';
+    try {
+      const iterDirForSplit = await getIterationDir(iter);
+      if (iterDirForSplit) {
+        const reqDir = join(iterDirForSplit, '010-requirements');
+        const typeDirs = [
+          { dir: 'bugs', agent: 'bug-analyzer' },
+          { dir: 'refactors', agent: 'refactor-architect' },
+          { dir: 'research', agent: 'research-analyst' },
+        ];
+        for (const td of typeDirs) {
+          if (!(await pathExists(join(reqDir, td.dir)))) continue;
+          const { loadAllAgents } = await import('../../core/agents');
+          const allAgents = await loadAllAgents(process.cwd());
+          const def = allAgents.get(td.agent);
+          if (def && def.systemPrompt) {
+            typeViewHint = `\n\n## 🎭 拆分视角（按任务类型 ${td.dir} 命中）\n\n- **${def.title}**：${def.systemPrompt}\n\n> 拆分任务时请从该视角切入：任务粒度、验收标准与产出物清单须贴合该类型。\n`;
+          }
+          break; // 一个批次只注入一个主类型视角
+        }
+      }
+    } catch { /* 忽略类型视角注入失败 */ }
+
     // v8.3.166+: 输出 subagent 标记（task-decomposer）
     // v8.3.169+: 尝试通过 Qoder SDK 直接调度子 Agent
-    const promptText = formatPrompt(prompt) + featureBatchHint;
+    const promptText = formatPrompt(prompt) + featureBatchHint + typeViewHint;
     let llmHandled = false;
     let aiProvider = 'host';
     try {
@@ -1147,9 +1238,11 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
         for (const sec of sections) {
           // v8.3.294+: bugfix 任务目录名拼「模块英文-内容英文」，其余类型保持原链
           // v8.3.337+: 模块目录名优先对齐功能单元目录名（无计数器），非目录名回退原链
+          // v8.3.382+: 目录名缺失时确定性反查 features/（中文名 → _matrix feature 字段），
+          // 避免 AI 未回填 functionalUnit/sourceFile 时产出 Task-NNN 计数命名
           const taskType = (sec as any)._taskType || 'feature';
           const taskTopic = buildTaskTopic(sec, taskType);
-          const moduleName = resolveModuleDirName(sec);
+          const moduleName = await resolveTaskModuleDirName(iterDirFull, sec);
           let taskId: string;
           if (moduleName) taskId = moduleName;
           else taskId = (await nextTaskId(sec.name, taskTopic)).id;
@@ -1230,7 +1323,7 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
           // 使用保存的 topic slug 生成任务ID
           // v8.3.33: 优先使用 functionalUnit 作为 topic，使目录名更有意义
           // v8.3.291: taskId 已在预分配阶段生成（依赖解析需要），此处直接复用
-          const taskTopic = (sec as any).functionalUnit || (sec as any)._topic || slugify(sec.name);
+          const taskTopic = (sec as any).functionalUnit || (sec as any)._topic || toSlug(sec.name);
           const taskId = (sec as any)._taskId as string;
           void taskTopic;
           await createTaskFromSection(iterDirFull, taskId, sec, allPlatforms, taskType, sections);
@@ -1661,12 +1754,13 @@ export async function iterationTaskifyCommand(options: IterationTaskifyOptions):
     logger.info(`Found ${sections.length} sections to split`);
     logger.info(`Platforms: ${platforms.join(', ')}`);
 
-    // ── 预分配任务 ID（v8.3.337+: 模块目录名优先对齐功能单元目录名）──
+    // ── 预分配任务 ID（v8.3.337+: 模块目录名优先对齐功能单元目录名；
+    // v8.3.382+: 缺失时确定性反查 features/）──
     for (const section of sections) {
       // v8.3.294+: bugfix 任务目录名拼「模块英文-内容英文」，其余类型保持原链
       const taskType = (section as any)._taskType || 'feature';
       const topic = buildTaskTopic(section, taskType);
-      const moduleName = resolveModuleDirName(section);
+      const moduleName = await resolveTaskModuleDirName(iterationDir, section);
       let taskId: string;
       if (moduleName) taskId = moduleName;
       else taskId = (await nextTaskId(section.name, topic)).id;
@@ -2009,7 +2103,7 @@ function buildGitConfigContent(
 # 分支名格式: {类型}/{前缀}{任务名}{后缀}
 #   {类型}/  = 类型自带（如 hotfix/、feature/）
 #   {前缀}   = 任务名前的前缀（可选，包含分隔符），如 api-、backend_、v2.
-#   {任务名} = 子任务全局唯一 ID，如 Task-001-booking-service
+#   {任务名} = 子任务 ID（= 模块目录名，不拼端名；多端同名分处不同端目录无冲突），如 Task-admin-web-01-yudingguanli
 #   {后缀}   = 任务名后的后缀（可选，包含分隔符），如 -urgent、_review、.beta
 #
 # ⚠️ 注意：前缀/后缀的值请包含你想用的分隔符，代码不再自动添加任何符号
@@ -2786,11 +2880,12 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
 
     // ── 所有端平铺：{端名}/{子任务}/ （v6.49.2+ 统一架构）──
     // 不再区分前后端，所有端平铺在任务目录下
-    // 子任务目录名使用 generateSubtaskId 生成的全局唯一 ID：Task-{num}-{platform}
+    // 子任务目录名 = generateSubtaskId 生成的 Task-{模块名}（不拼端名，v8.3.340+），
+    // 端名由目录层级承载（{模块}/{端}/{子任务}）
     for (const platform of taskPlatforms) {
       const platformDir = join(taskDir, platform);
       const subtaskId = subtaskIdMap.get(platform)!;
-      // 子任务目录名 = subtaskId（如 Task-001-booking-service）
+      // 子任务目录名 = subtaskId（如 Task-admin-web-01-yudingguanli，多端同名）
       const subtaskDir = join(platformDir, subtaskId);
       const subtaskHours = complexity.estimatedHours || 8;
       // 判断是否后端（用于生成不同的文档内容）
@@ -2813,30 +2908,33 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
     const allPlatforms = await parsePlatformList();
     const fallbackBackend = allPlatforms.find(p =>
       p === 'backend' || p.startsWith('后台') || /-(service|api|server|backend)$/i.test(p)
-    ) || 'backend';
-    const fallbackSubtaskId = subtaskIdMap.get(fallbackBackend) || generateSubtaskId(taskNum);
-    const autoSubtaskDir = join(taskDir, fallbackBackend, fallbackSubtaskId);
-    await ensureDir(join(autoSubtaskDir, '.meta'));
-    await writeFile(join(autoSubtaskDir, '.meta', 'type'), taskType);
-    await writeFile(join(autoSubtaskDir, '.meta', 'status'), 'todo');
-    await writeFile(join(autoSubtaskDir, '.meta', 'owner'), owner);
-    await writeFile(join(autoSubtaskDir, '.meta', 'created-at'), today);
-    // v8.3.5+: 子任务工时
-    const autoHours = complexity.estimatedHours || 8;
-    await writeFile(join(autoSubtaskDir, '.meta', 'estimated-hours'), String(autoHours));
-    // 功能单元标识（v6.49.2+）
-    const featureName = (section as any).functionalUnit || section.name || '未分类';
-    await writeFile(join(autoSubtaskDir, '.meta', 'feature'), featureName);
-    // v8.3.4+: git-config 自动填充
-    // v8.3.118+: 传入全局 branch_types
-    const gitConfig = loadGitConfig(iterationName);
-    await writeFile(
-      join(autoSubtaskDir, '.meta', 'git-config'),
-      buildGitConfigContent(gitConfig, '后端', (section as any).type, branchTypes, projectConfig.git.default_base)
     );
-    await writeFile(
-      join(autoSubtaskDir, 'TASK.md'),
-      `# ${section.name} — ${fallbackBackend}（自动补充）
+    // v8.3.386: 端列表无后端端名时不再硬编码 'backend' 幽灵端——纯前端项目
+    // 违反「端名必须使用 CONSTITUTION.md 标准端名」契约（BUG-7b）
+    if (fallbackBackend) {
+      const fallbackSubtaskId = subtaskIdMap.get(fallbackBackend) || generateSubtaskId(taskNum);
+      const autoSubtaskDir = join(taskDir, fallbackBackend, fallbackSubtaskId);
+      await ensureDir(join(autoSubtaskDir, '.meta'));
+      await writeFile(join(autoSubtaskDir, '.meta', 'type'), taskType);
+      await writeFile(join(autoSubtaskDir, '.meta', 'status'), 'todo');
+      await writeFile(join(autoSubtaskDir, '.meta', 'owner'), owner);
+      await writeFile(join(autoSubtaskDir, '.meta', 'created-at'), today);
+      // v8.3.5+: 子任务工时
+      const autoHours = complexity.estimatedHours || 8;
+      await writeFile(join(autoSubtaskDir, '.meta', 'estimated-hours'), String(autoHours));
+      // 功能单元标识（v6.49.2+）
+      const featureName = (section as any).functionalUnit || section.name || '未分类';
+      await writeFile(join(autoSubtaskDir, '.meta', 'feature'), featureName);
+      // v8.3.4+: git-config 自动填充
+      // v8.3.118+: 传入全局 branch_types
+      const gitConfig = loadGitConfig(iterationName);
+      await writeFile(
+        join(autoSubtaskDir, '.meta', 'git-config'),
+        buildGitConfigContent(gitConfig, '后端', (section as any).type, branchTypes, projectConfig.git.default_base)
+      );
+      await writeFile(
+        join(autoSubtaskDir, 'TASK.md'),
+        `# ${section.name} — ${fallbackBackend}（自动补充）
 
 ## 子任务信息
 - **子任务 ID**: \`${fallbackSubtaskId}-auto\`
@@ -2850,23 +2948,25 @@ ${!isBk && docSet.hasComponentTree ? '| COMPONENT_TREE.md | ⏳ | ./COMPONENT_TR
 - REQ.md → ../../../00-specs/REQ.md
 - TECH.md → ../../../00-specs/TECH.md
 `
-    );
-    // 自动补充的后端也需要执行产出文档（按任务类型裁剪）
-    await writeFile(join(autoSubtaskDir, 'TEST.md'), generateTestOutline(section, testMaterial));
-    await writeFile(join(autoSubtaskDir, 'REVIEW.md'), generateReviewChecklist(section));
-    if (docSet.hasDeploy) await writeFile(join(autoSubtaskDir, 'DEPLOY.md'), generateDeployChecklist(section));
-    await writeFile(join(autoSubtaskDir, 'ERROR_CODES.md'), generateErrorCodes(section));
-    if (docSet.hasRisk) await writeFile(join(autoSubtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
-    await writeFile(join(autoSubtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
-    if (docSet.hasMonitor) await writeFile(join(autoSubtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
-    taskPlatforms.push(fallbackBackend);
-    // 自动补充的后端子任务名也遵循 Task-{模块名}-auto（后缀区分自动补充来源）
-    subtaskIdMap.set(fallbackBackend, `${fallbackSubtaskId}-auto`);
+      );
+      // 自动补充的后端也需要执行产出文档（按任务类型裁剪）
+      await writeFile(join(autoSubtaskDir, 'TEST.md'), generateTestOutline(section, testMaterial));
+      await writeFile(join(autoSubtaskDir, 'REVIEW.md'), generateReviewChecklist(section));
+      if (docSet.hasDeploy) await writeFile(join(autoSubtaskDir, 'DEPLOY.md'), generateDeployChecklist(section));
+      await writeFile(join(autoSubtaskDir, 'ERROR_CODES.md'), generateErrorCodes(section));
+      if (docSet.hasRisk) await writeFile(join(autoSubtaskDir, 'RISK.md'), generateRiskTemplate(section, riskMaterial));
+      await writeFile(join(autoSubtaskDir, 'DEPS.md'), generateDepsTemplate(section, depsMaterial));
+      if (docSet.hasMonitor) await writeFile(join(autoSubtaskDir, 'MONITOR.md'), generateMonitorTemplate(section, monitorMaterial));
+      taskPlatforms.push(fallbackBackend);
+      // 自动补充的后端子任务名也遵循 Task-{模块名}-auto（后缀区分自动补充来源）
+      subtaskIdMap.set(fallbackBackend, `${fallbackSubtaskId}-auto`);
+    }
   }
 
   // ─ 5. 任务上下文 CONTEXT.md ─
   const sourceFile = (section as any)._sourceFile || '';
-  const topic = (section as any)._topic || slugify(section.name);
+  // v8.3.386: toSlug 拼音兜底（旧 slugify 纯中文名产 hash 乱码，BUG-8）
+  const topic = (section as any)._topic || toSlug(section.name);
   // 推导 010-requirements 源路径
   const reqSourcePath = sourceFile
     ? `010-requirements/${sourceFile}`
@@ -5216,6 +5316,8 @@ async function tryModuleDrivenSplit(
   const modules: {
     name: string; slug: string; type: string; sourceFile: string;
     platforms: string[]; sharedCapability?: string; dependsOn?: string[]; description?: string;
+    // v8.3.386: 端列表是否来自显式声明（_matrix/映射表），显式时不再自动补后端子任务（BUG-7b）
+    explicitPlatforms: boolean;
   }[] = [];
 
   // v6.70.0+: 1. 优先从 overview/FUNCTION_MAP.md 读取跨端功能映射表
@@ -5229,13 +5331,16 @@ async function tryModuleDrivenSplit(
         for (const u of parsed) {
           modules.push({
             name: u.name,
-            slug: slugify(u.name),
+            // v8.3.386: toSlug 拼音兜底替代旧 slugify hash 乱码（BUG-8，
+            // 此前「订单列表查询」→ decadi 式无语义任务名）
+            slug: toSlug(u.name),
             type: 'feature',
             sourceFile: 'overview/FUNCTION_MAP.md',
             platforms: u.platforms,
             sharedCapability: u.sharedCapability,
             dependsOn: u.dependsOn,
             description: u.description,
+            explicitPlatforms: true,
           });
         }
         functionMapParsed = true;
@@ -5258,10 +5363,11 @@ async function tryModuleDrivenSplit(
           for (const m of parsed) {
             modules.push({
               name: m.name,
-              slug: slugify(m.name),
+              slug: toSlug(m.name),
               type: 'feature',
               sourceFile: 'overview/REQUIREMENT.md',
               platforms: m.platforms,
+              explicitPlatforms: true,
             });
           }
           modulePlatformsParsed = true;
@@ -5281,11 +5387,12 @@ async function tryModuleDrivenSplit(
             for (const u of parsed) {
               modules.push({
                 name: u.name,
-                slug: slugify(u.name),
+                slug: toSlug(u.name),
                 type: 'feature',
                 sourceFile: 'ANALYSIS.md',
                 platforms: u.platforms,
                 description: u.description,
+                explicitPlatforms: true,
               });
             }
             modulePlatformsParsed = true;
@@ -5309,6 +5416,7 @@ async function tryModuleDrivenSplit(
               const readmePath = await resolveUnitSourcePath(join(featuresDir, entry.name));
               if (await pathExists(readmePath)) {
                 let unitPlatforms: string[] = [...allPlatforms];
+              let matrixExplicit = false;
                 const matrixPath = join(featuresDir, entry.name, '_matrix.md');
                 if (await pathExists(matrixPath)) {
                   const mc = await readFile(matrixPath, 'utf-8');
@@ -5318,13 +5426,15 @@ async function tryModuleDrivenSplit(
                       .map(l => l.replace(/^\s+-\s+/, '').trim()).filter(Boolean);
                     if (declared.length > 0) {
                       unitPlatforms = declared.filter(p => allPlatforms.includes(p));
+                      matrixExplicit = true;
                     }
                   }
                 }
                 modules.push({
-                  name: entry.name, slug: slugify(entry.name), type: 'feature',
+                  name: entry.name, slug: toSlug(entry.name), type: 'feature',
                   sourceFile: `features/${entry.name}/${basename(readmePath)}`,
                   platforms: unitPlatforms,
+                  explicitPlatforms: matrixExplicit,
                 });
               }
             }
@@ -5342,12 +5452,13 @@ async function tryModuleDrivenSplit(
       const entries = await readdir(typeDirPath, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isFile() && entry.name.endsWith('.md') && !isTimestampBackup(entry.name)) {
-          const slug = slugify(entry.name.replace('.md', ''));
+          const slug = toSlug(entry.name.replace('.md', ''));
           const taskType = typeDir === 'bugs' ? 'bugfix' : typeDir;
           modules.push({
             name: entry.name.replace('.md', ''), slug, type: taskType,
             sourceFile: `${typeDir}/${entry.name}`,
             platforms: [...allPlatforms],
+            explicitPlatforms: false,
           });
         }
       }
@@ -5462,6 +5573,9 @@ async function tryModuleDrivenSplit(
     (section as any)._taskType = mod.type;
     (section as any)._sourceFile = mod.sourceFile;
     (section as any)._scopePlatforms = modPlatforms;
+    // v8.3.386: 端列表来自 _matrix/映射表显式声明时，不再自动补后端子任务——
+    // 纯前端项目（端列表 app/h5/miniapp/admin）此前每个任务被塞 backend 幽灵子任务（BUG-7b）
+    (section as any)._explicitScope = mod.explicitPlatforms;
     (section as any)._complexity = {
       estimatedHours: 8,
       priority: 'medium',

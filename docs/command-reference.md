@@ -317,13 +317,13 @@ speccore spec-from-source --src backend/src                   # 兼容别名（�
 ```
 别名: `reverse`（`spec-from-source` 保留为兼容别名）
 
-> 从**现有代码工程**反推需求文档和技术文档（两跳 IR→UR：逐模块 IR 骨架 → 合成 UR），产出到 `.speccore/GLOBAL/`（需求 + TECH_STACK / CODE_INDEX / ARCHITECTURE / API_INVENTORY / DATA_MODEL / GLOSSARY + 按端 OVERVIEW/TECH）。是「存量项目补 SpecCore 全局层」的入口。
+> 从**现有代码工程**反推需求文档和技术文档（两跳 IR→UR：逐模块 IR 骨架 → 合成 UR），需求按端落盘到 `.speccore/GLOBAL/requirements/{端}/`（REQUIREMENT.md + _ir/ + REVERSE_PROMPT.md），技术文档到 `.speccore/GLOBAL/`（TECH_STACK / CODE_INDEX / ARCHITECTURE / API_INVENTORY / DATA_MODEL / GLOSSARY + 按端 OVERVIEW/TECH）。是「存量项目补 SpecCore 全局层」的入口。
 
 **参数**：
 - `--src, --source <dirs>`：源码目录，多端用逗号分隔（如 `backend/src,admin-web/src`）
 - `--depth <depth>`：分析深度 `quick` / `normal`（默认）/ `deep`
 - `--platform <platform>`：只分析指定端
-- `--out-dir <path>`：产出目录（默认 `.speccore/GLOBAL/_reverse`，与全局分析 requirements/ 域隔离）
+- `--out-dir <path>`：产出目录（默认 `.speccore/GLOBAL/requirements/{端}`，按端组织，与全局分析总纲 REQUIREMENT.md 同域共存）
 
 **等价命令**：`speccore global from-source --src <dirs>`
 

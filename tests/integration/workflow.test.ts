@@ -77,12 +77,13 @@ backend
     expect(out).toContain('模块驱动拆分完成');
   });
 
-  it.skipIf(!existsSync(CLI))('step4: generates task dirs with backend structure', () => {
+  it.skipIf(!existsSync(CLI))('step4: task dirs follow standard platform names (no ghost backend)', () => {
     const taskDir = execSync(`ls -d ${TEST_DIR}/Iteration-*/030-tasks/*/Task-* | head -1`, { encoding: 'utf-8' }).trim();
-    // New structure: backend/ under Task-*
-    expect(existsSync(join(taskDir, 'backend'))).toBe(true);
-    const backendFiles = run(`ls "${taskDir}/backend/" 2>/dev/null`);
-    expect(backendFiles).toBeTruthy();
+    // v8.3.386: 端列表无后端端名时不硬编码 backend 幽灵端（端名契约：
+    // 端名必须使用 CONSTITUTION.md 标准端名，禁止 api/web/backend 等简写）
+    expect(existsSync(join(taskDir, 'backend'))).toBe(false);
+    // 任务骨架正常落盘（.meta 元信息存在）
+    expect(existsSync(join(taskDir, '.meta'))).toBe(true);
   });
 
   it.skipIf(!existsSync(CLI))('step5: constitution has tech stack', () => {

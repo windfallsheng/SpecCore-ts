@@ -44,3 +44,10 @@ export {
   parseAgentResponse,
   mergeAgentResults,
 } from './engine/agent-executor';
+
+// ── v8.3.389+: 任务角色解析器（类型 × 内容 × 意图 → 主角色 + 辅助角色）──
+export {
+  resolveTaskAgents,
+  TaskAgentResolution,
+  ResolveTaskAgentsOptions,
+} from './task-agent-resolver';

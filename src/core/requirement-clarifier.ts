@@ -354,19 +354,28 @@ export function stripLeadingFrontmatter(text: string): string {
  * v8.2.0+: 改为写入 020-specs/requirements/ 作为黄金需求目录
  * 原始需求保留在 010-requirements/ 不变
  * v8.3.35+: 文件名改为 {原需求名}-clarified.md，多次澄清时自动备份
+ * v8.3.386: 通用源文件名（SOURCE.md/README.md 等）在多功能单元场景下互相覆盖——
+ * 每个单元都产出 SOURCE-clarified.md，旧文件仅时间戳备份。携带单元目录名 unitHint
+ * 时以其命名产物（{单元}-clarified.md），保证黄金需求与功能单元一一对应（BUG-6）
  */
 export async function writeClarifiedDoc(
   content: string,
   iterDir: string,
-  sourceName: string
+  sourceName: string,
+  unitHint?: string
 ): Promise<string> {
   // v8.2.0+: 黄金需求目录 — 澄清后的专业需求作为唯一分析依据
   const goldenDir = join(iterDir, '020-specs', 'requirements');
   await ensureDir(goldenDir);
 
   // v8.3.35: 文件名固定为 {原需求名}-clarified.md，便于 parseFeatureList 识别
-  const baseName = basename(sourceName, '.md')
-    .replace(/[^\w\u4e00-\u9fa5-]/g, '-')
+  const rawBase = basename(sourceName, '.md');
+  // v8.3.386: 通用名 + 单元 hint → 用单元目录名命名（防 SOURCE-clarified.md 互覆盖）
+  const isGenericName = /^(source|readme|requirement|index)$/i.test(rawBase);
+  const baseName = (isGenericName && unitHint
+    ? unitHint
+    : rawBase
+  ).replace(/[^\w\u4e00-\u9fa5-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     || 'clarified';

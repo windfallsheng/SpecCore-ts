@@ -9,7 +9,7 @@
  */
 import { logger, Spinner } from '../utils/logger';
 import { execSync } from 'child_process';
-import { pathExists, ensureDir, readdir, stat, writeFile } from 'fs-extra';
+import { pathExists, ensureDir, readdir, stat, writeFile, unlink } from 'fs-extra';
 import { join, basename, extname, dirname, relative } from 'path';
 import { isTimestampBackup } from '../utils/task-utils';
 import { imgTagsToMarkdown } from '../utils/markdown-image';
@@ -239,12 +239,18 @@ export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
       content = imgTagsToMarkdown(rebaseImageRefs(content, dirname(sf.path), process.cwd()));
       merged += `\n\n<!-- === ${sf.label}: ${sf.path} === -->\n\n${content}`;
     }
-    const tmpDir = join(process.cwd(), '.speccore');
+    // v8.3.383+: 临时文件统一归宿 .speccore/cache/tmp/（不散落在 .speccore/ 根或项目根），
+    // 用完即焚（成功/失败路径均 unlink），不再依赖 cleanup 命令兜底
+    const tmpDir = join(process.cwd(), '.speccore', 'cache', 'tmp');
     const tmpPath = join(tmpDir, sourceFiles.length === 1 ? '.tmp_export_single.md' : '.tmp_export.md');
     await ensureDir(tmpDir);
     await writeFile(tmpPath, merged);
-    const cmd = `"${pandocBin}" "${tmpPath}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
-    execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
+    try {
+      const cmd = `"${pandocBin}" "${tmpPath}" -f gfm -t ${WRITER_MAP[format]} --wrap=none -o "${outputPath}"`;
+      execSync(cmd, { stdio: 'pipe', env: { ...process.env, LANG: 'zh_CN.UTF-8' } });
+    } finally {
+      try { await unlink(tmpPath); } catch { /* 清理失败不阻断导出结果 */ }
+    }
 
     spinner.stop('导出完成');
     const fileStat = await stat(outputPath);

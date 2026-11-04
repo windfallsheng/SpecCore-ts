@@ -1,5 +1,92 @@
 # Changelog
 
+## v8.3.388 (2026-11-04) — E2E 全链路深度检查修复：change 链路/图片提取/幽灵后端/命名乱码/闸口模式/澄清产物/短迭代名 11 项
+
+- **change 口语化链路（BUG-3/4/5）**：`change` 命令注册位置参数 `[desc]`（`speccore change "描述"` 与 ask 引擎约定一致）；意图分类正则补「加」前缀（「加一个消息通知功能」识别为新增/feature）；ask 引擎 change 分支用完整输入构造命令，触发词不再被「加(.+)」捕获组剥离。
+- **doc2spec 本地图片提取（BUG-1）**：.md 直接导入新增 `extractLocalImages`——扫描 markdown/HTML 图片引用、同步收集后统一复制到 assets/extracted/、按内容去重、重名加 -2 序号、外链/锚点不处理；引用改写为相对路径。
+- **doc-validator 注释剥离（BUG-2）**：checkImages 校验前剥离 HTML 注释（`<!-- ... -->`），注释中的示例图片引用不再触发「图片引用可能失效」假错误。
+- **taskify 幽灵后端与命名乱码（BUG-7b/8）**：端列表无后端端名时不再硬编码 `backend` 幽灵端子目录（fallbackBackend 匹配失败即跳过）；5 处 `slugify` 替换为 `toSlug` 拼音兜底，Task 目录名从 hash 乱码（decadi 等）恢复为拼音（ding-dan-lie-biao-cha-xu）。
+- **run --auto 全自动闸口（BUG-9）**：`--auto` 显式切换 gateMode='auto'，三闸口（A/B/C）自动跳过，与 `--gate auto` 等价。
+- **澄清产物命名（BUG-6）**：writeClarifiedDoc 新增 unitHint——源文件名是通用名（source/readme/requirement/index）时用功能单元目录名命名澄清产物，多单元澄清不再互相覆盖。
+- **change --dry-run 不落盘（BUG-10）**：变更驱动工作流 dry-run 分支只展示意图与动作预览（新增/变更），不创建任务、不写 Spec、不归档。
+- **run 短迭代名解析（BUG-11）**：run 此前直接拼 `Iteration-${iteration}`，短名（无序号前缀，如 ding-dan-guan-li-xi-tong）拼出不存在目录，基于 iterDir 的前置依赖检查读空路径全部失败误报「阶段前置依赖未满足」，且 remedy 仍让用户用短名重试自相矛盾；现统一走 getIterationDir 模糊解析（精确/后缀匹配，找不到回退拼接），与其它命令口径一致。
+- **测试**：新增 21 用例（change-category-infer 5 / clarified-doc-naming 5 / doc2spec-image-paths 4 / validator-image-refs 2 / iteration-dir-fuzzy 5），workflow 端名契约断言更新为「无幽灵 backend + .meta 存在」，全量 891/891 通过。
+
+## v8.3.387 (2026-11-04) — execute 意图语义硬化：高频表达默认映射 + 歧义必须确认
+
+- **高频表达的默认语义映射（spec-execute SKILL.md）**：「执行所有/全部开发任务」「全自动执行」「无人值守」等表达绑定明确默认语义——以 execute AI 接力流程逐个执行所有 pending 任务直到 `[SPECCORE_CONTINUE]` 链结束；明确禁止三类降格行为：只调用一次 execute 命令就停下、只改任务状态不生成代码、以「任务量较大」为由中途停下来问用户。「全自动」从修饰词升格为行为约束。
+- **歧义必须确认硬约束**：执行范围/迭代/约束任一不清时（迭代未指明且 context.json 无 currentIteration、任务范围未指明、约束表述模糊），先 AskUserQuestion 或意图块确认再执行，禁止猜测；确认原则一次问清，确认后立即执行到底，不再反复确认。
+- **三处同步**：speccore-router SKILL.md「执行开发」映射表增加接力语义与歧义确认段；AGENTS.md 禁令 13 同步语义映射与确认约束；init.ts TOOL_COMMANDS 的 spec-execute 模板同步更新（6 宿主命令副本随之刷新）。
+
+## v8.3.386 (2026-11-04) — 全局分析质量门禁语义化：架构决策/ADR/代码证据/API 列非空 + 4a 产品层可跳过
+
+- **质量门禁从量化升级为语义检查**：此前门禁只查行数/Mermaid 图存在/章节标题，AI 用功能罗列灌水可得 100 分，空壳技术文档畅行无阻。现 `doc-quality-gate` 新增四类语义检查：① ARCHITECTURE.md 必须含 ≥ 3 条架构决策（标题形如「### 决策 N：」），每条附理由（理由/原因/权衡/背景）与代码证据路径，缺一条即拦截；② API_INVENTORY.md 接口表格的鉴权/幂等/版本三列必须存在且每行非空（「无」对鉴权列是合法值，`-`/N/A/待定等视为空）；③ 技术文档（DATA_FLOW/DATA_MODEL/API_CALL_MAP/STATE_MANAGEMENT/DEPLOYMENT/BUSINESS_RULES/PERFORMANCE/SECURITY）关键结论必须标注 ≥ 3 处源码路径；④ ADR 门禁：ARCHITECTURE.md 含决策时 `overview/decisions/` 必须存在且每份 ADR 三段完整。
+- **ADR 子目录引入**：`.speccore/GLOBAL/overview/decisions/` 承接架构级决策的「上下文-决策-后果」三段式记录（ADR-NNN.md），Layer 4b prompt 强制每条架构决策同步生成 ADR；apply 路由天然支持 `overview/decisions/` 前缀落盘，无需额外改动。
+- **Layer 4 prompt 语义标准注入**：ARCHITECTURE.md 决策章节（选择/理由/证据三要素 + ADR 同步模板）、API_INVENTORY 列非空强制、技术文档源码路径标注要求全部写入 Layer 4 生成指令，AI 生成时就按标准写，不靠门禁事后拦截。
+- **4a 产品层可配置化（--no-product）**：`speccore global analyze --no-product` 跳过 4a（不反推 requirements/ 需求文档，只做技术文档）——进度检测直接视为 4a 完成、Layer 4 prompt 不注入产品层任务、LAYER_ROLES 切换为「技术负责人」角色、apply 后自动推进命令保留选项。用户说「只要技术」时不再照单全收产品层。
+- **测试**：新增 doc-quality-gate-semantic.test.ts（24 用例覆盖决策识别/表格解析/证据统计/ADR 门禁全路径），全量 870/870 通过。
+
+---
+
+## v8.3.385 (2026-11-04) — execute 批量/进度/续跑路径假执行根治（只改状态不写代 码退场）
+
+- **假执行根因修复**：`execute --all`（任务数 > batchSize 时）此前走 `executeBatchMode` 的历史 demo 路径——只生成骨架存根并把任务标记 completed，不创建分支、不生成真实代码；`executeWithProgress` 兜底路径同样「骨架 + 标记完成」。现三条路径（批量/进度/续跑）统一改为对第一个任务走 `runPromptMode`：prepareTaskBranch 建 Git 分支 + 子 Agent SDK 派单（失败回退 prompt 输出 + exitCode 10），宿主 AI 完成后按 [SPECCORE_CONTINUE] 接力下一任务，批次推进由接力协议接管。
+- **批量模式 --skip/--only 过滤恢复**：此前 --skip/--only 只在 executeWithProgress 生效，批量模式完全忽略；现 executeBatchMode 同样经 matchesTaskAlias 过滤，与单任务路径口径一致。
+- **executeResume 对齐**：续跑同样走 runPromptMode 接力（原 processBatch「骨架+标记完成」退役，processBatchLegacy 死代码删除）；无执行上下文时仅展示待执行任务清单，不推进、不假标记。
+- **Git 操作 cwd 不存在防护**：PROJECT.yaml 缺失或 code_path/code_scope 指向不存在目录时，prepareTaskBranch/runApplyMode 回退 process.cwd()——此前 execSync 在不存在 cwd 下报「spawnSync /bin/sh ENOENT」，分支创建静默失败且错误信息令人费解。
+
+---
+
+## v8.3.384 (2026-11-04) — 任务目录改名后 execute 不再读旧名（目录名事实源闭环）
+
+- **scanTasks 子任务 ID 目录名事实源优先**：用户手动修改子任务目录名后，此前 TASK.md 内「子任务 ID」字段（旧名）会覆盖实际目录名，导致 `execute --skip/--task` 用新目录名匹配不上、报「还在用旧任务名」。现抽出 `resolveSubtaskId`：新结构（端目录下有子任务目录）目录名即 subtaskId，TASK.md 字段不再覆盖；仅旧结构（端目录直铺 TASK.md）回退字段兜底。
+- **findTaskDir 目录名精确递归兜底**：旧逻辑第 3 步依赖父目录名推断（模块目录名 = 子任务 ID 去前缀），遇「只改子任务目录名 / 只改模块目录名 / 都改」等组合会失败；且旧存量模块目录名 = 子任务 ID（带 Task- 前缀）时，前缀匹配会误命中模块目录而非子任务目录。现改为：子任务查找提前到模块前缀匹配之前、模块候选把 taskId 自身纳入首位，并新增第 4 步按目录名精确匹配递归查找（深度 3：模块/{端}/{子任务}），改名组合均能定位子任务目录。
+- **--skip/--only 别名匹配**：新增 `matchesTaskAlias`——除完整 ID（=目录名）外，还接受 path 尾段与去 `Task-` 前缀的模块名，用户用「模块名」或「不带前缀目录名」skip 不再落空。
+- **知识图谱同步**：标准端平铺结构子任务实体 ID 同步改为目录名事实源（仅存量旧格式目录名非 Task- 开头时才回退 TASK.md 字段），索引不再残留旧名。
+
+---
+
+## v8.3.383 (2026-11-04) — 临时文件统一归宿与即时清理（.temp-iter-req* 不再干扰根目录）
+
+- **识别模式扩展**：cleanup 的临时文件判定（TEMP_FILE_PATTERNS）从仅 `.tmp_.*` 扩为 `.tmp-*` / `.temp_*` / `.temp-*` 全覆盖——宿主 AI 接力时自创的中转文件（`.temp-iter-req-*.md` 等）纳入识别，analyze/execute/taskify 收尾自动清理与 `speccore cleanup` 均可扫除。
+- **spec2doc 临时文件规范化**：导出中转文件 `.tmp_export*.md` 从 `.speccore/` 根下挪进 `.speccore/cache/tmp/`，且成功/失败路径均用 finally 即时 unlink，不再留残骸等 cleanup 兑底。
+- **.gitignore 补文件级通配**：新增 `.temp-*` / `.tmp-*`（此前仅忽略 `.temp/`、`.tmp/` 目录），散落文件不再污染 git status 与正常目录视线。
+- **子任务命名行为锁定（v8.3.340 行为确认）**：`generateSubtaskId` 导出并补回归测试——子任务 ID = `Task-{模块名}`（不拼端名，多端同名分处不同端目录，默认一端一任务）；Git 分支主体 = 子任务 ID（composeBranchName），重名才由 createTaskBranch 拼 -hash4 兜底；同步修正三处「Task-{num}-{platform}」过时注释与示例。
+
+---
+
+## v8.3.382 (2026-11-04) — taskify 任务目录名确定性对齐功能单元名（Task-NNN 计数命名退场）
+
+- **三级确定性反查**：`resolveFeatureUnitDir` 新增——AI 拆分路径 functionalUnit 给中文/缺失、sourceFile 未携带 features/ 路径时，任务名反查 `010-requirements/features/` 枚举匹配：`_matrix.md` feature 字段 → `SOURCE.md` 一级标题 → 目录名尾段 slug 与任务名拼音比对（toSlug 分词连字符与目录连写拼音去连字符归一化）。精确命中立即返回，子串/拼音命中作候选兜底。
+- **根因修复**：此前反查无果时 `resolveModuleDirName` 返回空，预分配走 `nextTaskId` 回退链，产出 `Task-数字-乱码` 计数命名；现在 `resolveTaskModuleDirName`（直接目录名 > functionalUnit 反查 > 任务名反查）接管两处预分配调用点，目录名直接复用功能单元名（如 `admin-web-01-yudingguanli`），与 features/、020-specs/ 三方对齐。
+
+---
+
+## v8.3.381 (2026-11-04) — ask 类型词多端映射修复（「所有前端项目」不再把后端一起反推）
+
+- **类型词多端解析**：`resolvePlatformsFromInput` 新增——用户句中出现「前端/后端/前后端/全栈」类型词时，映射该类型全部端（--platform + --src 多端拼接）；「所有端/所有工程」全量词映射全部端。精确单端命中（端名/描述/工程名）仍优先于类型词，防止「会议预订后端工程」被扩成所有后端。
+- **根因修复**：此前「分析所有前端项目反推需求文档」不命中任何端名 → 不配 --src/--platform → CLI 空 src 走 DEFAULT_SCOPE 全扫 → 后端也被反推；现在类型词命中后只反推 frontend 端。
+
+---
+
+## v8.3.380 (2026-11-04) — 反推需求对齐 recipe PRD 模板（功能罗列 → 业务+交互深度）
+
+- **UR 骨架对齐 PRD 模板**：反推 UR 从「功能单元表 + EARS」四块扩为八节——概述（摘要 + 目标用户画像）、用户故事与场景（作为/想要/以便 + 用例场景 + Mermaid 用户旅程）、功能需求（需求详述 + EARS 验收标准）、交互与场景（前端端）、非功能需求、成功指标、待确认项、模块清单。
+- **前端端交互深度**：前端端 UR 强制「交互与场景」节——页面状态矩阵（加载/空态/异常/无权限/成功）、操作反馈、字段校验、组件联动；非功能节含无障碍；后端端保持业务规则导向（端类型用 resolvePlatformType 判定）。
+- **置信度三级门控**：IR/UR 全部语义条目标注 Verified/Inferred/Unverified，Unverified 只能进「待确认项」禁止写进正文——堵死 AI 编交互的漏洞。
+- **调查边界硬性化**：IR 骨架新增「权限与边界」「数据约束」节；两跳指引强制「业务规则、权限、可观测错误行为、数据约束」必须追踪到代码证据才落笔。
+- **审查维度八维化**：--review 从六维扩八维，新增「交互完整性 interaction」「无障碍 accessibility」——功能罗列型产物过不了审查门。
+
+---
+
+## v8.3.379 (2026-11-04) — 反推需求按端组织（GLOBAL/requirements/{端}/，废弃 _reverse 域）
+
+- **反推产物按端落盘**：源码反推需求（REQUIREMENT.md / REVERSE_PROMPT.md / _ir / _qa）从 GLOBAL/_reverse/ 平铺单域改为 GLOBAL/requirements/{端}/ 按端组织——与全局分析总纲（requirements/REQUIREMENT.md）同域共存，文件层面不冲突（总纲在根级、反推在端级子目录），也与 platforms/{端}/ 技术资产目录对称，语义清晰。
+- **旧域兼容保留**：GLOBAL/_reverse/（v8.3.368-378）与 requirements/ 根级直铺（v8.3.368 前）两类存量产物，QA 环（--verify/--review/--revise）未指定 --out-dir 时自动接管并提示迁移，存量项目不断档。
+- **QA 环逐端执行**：反推多端时 --verify/--review/--revise 自动发现 requirements/ 下所有自包含端级单元（REQUIREMENT.md + _ir），逐端跑验证/审查/修订，单端结果互不干扰。
+
+---
+
 ## v8.3.378 (2026-11-04) — run 流水线 analyze 接力窗口修复（全自动不再死在空模板闸口）
 
 - **接力死锁修复**：`analyze --auto` 以 exit 10 输出分析 Prompt（内容需宿主 AI 接力落盘），run 流水线却在同进程内紧接着跑骨架硬闸口——此时 AI 尚未落盘，空模板必然命中，exit 1 硬停。全自动流程永远死在 analyze 阶段（Prompt 打了没人接）。

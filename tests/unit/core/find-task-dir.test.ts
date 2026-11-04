@@ -57,4 +57,23 @@ describe('findTaskDir', () => {
     expect(found).toBe(join(testRoot, 'feature', 'Task-033-login-flow', 'booking-service',
       'Task-033-login-flow-booking-service'));
   });
+
+  it('v8.3.384+: 用户改子任务目录名后（父目录名未改），按目录名精确定位', async () => {
+    // 目录已改名 Task-admin-web-01-yudingguanli，但父模块目录仍是旧名
+    // Task-033-login-flow，父目录推断必失败——兜底按目录名递归查找
+    mkdirSync(join(testRoot, 'feature', 'Task-033-login-flow', 'booking-service',
+      'Task-admin-web-01-yudingguanli'), { recursive: true });
+    const found = await findTaskDir(testRoot, 'Task-admin-web-01-yudingguanli');
+    expect(found).toBe(join(testRoot, 'feature', 'Task-033-login-flow', 'booking-service',
+      'Task-admin-web-01-yudingguanli'));
+  });
+
+  it('v8.3.384+: 模块目录与子任务目录均改名前，仍按目录名定位', async () => {
+    // 模块目录改为功能单元名（无 Task- 前缀），子任务目录同步改
+    mkdirSync(join(testRoot, 'feature', 'admin-web-01-yudingguanli', 'booking-service',
+      'Task-admin-web-01-yudingguanli'), { recursive: true });
+    const found = await findTaskDir(testRoot, 'Task-admin-web-01-yudingguanli');
+    expect(found).toBe(join(testRoot, 'feature', 'admin-web-01-yudingguanli', 'booking-service',
+      'Task-admin-web-01-yudingguanli'));
+  });
 });

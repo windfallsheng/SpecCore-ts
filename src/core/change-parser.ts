@@ -253,8 +253,9 @@ function normalizePriority(priority: string | undefined): 'low' | 'medium' | 'hi
 export function inferCategoryFromDescription(desc: string): { type: 'change' | 'new' | 'unknown'; category: ChangeCategory } {
   const lower = desc.toLowerCase();
 
-  // 新增类
-  if (/^(新增|增加|添加|创建|实现|做一个|开发)/.test(desc)) {
+  // 新增类（需求文档 6.2 节规定「新增、加、创建、实现」→ new；
+  // v8.3.386 补「加」前缀——此前「加一个消息通知功能」判 unknown 走变更路径）
+  if (/^(新增|增加|添加|创建|实现|做一个|开发|加)/.test(desc)) {
     if (/端|平台|渠道|小程序|app|h5/.test(lower)) return { type: 'new', category: 'endpoint' };
     if (/对接|接入|集成|同步|回调/.test(lower)) return { type: 'new', category: 'integration' };
     return { type: 'new', category: 'feature' };

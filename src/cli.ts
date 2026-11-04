@@ -175,7 +175,7 @@ program
     '  ├─ run <一句话需求> → 从需求出发全流程\n' +
     '  └─ run（无参） → 智能续跑：检测断点从第一个未完成阶段继续（v8.3.290+）')
   .option('-i, --iteration <iteration>', 'Target iteration')
-  .option('--auto', '全自动（run 默认即全自动，此选项为续跑一致性保留）')
+  .option('--auto', '全自动流水线：无人干预级联执行全部阶段（等价 --gate auto，闸口 A/B/C 自动跳过）')
   .option('--auto-steps <steps>', '指定连续步骤自动执行（如 analyze,validate,taskify,execute）')
   .option('--preset <name>', '预设/自定义流水线（full/import/analyze/develop/deliver/deploy/docs，或配置 pipelines.custom 的名称）')
   .option('--from <phase>', '从指定阶段开始（req-doc/doc2spec/split-units/analyze/validate/taskify/plan/execute/verify/pipeline/pr/done/spec2doc）')
@@ -505,6 +505,9 @@ program
   .command('change')
   .alias('ch')
   .description('需求变更：联动更新所有关联 Spec → 支持口语化输入')
+  // v8.3.386: 位置参数描述——ask 引擎与需求文档均约定 `speccore change "描述"` 形式，
+  // 此前 CLI 未注册位置参数导致「加一个消息通知功能」被拒收（BUG-3）
+  .argument('[desc]', '变更描述（口语化，等价于 --desc）')
   .option('-t, --task <task>', 'Target task')
   .option('-r, --req <req>', 'Requirement ID')
   .option('-d, --desc <desc>', 'Change description')
@@ -527,7 +530,10 @@ program
   .option('--keep', '保留原始文件（不移动/不删除）')
   .option('--delete-after-process', '处理后删除原始文件（默认归档）')
   .option('--batch-size <n>', '批量处理数量', '1')
-  .action(changeCommand);
+  .action(async (desc: string | undefined, opts: any) => {
+    // 位置参数优先于 --desc/--input（后者由 changeCommand 内部兜底转 desc）
+    await changeCommand({ ...opts, desc: desc || opts.desc });
+  });
 
 program
   .command('sync')
@@ -895,7 +901,7 @@ program
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
   .option('--with-code', '结合 CONSTITUTION.md 配置的工程源码一起分析')
   .option('--from-code', '从源码反推候选需求（两跳：逐模块 IR → 合成 UR，含 EARS 验收标准）；配合 --prompt/--apply 完成全局技术文档 AI 接力（骨架→语义回填）')
-  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/_reverse）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements/{端}）')
   .option('--no-source', '不读取源码内容（默认会读）')
   .option('--source-scope <dirs>', '指定源码扫描目录（逗号分隔，如 src/commands,src/core）')
   .option('--supplement', '补充模式：追加未覆盖的源码到现有报告（不重新生成）')
@@ -943,7 +949,7 @@ program
   .option('--src, --source <dirs>', '源码目录（逗号分隔，如 --src <端1/src>,<端2/src>）')
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--platform <platform>', '指定端（如 backend）')
-  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/_reverse）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements/{端}）')
   .option('--verify', '验证环：只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推（宿主 AI 填完 UR 后运行）')
   .option('--review', 'QA 环：生成 document-reviewer 语义审查剧本 + review.json 模板（--verify 后运行）')
   .option('--revise', 'QA 环：读 review.json 做裁决门禁（有 apply findings 则生成修订剧本 + 修订轮次记录）')
@@ -969,6 +975,7 @@ globalCmd
   .option('--deep <doc>', 'Layer 4 单文档深度分析')
   .option('--iterative', 'Layer 4 迭代式生成（大纲→逐节填充）')
   .option('--incremental', '增量更新（只刷新变更部分）')
+  .option('--no-product', '跳过 4a 产品层（不反推需求文档，只做技术文档）')
   .action(globalAnalyzeCommand);
 
 globalCmd
@@ -978,7 +985,7 @@ globalCmd
   .option('--src, --source <dirs>', '源码目录（逗号分隔，如 --src <端1/src>,<端2/src>）')
   .option('--depth <depth>', '分析深度: quick | normal(默认) | deep')
   .option('--platform <platform>', '指定端（如 backend）')
-  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/_reverse）')
+  .option('--out-dir <path>', '反推需求产出目录（默认 .speccore/GLOBAL/requirements/{端}）')
   .option('--verify', '验证环：只校验 UR 溯源锚点与 IR 清单一致性，不重跑反推（宿主 AI 填完 UR 后运行）')
   .option('--review', 'QA 环：生成 document-reviewer 语义审查剧本 + review.json 模板（--verify 后运行）')
   .option('--revise', 'QA 环：读 review.json 做裁决门禁（有 apply findings 则生成修订剧本 + 修订轮次记录）')

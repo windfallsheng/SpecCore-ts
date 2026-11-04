@@ -68,6 +68,17 @@ async function resolveUnitClarifyPath(iterDir: string, unitId: string): Promise<
   return null;
 }
 
+/**
+ * v8.3.386: 从来源路径提取功能单元目录名（features/{单元}/SOURCE.md → {单元}）。
+ * 文档级澄清产物命名用——通用源文件名（SOURCE.md）在多单元场景互相覆盖（BUG-6），
+ * 带单元名后产物为 {单元}-clarified.md，黄金需求与功能单元一一对应。
+ */
+function extractUnitHint(fromPath?: string): string | undefined {
+  if (!fromPath) return undefined;
+  const m = String(fromPath).match(/(?:^|\/)features\/([^/]+)\/[^/]+$/);
+  return m ? m[1] : undefined;
+}
+
 // ═══════════════════════════════════════════════════════════
 // 澄清调度循环（v8.3.225+，方式 Y 宿主会话内闭环）
 // ═══════════════════════════════════════════════════════════
@@ -275,7 +286,7 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
       }
       const prd = consolidateClarifiedUnits(clarifiedUnits, sourceName);
       if (options.apply) {
-        const writtenPath = await writeClarifiedDoc(prd, iterDir, sourceName);
+        const writtenPath = await writeClarifiedDoc(prd, iterDir, sourceName, extractUnitHint(options.from));
         logger.success(`✅ 统一 PRD 已写入: ${relative(process.cwd(), writtenPath)}`);
         return;
       }
@@ -566,7 +577,7 @@ export async function reqDocCommand(options: ReqDocOptions): Promise<void> {
         logger.info(`  1. 查看文档内容确认无误`);
         logger.info(`  2. 提升到迭代层: speccore req-doc --promote ${entryId} --to <iteration>`);
       } else {
-        const writtenPath = await writeClarifiedDoc(finalContent, iterDir, sourceName);
+        const writtenPath = await writeClarifiedDoc(finalContent, iterDir, sourceName, extractUnitHint(options.from));
         spinner.stop('✅ 需求文档已整理并写入');
         logger.info('');
         logger.info(`📄 文件: ${relative(process.cwd(), writtenPath)}`);

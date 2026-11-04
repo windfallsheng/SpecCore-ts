@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { join } from 'path';
-import { fixImageRefs } from '../../../src/commands/doc2spec';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { fixImageRefs, extractLocalImages } from '../../../src/commands/doc2spec';
 import { rebaseImageRefs } from '../../../src/commands/spec2doc';
 import { imgTagsToMarkdown } from '../../../src/utils/markdown-image';
 
@@ -97,5 +99,62 @@ describe('imgTagsToMarkdown - HTML img → markdown 语法（v8.3.331）', () =>
   it('行内 img 不破坏周围文本', () => {
     const content = '文字前<img src="x.png" alt="内联" />文字后';
     expect(imgTagsToMarkdown(content)).toBe('文字前![内联](x.png)文字后');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// .md 导入本地图片提取（v8.3.386，BUG-1 修复）
+// bug：.md 直接导入只做 fixImageRefs（仅处理 pandoc media/ 形态），
+// 原始相对路径（./xxx.png）原样保留 → converted 引用断链、图片 0 张。
+// ═══════════════════════════════════════════════════════════
+describe('extractLocalImages - .md 导入本地图片提取（v8.3.386）', () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'spec-extract-img-'));
+  const srcDir = join(tmpRoot, 'prd-src');
+  const imageDir = join(tmpRoot, 'Iteration-001-img', '010-requirements', 'assets', 'extracted');
+  const mdDir = join(tmpRoot, 'Iteration-001-img', '010-requirements', 'converted');
+
+  beforeAll(() => {
+    mkdirSync(srcDir, { recursive: true });
+    mkdirSync(imageDir, { recursive: true });
+    mkdirSync(mdDir, { recursive: true });
+    writeFileSync(join(srcDir, 'order-list.png'), 'fake-png');
+    writeFileSync(join(srcDir, 'logo.png'), 'fake-png');
+    writeFileSync(join(srcDir, 'detail.png'), 'fake-png');
+    writeFileSync(join(imageDir, 'logo.png'), 'existing-png');
+  });
+
+  afterAll(() => {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('本地相对路径图片复制到 extracted 且引用改写为相对 converted/ 路径', async () => {
+    const content = '![订单列表](./order-list.png)\n正文内容';
+    const r = await extractLocalImages(content, srcDir, imageDir, mdDir);
+    expect(r.extracted).toBe(1);
+    expect(r.content).toContain('assets/extracted/order-list.png');
+    expect(existsSync(join(imageDir, 'order-list.png'))).toBe(true);
+  });
+
+  it('HTML <img> 形态同样提取', async () => {
+    const content = '<img src="./detail.png" alt="详情" />';
+    const r = await extractLocalImages(content, srcDir, imageDir, mdDir);
+    expect(r.extracted).toBe(1);
+    expect(r.content).toContain('src="../assets/extracted/detail.png"');
+  });
+
+  it('重名文件加 -2 序号防覆盖', async () => {
+    const r = await extractLocalImages('![logo](./logo.png)', srcDir, imageDir, mdDir);
+    expect(r.extracted).toBe(1);
+    expect(r.content).toContain('logo-2.png');
+    expect(existsSync(join(imageDir, 'logo-2.png'))).toBe(true);
+  });
+
+  it('外链 / 锚点 / 不存在的本地文件不动', async () => {
+    const content = '![a](https://x.com/a.png)\n![b](#anchor)\n![c](./gone.png)';
+    const r = await extractLocalImages(content, srcDir, imageDir, mdDir);
+    expect(r.extracted).toBe(0);
+    expect(r.content).toContain('](https://x.com/a.png)');
+    expect(r.content).toContain('](#anchor)');
+    expect(r.content).toContain('](./gone.png)');
   });
 });

@@ -2372,11 +2372,11 @@ export async function analyzeCommand(options: AnalyzeOptions): Promise<void> {
     // v8.3.61+: 全局分析非 Pipeline 模式下，--apply 完成后自动推进下一层
     // 解决：Layer 1/2/3 完成后 AI 不知道要继续执行 Layer 4 的问题
     if (options.scope === 'global' && !options.pipeline) {
-      const progress = await detectGlobalLayerProgress();
+      const progress = await detectGlobalLayerProgress(options.noProduct);
       if (progress.completedLayer < 4) {
         const nextCmd = progress.nextLayer === 4 && progress.subLayer
-          ? `speccore global analyze --layer 4${options.withCode ? ' --with-code' : ''}`
-          : `speccore global analyze --layer ${progress.nextLayer}${options.withCode ? ' --with-code' : ''}`;
+          ? `speccore global analyze --layer 4${options.withCode ? ' --with-code' : ''}${options.noProduct ? ' --no-product' : ''}`
+          : `speccore global analyze --layer ${progress.nextLayer}${options.withCode ? ' --with-code' : ''}${options.noProduct ? ' --no-product' : ''}`;
         process.stdout.write(`\n[SPECCORE_EXEC: ${nextCmd}]\n`);
         process.stdout.write(`> 全局分析 ${progress.completedLayer}/4 层完成，自动推进到下一层...\n`);
         process.exitCode = 10;
@@ -2851,7 +2851,7 @@ async function injectGraphSummary(prompt: string): Promise<string> {
 
 // ── v7.2.0+: 检测全局分析当前进度 ──
 // Layer 4 拆分为子层: 4a=产品文档, 4b=全局技术核心, 4c=全局技术扩展, 4d=各端技术
-async function detectGlobalLayerProgress(): Promise<{
+async function detectGlobalLayerProgress(noProduct?: boolean): Promise<{
   completedLayer: number;
   nextLayer: number;
   missing: string[];
@@ -2966,6 +2966,10 @@ async function detectGlobalLayerProgress(): Promise<{
     const completedSubLayers: string[] = [];
 
     // 4a: 产品文档（全局 + 各端，v8.3.0+ 修复：检查各端 REQUIREMENT.md）
+    // v8.3.386+: --no-product 跳过产品层，直接视为完成
+    if (noProduct) {
+      completedSubLayers.push('4a');
+    } else {
     const hasReq = await pathExists(join(requirementsDir, 'REQUIREMENT.md'));
     let allPlatformReqsExist = true;
     try {
@@ -2988,6 +2992,7 @@ async function detectGlobalLayerProgress(): Promise<{
     } else if (!hasReq) {
       missing.push('Layer 4a: requirements/REQUIREMENT.md（全局需求总纲）');
     }
+    } // end if (!noProduct)
 
     // 4b: 全局技术核心文档（v8.3.62+ 修复：与 SUB_LAYER_DOCS['4b'] 对齐，检查全部 4 个文档）
     const CORE_TECH_DOCS = ['ARCHITECTURE.md', 'FUNCTION_MAP.md', 'API_CONTRACT.yaml', 'INTERACTION_MAP.md'];
@@ -3079,7 +3084,7 @@ async function detectGlobalLayerProgress(): Promise<{
 
 // ── v7.2.0+: 全局分析下一步引导 ──
 async function buildGlobalAnalysisGuide(options?: AnalyzeOptions): Promise<string | null> {
-  const progress = await detectGlobalLayerProgress();
+  const progress = await detectGlobalLayerProgress(options?.noProduct);
   const { completedLayer, nextLayer, subLayer, pendingModules, pendingPlatforms } = progress;
   const deepDoc = options?.deep;
 
@@ -3350,7 +3355,7 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
     }
 
     // v7.2.0+: 全局分析分层执行 — 检测当前进度，自动分配 layer
-    const progress = await detectGlobalLayerProgress();
+    const progress = await detectGlobalLayerProgress(options?.noProduct);
     const targetLayer = options?.layer || progress.nextLayer;
     const isLayered = !!options?.layer || progress.completedLayer < 4;
 
@@ -3444,7 +3449,10 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       1: { role: '代码索引专家', focus: '全面扫描各端源码结构，提取目录/接口/实体/配置等索引信息', output: 'platforms/{端}/_INDEX.md（每端一个）+ semantic-tags.json' },
       2: { role: '系统架构师', focus: '基于 Layer 1 索引进行跨端关联分析、接口匹配、模块聚类', output: 'platforms/_shared/_ASSOCIATION.md + _MODULES.md' },
       3: { role: '业务分析师', focus: '按功能模块深入分析业务逻辑、数据流、规则、时序', output: '各端功能模块深入文档' },
-      4: { role: '产品总监 + 技术负责人', focus: '全局汇总，分 4 个子层执行（4a产品→4b技术核心→4c技术扩展→4d各端）', output: 'requirements/REQUIREMENT.md（必须）+ requirements/{前端端}/REQUIREMENT.md + overview/* + platforms/{端}/*' },
+      // v8.3.386+: --no-product 跳过 4a 产品层
+      4: options?.noProduct
+        ? { role: '技术负责人', focus: '全局技术汇总，分 3 个子层执行（4b技术核心→4c技术扩展→4d各端，4a产品层已跳过）', output: 'overview/* + platforms/{端}/*（不生成 requirements/ 需求文档）' }
+        : { role: '产品总监 + 技术负责人', focus: '全局汇总，分 4 个子层执行（4a产品→4b技术核心→4c技术扩展→4d各端）', output: 'requirements/REQUIREMENT.md（必须）+ requirements/{前端端}/REQUIREMENT.md + overview/* + platforms/{端}/*' },
     };
     const layerMeta = LAYER_ROLES[targetLayer];
 
@@ -3647,6 +3655,10 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
     // ── Layer 4 指令（仅 targetLayer === 4 时注入）──
     if (targetLayer === 4) {
       prompt += `## 🌍 Layer 4: 全局汇总（所有功能模块分析完成后）\n\n`;
+      // v8.3.386+: --no-product 模式提示
+      if (options?.noProduct) {
+        prompt += `> ⚠️ **--no-product 模式**：本层已跳过 4a 产品层，不生成 requirements/REQUIREMENT.md 与各前端端需求文档，只生成 overview/ 技术文档与 platforms/ 端级技术文档。\n\n`;
+      }
       prompt += `1. **一致性校验**：\n`;
       prompt += `   - 前端字段 vs 后端字段是否一致（名称、类型、必填性、校验规则）\n`;
       prompt += `   - 前端状态 vs 后端状态枚举是否一致\n`;
@@ -3656,6 +3668,8 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `   - 配置不一致清单（超时/重试/限流各端差异）\n`;
       prompt += `   → 输出 \`CONSISTENCY_CHECK.md\`\n\n`;
       prompt += `2. **生成全局文档**（按视角分离存放，v6.98.0+）：\n`;
+      // v8.3.386+: --no-product 跳过产品层任务段，只生成技术文档
+      if (!options?.noProduct) {
       prompt += `   **产品视角 → 存放到 .speccore/GLOBAL/requirements/（以专业产品角色撰写，v6.99.0+）：**\n`;
       prompt += `   - \`requirements/REQUIREMENT.md\`：全局需求总纲（产品总监视角，按业务场景/用户旅程组织）\n`;
       prompt += `     - 必须包含：产品愿景、目标用户画像、核心场景地图、功能全景图\n`;
@@ -3737,6 +3751,7 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `   - 全局 REQUIRMENT.md ≥ 80 行（总纲，只写业务视角，不写技术细节）\n`;
       prompt += `   - 每个前端端 REQUIREMENT.md ≥ 500 行，必须包含 8 个通用章节 + 端类型专项\n`;
       prompt += `   - 严禁生成空壳文档（只有标题和几行描述）\n`;
+      } // end if (!noProduct)
       prompt += `   **技术视角 → 存放到 .speccore/GLOBAL/overview/（不与 platforms/requirements 平级）：**\n`;
       prompt += `   - \`overview/FUNCTION_MAP.md\`：功能单元 × 端映射表\n`;
       prompt += `   - \`overview/INTERACTION_MAP.md\`：跨端交互时序图（含同步 API + 异步消息，从 Layer 3 汇总）\n`;
@@ -3745,6 +3760,17 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `   - \`overview/ARCHITECTURE.md\`：全局架构文档（服务拓扑、数据流、部署关系、容错设计、降级策略、扩容方案）\n`;
       prompt += `     - 必须包含 **Mermaid architecture diagram**（graph TB），展示服务拓扑和部署关系\n`;
       prompt += `     - 必须包含 **Mermaid graph LR**，展示模块间的依赖关系\n`;
+      prompt += `     - **架构决策章节（v8.3.386+ 强制）**：必须包含 ≥ 3 条架构决策，标题形如「### 决策 N：xxx」，每条决策必须说明：\n`;
+      prompt += `       1. 选择了什么（技术选型/架构模式/拆分边界）\n`;
+      prompt += `       2. 为什么（理由/权衡/背景，必须出现「理由/原因/权衡/背景」等依据说明）\n`;
+      prompt += `       3. 代码证据（标注支撑该决策的源码路径，如 \`src/core/gateway.ts\`，禁止泛泛而谈）\n`;
+      prompt += `     - **ADR 同步（v8.3.386+ 强制）**：每条架构决策同步生成 \`overview/decisions/ADR-NNN.md\`（NNN 三位序号），内容为三段式：\n`;
+      prompt += `       \`\`\`markdown\n`;
+      prompt += `       # ADR-NNN: {决策名}\n`;
+      prompt += `       ## 上下文\n       {问题背景、约束条件、涉及模块}\n`;
+      prompt += `       ## 决策\n       {选定方案 + 理由 + 代码证据路径}\n`;
+      prompt += `       ## 后果\n       {正面影响 / 负面影响 / 后续待办}\n`;
+      prompt += `       \`\`\`\n`;
       prompt += `   - \`overview/SECURITY_AUDIT.md\`：全局安全审计（鉴权策略矩阵、敏感数据流、攻击面分析、CVE 清单、合规检查）\n`;
       prompt += `   - \`overview/PERFORMANCE_BASELINE.md\`：性能基线（慢查询清单、缓存策略矩阵、并发承载评估、关键路径耗时）\n`;
       prompt += `   - \`overview/DATA_FLOW.md\`：数据流与隐私分析（PII 识别与追踪、数据生命周期、存储/传输/归档策略、GDPR 合规检查）\n`;
@@ -3758,6 +3784,10 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `   - ARCHITECTURE.md ≥ 200 行，必须包含 2+ 个 Mermaid 图（服务拓扑 + 模块依赖）\n`;
       prompt += `   - DATA_FLOW.md ≥ 150 行，必须包含 1+ 个 Mermaid flowchart（数据生命周期）\n`;
       prompt += `   - DEPLOYMENT.md ≥ 100 行，必须包含 1+ 个 Mermaid flowchart（CI/CD 流水线）\n`;
+      prompt += `   **语义门禁标准（v8.3.386+，不达标会拦截重写）**：\n`;
+      prompt += `   - ARCHITECTURE.md 必须含 ≥ 3 条架构决策（带理由 + 代码证据），并同步 decisions/ADR-NNN.md\n`;
+      prompt += `   - API_INVENTORY.md 表格的鉴权/幂等/版本列必须存在且每行非空\n`;
+      prompt += `   - DATA_FLOW.md / DEPLOYMENT.md 等技术文档关键结论必须标注 ≥ 3 处源码路径（如 \`src/xxx/xxx.ts\`）\n`;
       prompt += `   - SECURITY_AUDIT.md / PERFORMANCE_BASELINE.md / OBSERVABILITY.md 各 ≥ 80 行\n`;
       prompt += `   - FUNCTION_MAP.md / INTERACTION_MAP.md / CONSISTENCY_CHECK.md / EXTERNAL_INTEGRATIONS.md 各 ≥ 50 行\n`;
       prompt += `   - 严禁生成空壳文档（只有标题和几行描述）\n\n`;
@@ -3765,6 +3795,7 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `   > 存放: .speccore/GLOBAL/platforms/{端名}/\n`;
       prompt += `   **后端端（9项）**：\n`;
       prompt += `   - \`API_INVENTORY.md\`：完整接口清单（路径/方法/参数/响应/鉴权/rate limit/幂等性/版本/废弃标记）\n`;
+      prompt += `     - **列非空强制（v8.3.386+）**：表格的鉴权/幂等/版本三列必须存在且每行填写明确值（鉴权: JWT/无；幂等: 是/否；版本: v1/v2），禁止留空或写 N/A/待定\n`;
       prompt += `   - \`DATA_MODEL.md\`：表结构+字段+关系+索引+数据量预估+归档策略+分库分表建议\n`;
       prompt += `   - \`BUSINESS_RULES.md\`：校验规则+业务约束+状态机+规则冲突检测+边界案例\n`;
       prompt += `   - \`SECURITY.md\`：端级安全分析（接口鉴权矩阵、输入校验策略、SQL 注入/XSS/CSRF 防护、敏感数据处理）\n`;
@@ -3902,11 +3933,13 @@ export async function buildMultiDocPrompt(command: string, ctx: { iteration?: st
       prompt += `| _ASSOCIATION.md | Layer 2 | platforms/_shared/ | 前后端关联矩阵 + 接口缺口 + 消息流链路 + 定时任务影响 + 外部集成分布 + 配置一致性风险 |\n`;
       prompt += `| _MODULES.md | Layer 2 | platforms/_shared/ | 功能模块候选清单（含页面/接口/消息三维聚类） |\n`;
       prompt += `\n### 需求文档（产品视角，v6.99.0+）\n`;
+      if (!options?.noProduct) {
       prompt += `> 存放: .speccore/GLOBAL/requirements/（含 images/ prototypes/ 子目录）\n\n`;
       prompt += `| 文档 | 视角 | 内容 |\n`;
       prompt += `| :--- | :--- | :--- |\n`;
       prompt += `| requirements/REQUIREMENT.md | 产品总监视角 | 需求总纲：愿景、用户画像、场景地图、功能全景、优先级矩阵、里程碑、风险预判 |\n`;
       prompt += `| requirements/{前端端}/REQUIREMENT.md | 前端产品经理视角 | 信息架构、用户旅程、页面清单、交互设计、状态反馈、权限角色、响应式策略 |\n`;
+      }
       prompt += `\n### 全局技术性文档（Layer 4 汇总生成，v7.2.0+）\n`;
       prompt += `> 存放: .speccore/GLOBAL/overview/（不与 platforms/requirements 平级）\n\n`;
       prompt += `| 文档 | 视角 | 内容 |\n`;

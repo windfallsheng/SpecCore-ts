@@ -56,6 +56,12 @@ const ARCHIVE_PATTERNS = [
 const TEMP_FILE_PATTERNS = [
   /^\.tmp_export\.md$/,
   /^\.tmp_.*$/,
+  // v8.3.383+: 宿主 AI 接力时自创的中转文件（.temp-iter-req-xxx.md 等）与
+  // 其他 .tmp-/.temp- 前缀散落文件，统一纳入临时文件识别，
+  // analyze/execute/taskify 收尾自动清理与 speccore cleanup 均可扫除
+  /^\.tmp-.*$/,
+  /^\.temp_.*$/,
+  /^\.temp-.*$/,
 ];
 
 const STALE_CACHE_PATTERNS = [
@@ -70,8 +76,8 @@ function isArchiveFile(name: string): boolean {
   return ARCHIVE_PATTERNS.some(p => p.test(name));
 }
 
-/** 判断文件名是否为临时文件 */
-function isTempFile(name: string): boolean {
+/** 判断文件名是否为临时文件（导出供单测锁定模式覆盖，v8.3.383+） */
+export function isTempFile(name: string): boolean {
   return TEMP_FILE_PATTERNS.some(p => p.test(name));
 }
 
