@@ -111,8 +111,20 @@ describe('runReverseVerify 验证环', () => {
 });
 
 describe('runReverseReview 语义审查', () => {
+  async function seedDoneVerify(): Promise<void> {
+    await ensureDir(join(dir, '_qa'));
+    await writeFile(join(dir, '_qa', 'verify.json'), JSON.stringify({
+      status: 'done',
+      items: [
+        { acId: 'AC-01', status: 'verified', evidence: 'core/auth.ts#login' },
+        { acId: 'AC-02', status: 'needs_review', evidence: 'core/order.ts#create' },
+      ],
+    }));
+  }
+
   it('生成 REVIEW_PLAYBOOK.md + review.json，剧本含六维审查与裁决门禁', async () => {
     await seedRequirement(PARTIAL_REQ);
+    await seedDoneVerify();
     await runReverseReview(dir);
     const qa = join(dir, '_qa');
     expect(await pathExists(join(qa, 'REVIEW_PLAYBOOK.md'))).toBe(true);
@@ -129,10 +141,29 @@ describe('runReverseReview 语义审查', () => {
     expect(rj.findings[0].disposition).toBe('pending');
   });
 
-  it('verify.json 缺失时补模板（review 以验证结果为证据）', async () => {
+  it('verify.json 缺失时拒绝推进（review 以验证结果为证据，硬门禁）', async () => {
     await seedRequirement(PARTIAL_REQ);
-    await runReverseReview(dir);
-    expect(await pathExists(join(dir, '_qa', 'verify.json'))).toBe(true);
+    await expect(runReverseReview(dir)).rejects.toThrow(/未找到 .*verify\.json/);
+  });
+
+  it('verify.json 未完成时拒绝推进（status 非 done / 有 unverified 条目 / evidence 缺失）', async () => {
+    await seedRequirement(PARTIAL_REQ);
+    // 场景 1: status 非 done
+    await ensureDir(join(dir, '_qa'));
+    await writeFile(join(dir, '_qa', 'verify.json'), JSON.stringify({ status: 'pending', items: [] }));
+    await expect(runReverseReview(dir)).rejects.toThrow(/status 为 pending/);
+    // 场景 2: 有 unverified 条目
+    await writeFile(join(dir, '_qa', 'verify.json'), JSON.stringify({
+      status: 'done',
+      items: [{ acId: 'AC-01', status: 'unverified', evidence: 'x#y' }],
+    }));
+    await expect(runReverseReview(dir)).rejects.toThrow(/未验证/);
+    // 场景 3: evidence 缺失
+    await writeFile(join(dir, '_qa', 'verify.json'), JSON.stringify({
+      status: 'done',
+      items: [{ acId: 'AC-01', status: 'verified', evidence: '' }],
+    }));
+    await expect(runReverseReview(dir)).rejects.toThrow(/evidence/);
   });
 });
 
@@ -166,6 +197,11 @@ describe('runReverseRevision 裁决门禁', () => {
     expect(r.completed).toBe(true);
     expect(r.apply).toBe(0);
     expect(await pathExists(join(dir, '_qa', 'REVISION_PLAYBOOK.md'))).toBe(false);
+  });
+
+  it('0 findings 空心审查时报错（不可闭环，防假绿）', async () => {
+    await seedReview([]);
+    await expect(runReverseRevision(dir)).rejects.toThrow(/空心审查/);
   });
 
   it('apply>0 时生成修订剧本（含 apply findings 全文）+ 修订轮次记录', async () => {

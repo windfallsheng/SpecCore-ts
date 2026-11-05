@@ -1,5 +1,16 @@
 # Changelog
 
+## v8.3.396 (2026-11-05) — QA 环假绿门禁闭环：空心审查与未验证产物不再蒙混过关
+
+- **verify.json 模板去误导**：模板条目默认值从 `verified` + 示例 evidence 改为 `unverified` + 空 evidence——宿主 AI 不填写时「未验证」与「已验证」从此可区分，不再默认全绿。
+- **--review 硬校验 verify.json 完成度**：新增 checkVerifyJsonCompletion（status=done、items 非空、无 unverified 条目、每条 evidence 非空，缺一即拒绝推进）——此前 verify 未完成只是软警告，review 照常生成剧本，空心证据链可以直通闭环。
+- **--revise 空心审查门禁**：review.json 的 findings 为空（0 findings）+ resolved 不再视为闭环完成——document-reviewer 未产出实质审查时报错拒绝，防「0 findings 假绿」。
+- **--verify 骨架态硬拒绝**：单元仍在骨架态（UR/IR 占位符未填）时直接拒绝（exit 1 + 续跑指引）——此前警告后继续生成空剧本，验证对象不存在。QA 环三层门禁自此闭环：verify 拒骨架、review 拒未验证、revise 拒未裁决与空心。
+- **意图识别 AI 增强转真调用**：intent-ai 的「LLM 兜底」从占位符（直接 throw 降级）改为 providers 池真调用（callLlm），无可用 LLM 时降级规则深度分析；误导性日志「启用 AI 分析」改为如实描述。
+- **分发源双向同步**：init.ts TOOL_COMMANDS 四条补齐（spec-from-source 补 QA 环接力与 relay(10) 语义、spec-unitize/iteration-create/task-create 补英译接力剧本），24 份宿主副本同步（unitize/iteration-create/task-create 补英译段、verify 补 --ai 说明）——此前只更新 SKILL.md 与副本而漏回填模板源，init/update 会用旧模板覆盖新副本。
+- **接力语义修正**：analyze 单元调度 SDK 派单轮次超限退出从 exit 10（接力）改为 exit 0（正常停止）——无 [SPECCORE_PROMPT] 输出的退出不再让宿主 AI 空等接力信号。
+- **测试**：新增 intent-ai 降级路径 5 例（无 LLM 时规则兜底、高置信不启动、低置信采纳）、review 硬门禁 3 场景、空心审查拒绝 1 例，全量 934/934 通过。
+
 ## v8.3.395 (2026-11-04) — 反推链接力协议三处收口：续跑参数全量重建、QA 环组合拦截、宿主通道文档同步
 
 - **续跑命令丢参数修复**：两跳接力 Prompt 的续跑命令此前只带 --src，用户原传的 --depth/--platform/--out-dir 全部丢失，续跑行为漂移；现完整重建全部参数，--verify 续跑同样带全。

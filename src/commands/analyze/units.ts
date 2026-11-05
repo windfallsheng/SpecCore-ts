@@ -834,7 +834,8 @@ export async function analyzeUnitModes(options: AnalyzeOptions, projectRoot: str
       }
       if (++dispatchCount >= maxDispatchRounds) {
         logger.warn(`⚠️ SDK 派单轮次超限（${maxDispatchRounds}），退出调度循环`);
-        process.exitCode = 10;
+        // 正常停止而非接力：此处无 [SPECCORE_PROMPT] 输出，exit 10 会让宿主 AI 空等接力信号
+        process.exitCode = 0;
         return;
       }
     }

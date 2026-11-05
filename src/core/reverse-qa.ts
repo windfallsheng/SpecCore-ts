@@ -152,15 +152,45 @@ function buildVerifyJsonTemplate(cov: InventoryCoverage | null): string {
     items: [
       {
         acId: 'AC-01',
-        status: 'verified',
-        evidence: '文件路径#符号（如 core/auth-service.ts#login）',
-        note: '代码证据如何支持该验收标准（或矛盾/缺失说明）',
+        status: 'unverified',
+        evidence: '',
+        note: '代码证据如何支持该验收标准（或矛盾/缺失说明）；evidence 非空 + status 非 unverified 才算验证完成',
       },
     ],
   }, null, 2) + '\n';
 }
 
 /** 验证剧本（code-verifier 角色） */
+
+/**
+ * verify.json 完成度检查（硬门禁证据）
+ * - 完成标准：status=done、items 非空、每条 item 有非空 evidence 且 status 非 unverified
+ * - 防假绿：模板默认 evidence 为空、status=unverified，宿主 AI 不填即被拦截
+ */
+export async function checkVerifyJsonCompletion(verifyJsonPath: string): Promise<{ complete: boolean; reason: string }> {
+  let v: any;
+  try {
+    v = JSON.parse(await readFile(verifyJsonPath, 'utf-8'));
+  } catch {
+    return { complete: false, reason: 'JSON 解析失败（宿主 AI 填写损坏）' };
+  }
+  if (v.status !== 'done') {
+    return { complete: false, reason: `status 为 ${v.status || '未知'}（须 done）` };
+  }
+  const items: any[] = Array.isArray(v.items) ? v.items : [];
+  if (items.length === 0) {
+    return { complete: false, reason: 'items 为空（0 条验收标准）' };
+  }
+  const unverified = items.filter(it => it.status === 'unverified' || !it.status).length;
+  if (unverified > 0) {
+    return { complete: false, reason: `${unverified} 条 item 未验证（status 须为 verified/needs_review/inconsistent）` };
+  }
+  const noEvidence = items.filter(it => !it.evidence || !String(it.evidence).trim()).length;
+  if (noEvidence > 0) {
+    return { complete: false, reason: `${noEvidence} 条 item 缺 evidence（须写 文件路径#符号）` };
+  }
+  return { complete: true, reason: '' };
+}
 function buildVerifyPlaybook(outputDir: string, cov: InventoryCoverage | null): string {
   const lines: string[] = [];
   lines.push('# 验证剧本（VERIFY）—— code-verifier 角色');
@@ -323,20 +353,16 @@ export async function runReverseReview(outputDir: string): Promise<void> {
   const qaDir = join(outputDir, '_qa');
   await ensureDir(qaDir);
 
-  // 前置检查：verify.json 是否已完成（recipe: review 的输入是 Step 3 输出）
+  // 前置检查：verify.json 是否已完成（recipe: review 的输入是 Step 3 输出）——硬门禁，未完成拒绝推进
   const verifyJsonPath = join(qaDir, 'verify.json');
   if (!(await pathExists(verifyJsonPath))) {
-    logger.warn('   ⚠️ 未找到 _qa/verify.json，请先运行 --verify 完成验证环（review 须以验证结果为证据）。');
-    await writeFile(verifyJsonPath, buildVerifyJsonTemplate(await checkInventoryCoverage(outputDir)));
-  } else {
-    try {
-      const v = JSON.parse(await readFile(verifyJsonPath, 'utf-8'));
-      if (v.status !== 'done') {
-        logger.warn('   ⚠️ verify.json 状态为 ' + (v.status || '未知') + '，审查应以完成状态的验证结果为证据（recipe: review 输入 = Step 3 输出）。');
-      }
-    } catch {
-      logger.warn('   ⚠️ verify.json 解析失败，可能是宿主 AI 尚未填写或格式损坏，审查证据可能缺失。');
-    }
+    throw new Error('未找到 _qa/verify.json，请先运行 --verify 完成验证环（review 须以验证结果为证据）。');
+  }
+  const verifyCheck = await checkVerifyJsonCompletion(verifyJsonPath);
+  if (!verifyCheck.complete) {
+    throw new Error(
+      `verify.json 验证环未完成：${verifyCheck.reason}。请宿主 AI 完成 code-verifier 填写（status: done、每条 AC 有非空 evidence）后重跑 --verify。`,
+    );
   }
 
   await writeFile(join(qaDir, 'REVIEW_PLAYBOOK.md'), buildReviewPlaybook(outputDir));
@@ -428,6 +454,13 @@ export async function runReverseRevision(outputDir: string): Promise<RevisionRes
   if (review.status !== 'resolved' || pendingFindings.length > 0) {
     throw new Error(
       `Review Resolution Gate 未通过：review.json 有 ${pendingFindings.length} 条 finding 未裁决（disposition 须为 apply/decline，status 须为 resolved）。请宿主 AI 完成裁决后重试。`,
+    );
+  }
+
+  // 空心审查门禁：0 findings 不可闭环（document-reviewer 未产出实质审查，防“0 findings”假绿）
+  if (findings.length === 0) {
+    throw new Error(
+      '空心审查不可闭环：review.json 的 findings 为空（0 findings）。请 document-reviewer 对照 verify.json 逐条产出 finding（id/severity/category/finding/evidence/suggestion）后重跑 --review。',
     );
   }
 

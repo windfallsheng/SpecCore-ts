@@ -2,6 +2,17 @@
 
 ---
 
+## v8.3.396 (2026-11-05) — QA ring fake-green gate closure: hollow reviews and unverified artifacts can no longer slip through
+
+- **verify.json template de-misleading**: template item defaults changed from `verified` + sample evidence to `unverified` + empty evidence — an untouched file is now distinguishable from a truly verified one, no more default all-green.
+- **--review hard-checks verify.json completion**: new checkVerifyJsonCompletion (status=done, items non-empty, no unverified items, every evidence non-empty — any failure rejects progression); previously an incomplete verify only warned while review still generated its playbook, letting hollow evidence chains reach closure.
+- **--revise hollow-review gate**: review.json with empty findings (0 findings) + resolved no longer counts as closure — a document-reviewer that produced no substantive findings is rejected, preventing the "0 findings fake green".
+- **--verify skeleton-state hard rejection**: units still in skeleton state (UR/IR placeholders unfilled) are rejected outright (exit 1 + resume guidance) — previously a warning followed by generating an empty playbook with no verification subject. The QA ring's three gates are now closed: verify rejects skeletons, review rejects unverified, revise rejects undecided and hollow.
+- **Intent recognition AI enhancement now a real call**: intent-ai's "LLM fallback" upgraded from a placeholder (throw → degrade) to a real providers-pool call (callLlm), degrading to rule-based deep analysis when no LLM is available; the misleading "AI analysis enabled" log now states the truth.
+- **Distribution source two-way sync**: four init.ts TOOL_COMMANDS entries completed (spec-from-source gains QA-ring relay & relay(10) semantics; spec-unitize/iteration-create/task-create gain translation-relay scripts), 24 host copies synced (unitize/iteration-create/task-create gain translation sections, verify gains --ai notes) — previously only SKILL.md and copies were updated while the template source was missed, so init/update would overwrite new copies with old templates.
+- **Relay semantics fix**: analyze unit-dispatch SDK round-limit exit changed from exit 10 (relay) to exit 0 (normal stop) — an exit with no [SPECCORE_PROMPT] output no longer leaves the host AI waiting for a relay signal.
+- **Tests**: 5 new intent-ai degradation-path cases (rule fallback without LLM, no AI on high confidence, adoption on low confidence), review hard-gate 3 scenarios, hollow-review rejection 1 case; full suite 934/934 green.
+
 ## v8.3.395 (2026-11-04) — reverse-engineering relay protocol: three cleanups (full resume args, QA flag combos rejected, host channel docs synced)
 
 - **Resume command arg loss fixed**: the two-hop relay prompt previously rebuilt the resume command with only --src, dropping the user's --depth/--platform/--out-dir and drifting resume behavior; all original args are now rebuilt, including for the --verify resume command.

@@ -3,11 +3,13 @@
  *
  * 策略: cascade（级联）
  *   1. 关键词匹配（零延迟）
- *   2. 置信度 < 50% 或第一名与第二名差距 < 20% → 调用 AI
+ *   2. 置信度 < 50% 或第一名与第二名差距 < 20% → 调用 AI（providers 池真调用）
  *   3. AI 结果置信度 > 关键词结果 → 采纳 AI
+ *
+ * 无可用 LLM 时降级规则深度分析（fallbackAnalysis），不阻断识别流程。
  */
-import { execSync } from 'child_process';
 import { logger } from '../utils/logger';
+import { callLlm, resolveAiProviders } from './ask-llm';
 
 export interface AiIntentResult {
   intent: string;
@@ -24,7 +26,7 @@ export async function aiEnhance(input: string, keywordConfidence: number): Promi
   // 只有低置信度时才启动 AI
   if (keywordConfidence >= 50) return null;
 
-  logger.info('  🤖 关键词置信度偏低，启用 AI 分析...');
+  logger.info('  🧭 关键词置信度偏低，尝试 AI 增强分析（无可用 LLM 时降级规则深度分析）...');
   
   try {
     const prompt = buildAiPrompt(input);
@@ -61,11 +63,13 @@ function buildAiPrompt(input: string): string {
 }`;
 }
 
-function callLocalAi(prompt: string): string {
+async function callLocalAi(prompt: string): Promise<string> {
   try {
-    // 尝试通过 WorkBuddy 的 AI 能力（进程内调用）
-    // fallback: 基于规则给出合理建议
-    throw new Error('use fallback');
+    // providers 池真调用（无 provider / 调用失败时降级规则分析）
+    const providers = await resolveAiProviders('intent-ai');
+    const response = await callLlm('你是 SpecCore 意图识别助手，严格按用户要求只输出 JSON。', prompt, providers);
+    if (response) return response;
+    throw new Error('no llm response');
   } catch {
     // 无 AI 可用时，基于关键词深度分析
     return fallbackAnalysis(prompt);

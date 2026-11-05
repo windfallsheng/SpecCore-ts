@@ -214,14 +214,18 @@ export async function analyzeFromCode(options: AnalyzeOptions): Promise<void> {
 
     // v8.3.394+: --verify 前置填充检查（缺口 4）——骨架态跑 verify 只会得到空剧本
     if (options.verify) {
+      const skeletonUnits: string[] = [];
       for (const unit of units) {
         const st = await countSkeletonPlaceholders(unit);
         if (st.requirement > 0 || st.irPlaceholders > 0) {
-          logger.warn('');
-          logger.warn(`⚠️ ${unit.split('/').pop()} 仍在骨架态（UR ${st.requirement} + IR ${st.irPlaceholders} 个未填占位符）——`);
-          logger.warn('   验证环以已填写的验收标准为对象，骨架态跑 verify 只会得到空剧本；');
-          logger.warn('   请先完成两跳填充（重跑 speccore global from-source --src <dirs> 触发接力）。');
+          skeletonUnits.push(unit.split('/').pop()!);
         }
+      }
+      if (skeletonUnits.length > 0) {
+        logger.error(`❌ 验证环拒绝：${skeletonUnits.join('、')} 仍在骨架态（UR/IR 未填占位符）——verify 只会得到空剧本，无法产出有效验证。`);
+        logger.error('   请先完成两跳填充（重跑 speccore global from-source --src <dirs> 触发接力），再运行 --verify。');
+        process.exitCode = 1;
+        return;
       }
     }
 
