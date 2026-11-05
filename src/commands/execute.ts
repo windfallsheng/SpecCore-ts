@@ -19,7 +19,7 @@ import { extractQuestions, showQuestionChecklist } from '../core/question-checkl
 import { resolvePlatform } from '../core/platform-registry';
 import { findTaskDir, isTaskModuleDirName } from '../core/task-paths';
 import { collectSkeletonResidues, appendSkeletonTodos, autoFillSkeletonFallback } from '../core/skeleton-residue';
-import { savePlan, markPlanExecuted, getPlan } from '../core/plan-store';
+import { savePlan, markPlanExecuted, getPlan, ExecutionPlan } from '../core/plan-store';
 import { generatePlan, formatPlanMarkdown } from './plan';
 import { generatePlanHtml } from '../core/plan-html';
 import { nextPlanId } from '../core/global-counters';
@@ -36,6 +36,11 @@ import {
 import { createTaskBranch, resolveTaskBaseBranch, findBranchByTaskId, findBranchByFeature, isProtectedBranchAsync, loadGitConfig, snapshotUncommittedChanges } from '../core/git-integration';
 import { buildPrompt, formatPrompt, parseAiResponse, outputNeedsInfo } from '../core/prompt-builder';
 import { writeVerifyReport, outputFixTag, runQualityGate, syncTestDocFromResults } from '../core/verify-engine';
+import {
+  extractTestCaseIds, buildCaseReviewSheet, parseCaseReview, formatCaseMatrix,
+  writeCaseReviewReport, readVerdictsFromReport, registerCaseIssues,
+  type CaseVerdict,
+} from '../core/case-gate';
 import { runArbitration, getArbitrationConfig } from '../core/arbitration/arbitration-engine';
 import { writeArbitrationReport } from '../core/arbitration/verdict-generator';
 import { loadConfig, loadProjectConfig } from '../core/unified-config';
@@ -79,6 +84,8 @@ export interface ExecuteOptions {
   plan?: string;
   prompt?: boolean;     // --prompt: 输出结构化 Prompt 到 stdout（等待 AI）
   response?: string;    // --response: AI 返回的代码内容（配合 --prompt 使用）
+  caseReview?: string;  // v8.3.399+: --case-review 回传用例核对答卷（配合 --task，CLI 判卷后落盘 TEST_REVIEW.md）
+  skipCaseGate?: boolean; // v8.3.399+: --skip-case-gate 跳过用例核对闸
   verify?: boolean;     // --verify: 执行后自动运行代码验证
   auto?: boolean;       // --auto: 跳过确认，自动选任务，直接执行
   listPending?: boolean; // --list-pending: 列出待执行任务清单（配合 --prompt 使用）
@@ -171,6 +178,22 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
         }
       }
     } catch { /* 图谱保鲜失败不阻断执行 */ }
+
+    // ── --case-review: 回传用例核对答卷（配合 --task）──
+    // v8.3.399+: 用例核对闸的入站通道——答卷写入 .case-review 后直入验证环判卷，
+    // 跳过代码生成（任务应已执行，此处只做判卷 + 门禁裁决）
+    if (options.caseReview) {
+      if (!options.task) { logger.error('--case-review 需要 --task=<TaskID>'); return; }
+      const caseIterDir = await getIterationDir(iteration);
+      const caseTaskDir = await resolveTaskDir(caseIterDir, options.task);
+      await writeFile(join(caseTaskDir, '.case-review'), options.caseReview);
+      logger.info(`📝 用例核对答卷已接收（${options.task}），进入验证环判卷...`);
+      const allTasks = await scanTasks(iteration);
+      const target = allTasks.find(t => t.id === options.task);
+      if (!target) { logger.error(`任务 ${options.task} 不存在`); return; }
+      await executionVerifyLoop([target], iteration, options);
+      return;
+    }
 
     // ── --list-pending: 列出待执行任务清单（拓扑排序）──
     if (options.listPending) {
@@ -275,9 +298,10 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       return;
     }
 
-    // ── 按计划执行 ──
+    // ── 按计划执行（v8.3.397+: 支持逗号分隔多计划，合并任务后拓扑排序执行） ──
     if (options.plan) {
-      await executeByPlan(options.plan as string, iteration, options);
+      const planIds = String(options.plan).split(',').map(s => s.trim()).filter(Boolean);
+      await executeByPlans(planIds, iteration, options);
       return;
     }
 
@@ -372,59 +396,6 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       logger.warn('   循环中的任务将按任意顺序执行，请手动检查依赖关系。');
     }
 
-    // 生成并保存执行计划
-    const planName = options.task 
-      ? `Execute-${options.task}`
-      : `Execute-${iteration}-${new Date().toISOString().slice(0, 16).replace('T', ' ')}`;
-    const planTasks = sortedTasks.map(t => t.id);
-    if (planTasks.length > 0) {
-      const saved = await savePlan({
-        name: planName,
-        iteration,
-        tasks: planTasks,
-        batchSize: parseInt(options.batchSize || '3', 10),
-        source: 'auto',
-        filters: {
-          assignee: options.assignee,
-          type: options.type,
-          priority: options.priority,
-          platform: options.platform,
-          backend: options.backend,
-          frontend: options.frontend,
-          module: options.module,
-        },
-      });
-
-      // ── 多任务时自动生成计划子目录（PLAN.md + HTML 可视化） ──
-      if (sortedTasks.length > 1) {
-        const iterDir = await getIterationDir(iteration);
-        const plansRoot = join(iterDir, '000-overview', 'plans');
-        await ensureDir(plansRoot);
-
-        const planEntries = generatePlan(sortedTasks, parseInt(options.batchSize || '3', 10), 'auto');
-        const planMd = formatPlanMarkdown(planEntries, iteration, sortedTasks);
-
-        // 创建计划子目录
-        const slug = sortedTasks.map(t => t.name).join('-').slice(0, 30);
-        const { id: planId } = await nextPlanId(slug);
-        const planDir = join(plansRoot, planId);
-        await ensureDir(planDir);
-        await writeFile(join(planDir, 'PLAN.md'), planMd, 'utf-8');
-
-        // 生成 HTML 可视化（放入同一子目录）
-        const htmlData = sortedTasks.map(t => ({
-          id: t.id, name: t.name, priority: t.priority, status: t.status,
-          owner: t.assignee || undefined, dependsOn: t.dependencies || [],
-        }));
-        const html = generatePlanHtml(htmlData, { version, iteration, planName });
-        await writeFile(join(planDir, 'speccore-plan.html'), html, 'utf-8');
-        const { ensureHtmlAssets } = await import('../core/page-bundle');
-        await ensureHtmlAssets(planDir);
-
-        logger.info(`📝 计划已生成: 000-overview/plans/${planId}/`);
-      }
-    }
-
     // === Interactive mode ===
     if (options.interactive) {
       await interactiveSelect(sortedTasks, iteration, options);
@@ -462,6 +433,69 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
       return;
     }
 
+    // v8.3.397+: 多任务执行前先列计划（计划库 + PLAN.md + HTML 可视化）——
+    // 仅在真正开始执行时落盘（已过 preview/strict/resume 拦截，preview 不再污染计划库）；
+    // 单任务执行无需计划；文档/库生成失败仅警告降级，不阻塞主流程。
+    let savedPlan: ExecutionPlan | null = null;
+    if (sortedTasks.length > 1) {
+      const planName = `Execute-${iteration}-${new Date().toISOString().slice(0, 16).replace('T', ' ')}`;
+      const planTasks = sortedTasks.map(t => t.id);
+      try {
+        savedPlan = await savePlan({
+          name: planName,
+          iteration,
+          tasks: planTasks,
+          batchSize: parseInt(options.batchSize || '3', 10),
+          source: 'auto',
+          filters: {
+            assignee: options.assignee,
+            type: options.type,
+            priority: options.priority,
+            platform: options.platform,
+            backend: options.backend,
+            frontend: options.frontend,
+            module: options.module,
+          },
+        });
+
+        // ── 自动生成计划子目录（PLAN.md + HTML 可视化） ──
+        try {
+          const iterDir = await getIterationDir(iteration);
+          const plansRoot = join(iterDir, '000-overview', 'plans');
+          await ensureDir(plansRoot);
+
+          const planEntries = generatePlan(sortedTasks, parseInt(options.batchSize || '3', 10), 'auto');
+          const planMd = formatPlanMarkdown(planEntries, iteration, sortedTasks);
+
+          // 创建计划子目录
+          const slug = sortedTasks.map(t => t.name).join('-').slice(0, 30);
+          const { id: planId } = await nextPlanId(slug);
+          const planDir = join(plansRoot, planId);
+          await ensureDir(planDir);
+          await writeFile(join(planDir, 'PLAN.md'), planMd, 'utf-8');
+
+          // 生成 HTML 可视化（放入同一子目录）
+          const htmlData = sortedTasks.map(t => ({
+            id: t.id, name: t.name, priority: t.priority, status: t.status,
+            owner: t.assignee || undefined, dependsOn: t.dependencies || [],
+            feature: t.feature,
+          }));
+          const html = generatePlanHtml(htmlData, { version, iteration, planName });
+          await writeFile(join(planDir, 'speccore-plan.html'), html, 'utf-8');
+          const { ensureHtmlAssets } = await import('../core/page-bundle');
+          await ensureHtmlAssets(planDir);
+
+          logger.info(`📝 计划已生成: 000-overview/plans/${planId}/`);
+        } catch (planDocErr) {
+          // 计划文档生成失败不阻塞主执行（计划库已落盘，蓝图仍在）
+          logger.warn(`   ⚠️ 计划文档生成失败（不阻塞执行）: ${(planDocErr as Error).message}`);
+        }
+      } catch (planStoreErr) {
+        // 计划库不可写时降级为直接执行（preview 已展示执行清单）
+        logger.warn(`   ⚠️ 执行计划保存失败（不阻塞执行）: ${(planStoreErr as Error).message}`);
+      }
+    }
+
     // === Batch mode ===
     if (batchSize > 0 && sortedTasks.length > batchSize) {
       await executeBatchMode(sortedTasks, iteration, batchSize, options);
@@ -474,6 +508,13 @@ export async function executeCommand(options: ExecuteOptions): Promise<void> {
 
     // === Verify loop: 代码生成后自动检查 → 修复 → 重试 ===
     await executionVerifyLoop(sortedTasks, iteration, options);
+
+    // v8.3.397+: 非批次路径执行完成后，将自动生成的计划标记 completed，
+    // 避免僵尸 active 计划被 run 流水线误复用（批次接力由单任务续跑，不在此标记——
+    // 任务全部完成后 mergePlanTasks 会跳过，保持 active 无害）
+    if (savedPlan) {
+      try { await markPlanExecuted(savedPlan.id, 'Executed via execute'); } catch { /* 标记失败不影响主流程 */ }
+    }
 
     // Hotfix tracking
     if (options.hotfix && sortedTasks.length > 0) {
@@ -1830,6 +1871,8 @@ async function executionVerifyLoop(
     const taskDir = await resolveTaskDir(iterDir, task.id);
     const taskCodePath = (await pathExists(join(taskDir, 'code'))) ? join(taskDir, 'code') : absCodePath;
     let allPassed = true;
+    // v8.3.399+: 用例核对闸失败标志——修复环需据此清除旧核对报告（代码修复后必须重新核对）
+    let caseVerdictHasFail = false;
 
     // v8.3.194+: 读取历史重试轮次（跨会话闭环），失败修复后从下一轮继续
     const retryFile = join(taskDir, '.needs-retry');
@@ -1842,6 +1885,7 @@ async function executionVerifyLoop(
     for (let round = startRound; round <= maxRounds; round++) {
       if (round > startRound) logger.info(`   🔄 第 ${round} 轮修复验证...`);
       allPassed = true;
+      caseVerdictHasFail = false;
 
       // ── Step 1: 契约冲突裁决 / 传统质量门禁 ──
       const arbConfig = await getArbitrationConfig();
@@ -1988,12 +2032,126 @@ async function executionVerifyLoop(
         }
       }
 
+      // ── Step 4.5: 用例核对闸（v8.3.399+）──
+      // 「确定性层 ↔ 语义层」结构化交棒：CLI 出卷（提取 TC-XXX 清单）→ AI 答卷（逐用例判定）
+      // → CLI 判卷（只校验答卷完整性）→ 矩阵打印 + TEST_REVIEW.md 落盘 + 未覆盖登记 .issues.md
+      // 仅在确定性门禁全部通过时核对——编译/单测已失败时先修基础问题，不浪费 AI 核对回合
+      if (allPassed && !options.skipCaseGate) {
+        const caseGateMode = config.quality_gates?.case_gate ?? 'block';
+        if (caseGateMode !== 'off') {
+          // research 类型任务无测试用例语义，跳过
+          let isResearch = false;
+          try {
+            const typePath = join(taskDir, '.meta', 'type');
+            if (await pathExists(typePath)) {
+              isResearch = (await readFile(typePath, 'utf-8')).trim() === 'research';
+            }
+          } catch { /* ignore */ }
+
+          const testPath = join(taskDir, 'TEST.md');
+          if (isResearch) {
+            logger.info(`   🧪 用例核对: research 任务跳过`);
+          } else if (!(await pathExists(testPath))) {
+            logger.info(`   🧪 用例核对: 无 TEST.md，跳过（无测试规格任务属正常）`);
+          } else {
+            const testMd = await readFile(testPath, 'utf-8');
+            const tcs = extractTestCaseIds(testMd);
+            if (tcs.length === 0) {
+              logger.info(`   🧪 用例核对: TEST.md 无 [TC-XXX] 编号用例，跳过（analyze 新约定 v8.3.399+ 生成后自动启用）`);
+            } else {
+              let verdicts: CaseVerdict[] | null = null;
+              const reviewPath = join(taskDir, 'TEST_REVIEW.md');
+              const pendingPath = join(taskDir, '.case-review');
+              // 判卷 + 落盘 + 登记的统一收口（缺漏用例按 ❌ 计入）
+              const applyVerdicts = async (answer: string): Promise<CaseVerdict[]> => {
+                const graded = parseCaseReview(answer, tcs);
+                if (graded.missing.length > 0) {
+                  logger.warn(`   🧪 答卷缺漏 ${graded.missing.length} 条用例（${graded.missing.join(', ')}），按 ❌ 未实现计入`);
+                }
+                const merged: CaseVerdict[] = [
+                  ...graded.verdicts,
+                  ...graded.missing.map(id => ({ id, status: 'fail' as const, evidence: '（答卷缺漏，未提供判定）' })),
+                ];
+                await writeCaseReviewReport(taskDir, task.id, tcs, merged);
+                await registerCaseIssues(taskDir, task.id, merged);
+                return merged;
+              };
+              if (await pathExists(pendingPath)) {
+                // 答卷回传判卷：--case-review 已落盘 .case-review
+                verdicts = await applyVerdicts(await readFile(pendingPath, 'utf-8'));
+                await remove(pendingPath).catch(() => {});
+              } else if (await pathExists(reviewPath)) {
+                // 已有核对报告（幂等）：直接读取判定，不重复出卷
+                verdicts = readVerdictsFromReport(await readFile(reviewPath, 'utf-8'), tcs);
+                if (!verdicts) logger.info(`   🧪 既有 TEST_REVIEW.md 覆盖不全，重新核对`);
+              }
+              if (!verdicts) {
+                // 出卷交棒：SDK 派单优先，不可用则 [SPECCORE_PROMPT] 接力
+                const sheet = buildCaseReviewSheet(task.id, tcs, testMd, taskCodePath);
+                let dispatched = false;
+                if (!process.stdout.isTTY) {
+                  try {
+                    const reviewCtx: AgentContext = {
+                      subagent: 'test-reviewer',
+                      iteration,
+                      contextBudget: 8000,
+                      contextType: 'full',
+                      cwd: process.cwd(),
+                    };
+                    const dispatchResult = await dispatchSubagent(reviewCtx, sheet);
+                    if (dispatchResult && dispatchResult.success && dispatchResult.content && dispatchResult.content.trim()) {
+                      verdicts = await applyVerdicts(dispatchResult.content);
+                      dispatched = true;
+                      logger.info(`   🧪 用例核对: 子 Agent test-reviewer SDK 完成答卷`);
+                    }
+                  } catch (e: any) {
+                    logger.debug(`[execute] 用例核对 SDK 派单失败: ${e.message}`);
+                  }
+                }
+                if (!dispatched) {
+                  // 宿主接力：出卷交棒，--case-review 回传后重入验证环判卷
+                  process.stdout.write(
+                    `[SPECCORE_PROMPT]\n${sheet}\n\n## 🔁 结果回传约定\n\n核对完成后经 CLI 回传答卷：\n\`speccore execute --case-review "<答卷内容>" --task=${task.id} -I ${iteration}\`\nCLI 将校验答卷完整性（每条用例必须有判定）并落盘 TEST_REVIEW.md。\n`
+                  );
+                  process.exitCode = 10;
+                  return;
+                }
+              }
+              if (verdicts) {
+                const fails = verdicts.filter(v => v.status === 'fail').length;
+                const partials = verdicts.filter(v => v.status === 'partial').length;
+                logger.info('');
+                logger.info(`🧪 用例核对闸 — ${task.id}（${tcs.length} 条用例）`);
+                logger.info(formatCaseMatrix(verdicts));
+                if (fails > 0) {
+                  caseVerdictHasFail = true;
+                  if (caseGateMode === 'block') {
+                    logger.warn(`   🚫 ${fails} 条用例未实现，阻塞进入修复环`);
+                    allPassed = false;
+                  } else {
+                    logger.warn(`   ⚠️ ${fails} 条用例未实现（report 模式，不阻塞）`);
+                  }
+                }
+                if (partials > 0) logger.warn(`   ⚠️ ${partials} 条用例部分实现，已登记 .issues.md`);
+                if (fails === 0 && partials === 0) logger.info(`   ✅ 全部用例核对通过`);
+              }
+            }
+          }
+        }
+      }
+
       if (allPassed) break;
 
       // 自动修复提示（跨会话闭环：失败后立即返回，让 AI 修复后重新 execute 继续下一轮）
       if (round < maxRounds) {
         logger.info(`   💡 AI 将修复未通过项。使用 speccore execute --task=${task.id} --force 重新执行代码生成`);
         await writeFile(join(taskDir, '.needs-retry'), String(round));
+        // v8.3.399+: 用例核对闸失败进修复环——清除旧核对报告，代码修复后必须重新核对，
+        // 否则下一轮读旧报告判定仍为 ❌，修复环永不收敛
+        if (caseVerdictHasFail) {
+          logger.info(`   🧪 未实现用例修复指引见 .issues.md 与上方核对矩阵（修复后 --resume 将重新核对）`);
+          await remove(join(taskDir, 'TEST_REVIEW.md')).catch(() => {});
+        }
         // 输出 [SPECCORE_EXEC] 让 AI 修复（回退到质量门禁报告）
         const gate = await runQualityGate(task.id, taskCodePath, taskDir, { strict: options.strict, blockLevel });
         if (!gate.passed) {
@@ -2105,24 +2263,77 @@ function detectCycles(tasks: TaskState[]): string[] {
 }
 
 /** 按已保存的计划执行 */
-async function executeByPlan(planId: string, iteration: string, options: ExecuteOptions): Promise<void> {
-  const plan = await getPlan(planId);
-  if (!plan) { logger.error('Plan not found: ' + planId); return; }
-  if (plan.iteration !== iteration) { logger.warn('Plan iteration differs from current'); }
-
-  logger.info('\nExecuting plan: ' + plan.name);
-  logger.info('  Tasks: ' + plan.tasks.length + ' | Batch: ' + plan.batchSize);
-
-  const allTasks = await scanTasks(iteration);
-  const planTasks = plan.tasks.map(id => allTasks.find(t => t.id === id)).filter(Boolean) as TaskState[];
-  if (planTasks.length === 0) { logger.error('No matching tasks'); return; }
-
-  if (plan.batchSize > 0 && planTasks.length > plan.batchSize) {
-    await executeBatchMode(planTasks, iteration, plan.batchSize, options);
-  } else {
-    await executeWithProgress(planTasks, iteration, options.base, [], {}, options);
+/**
+ * 合并多计划任务清单（纯函数，导出供单测锁定）——
+ * 按计划顺序拼接 + 去重（后出现的重复任务保留首次位置），
+ * 跳过已完成/已归档任务与计划中已不存在的任务。
+ */
+export function mergePlanTasks(plans: ExecutionPlan[], allTasks: TaskState[]): TaskState[] {
+  const seen = new Set<string>();
+  const out: TaskState[] = [];
+  for (const plan of plans) {
+    for (const id of plan.tasks) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const t = allTasks.find(x => x.id === id);
+      if (t && t.status !== 'completed' && t.status !== 'archived') out.push(t);
+    }
   }
-  await markPlanExecuted(plan.id, 'Completed ' + planTasks.length + ' tasks');
+  return out;
+}
+
+/**
+ * 按计划执行（v8.3.397+: 多计划合并版）——
+ * 计划是执行的蓝图：合并多计划的调度清单（保序去重），跳过已完成/已归档任务
+ * （批次接力中断后再次复用计划不会重复派单），重新拓扑排序后按批次推进。
+ */
+async function executeByPlans(planIds: string[], iteration: string, options: ExecuteOptions): Promise<void> {
+  const plans: ExecutionPlan[] = [];
+  for (const id of planIds) {
+    const plan = await getPlan(id);
+    if (!plan) { logger.error('Plan not found: ' + id); continue; }
+    if (plan.iteration !== iteration) {
+      // v8.3.398+: 跨迭代计划硬拦截——任务 ID（Task-001）在各迭代同名，
+      // 若仅警告放行会把当前迭代的同名任务误执行，交棒必须显式拒绝
+      logger.error(`Plan ${plan.name} 属于迭代 ${plan.iteration}，与当前迭代 ${iteration} 不符，已跳过`);
+      continue;
+    }
+    plans.push(plan);
+  }
+  if (plans.length === 0) { logger.error('No valid plans'); return; }
+
+  logger.info(`\nExecuting ${plans.length} plan(s): ${plans.map(p => p.name).join('、')}`);
+  logger.info('  Tasks: ' + plans.reduce((n, p) => n + p.tasks.length, 0) + ' | Batch: ' + (plans.find(p => p.batchSize > 0)?.batchSize || 3));
+
+  // 合并任务清单：按计划顺序拼接 + 去重 + 过滤已完成/已归档
+  const allTasks = await scanTasks(iteration);
+  const planTasks = mergePlanTasks(plans, allTasks);
+  if (planTasks.length === 0) {
+    logger.info('✅ 计划内任务均已完成，无需执行');
+    return;
+  }
+
+  // 合并后重新拓扑排序（跨计划的依赖关系也要正确）
+  const sorted = topologicalSort(planTasks);
+  const batchSize = plans.find(p => p.batchSize > 0)?.batchSize || parseInt(options.batchSize || '3', 10);
+
+  if (batchSize > 0 && sorted.length > batchSize) {
+    // 批次接力模式：本进程只派第一棒，后续由 --prompt --task=X 单任务续跑——
+    // 此时计划不能标记 completed（任务远未完成），保持 active；
+    // 任务完成后 mergePlanTasks 会跳过，重复复用不重派。
+    await executeBatchMode(sorted, iteration, batchSize, options);
+  } else {
+    await executeWithProgress(sorted, iteration, options.base, [], {}, options);
+    // 非批次路径一次性执行完所有任务，计划标记 completed
+    for (const plan of plans) {
+      await markPlanExecuted(plan.id, `Executed via plan ${plan.name}`);
+    }
+  }
+}
+
+/** @deprecated 兼容旧签名，改用 executeByPlans */
+async function executeByPlan(planId: string, iteration: string, options: ExecuteOptions): Promise<void> {
+  await executeByPlans([planId], iteration, options);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3043,8 +3254,10 @@ async function runApplyMode(iteration: string, options: ExecuteOptions): Promise
   logger.success(`\n📁 完成: ${writtenCount} 个文件已写入`);
   logger.info(`   📂 位置: ${iterDir}/`);
 
-  // v6.69.1: 记录任务执行快照，支持下次增量检测
-  await recordAnalysisSnapshot(`Task-${task}`, gitCwd);
+  // v6.69.1: 记录任务执行快照，支持下次增量检测（失败不阻塞主流程）
+  try {
+    await recordAnalysisSnapshot(`Task-${task}`, gitCwd);
+  } catch { /* 快照失败不影响任务完成状态 */ }
 
   // ── 执行后总结 ──
   outputPostSummary(iteration, task, writtenCount, parsed.files.map(f => f.path));

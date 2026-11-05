@@ -358,6 +358,9 @@ ${ctxResult.context}
 - 验收标准（Given-When-Then）
 - 边界值
 - 异常路径
+- 每条用例必须以 \`### [TC-XXX] 用例标题\` 编号（XXX 从 001 递增），
+  正文包含「前置条件/步骤/预期结果」；编号供 execute 后的用例核对闸自动勾稽，
+  禁止省略编号或用其他格式
 
 ### [DOC:RISK.md] 风险评估（如适用）
 - 技术风险
@@ -935,7 +938,9 @@ export async function analyzeUnitModes(options: AnalyzeOptions, projectRoot: str
         parts.push(p);
         parts.push(`\n> 提交本单元: speccore analyze --unit ${u.id} --apply '[DOC:...]' -I ${iter}\n`);
       }
-      process.stdout.write(parts.join('\n'));
+      // v8.3.399+: 显式交棒修复——此前多单元批量输出裸 stdout 无 [SPECCORE_PROMPT] 标记
+      // （单单元/汇总均走 emitAiPrompt 有标记），宿主 AI 收到 exit 10 无从识别接力信号。
+      await emitAiPrompt(iter, parts.join('\n'), { mode: 'multi-unit-batch' });
       process.exitCode = 10;
       return;
     }

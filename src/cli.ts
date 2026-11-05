@@ -451,7 +451,7 @@ program
   .option('--delete <id>', 'Delete a plan')
   .option('--cancel <id>', 'Cancel a plan (keep record)')
   .option('--prompt', '输出结构化 Prompt 到 stdout（Skill 协作模式）')
-  .option('--response <response>', '接收 AI 计划写入 plan.json（配合 --prompt）')
+  .option('--response <response>', '接收 AI 计划写入计划库（配合 --prompt，登记后可用 execute --plan 执行）')
   .option('--html', '生成 speccore-plan.html 可视化页面')
   .action(planCommand);
 
@@ -469,7 +469,7 @@ program
   .option('--frontend', '仅前端任务（自动识别项目中的前端端名）')
   .option('--platform <platform>', '按端过滤（工程标识，如 CONSTITUTION.md 端列表中的端名）')
   .option('--module <modules>', '按所属功能模块/模块目录名筛选（逗号分隔多值，模糊匹配，如 "支付,订单"）')
-  .option('--plan <id>', 'Execute a saved plan (from speccore plan --list)')
+  .option('--plan <ids>', 'Execute saved plans (from speccore plan --list); comma-separated for multiple, merged by dependency order')
   .option('--interactive', 'Interactive selection')
   .option('--dry-run', 'Preview execution plan')
   .option('--resume', 'Resume from last interruption')
@@ -488,6 +488,8 @@ program
   .option('--hotfix', 'Emergency fix: skip reverse sync (30min grace, 24h mandatory)')
   .option('--prompt', '输出结构化 Prompt 到 stdout，等待宿主 AI 生成代码（Skill 协作模式）')
   .option('--response <response>', '接收宿主 AI 返回的代码内容并写入文件（配合 --prompt 使用）')
+  .option('--case-review <content>', '回传用例核对答卷（配合 --task；CLI 判卷后落盘 TEST_REVIEW.md 并执行门禁裁决）')
+  .option('--skip-case-gate', '跳过用例核对闸（不按 TEST.md 的 TC-XXX 用例核对实现）')
   .option('--list-pending', '列出待执行任务清单（拓扑排序 + 批次分组，JSON 格式）')
   .option('--ignore-upstream-update', '跳过上游 020-specs/ 变更检测')
   .option('--with-code', '携带源码上下文（默认自动检测）')

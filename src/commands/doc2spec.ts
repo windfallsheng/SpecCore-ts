@@ -32,7 +32,7 @@ import { detectProfessionalLevel } from '../core/requirement-clarifier';
 
 import { showNextSteps } from '../core/next-steps';
 import { validateContent, generateReport } from '../core/doc-validator';
-import { buildPrompt, formatPrompt } from '../core/prompt-builder';
+import { recordAiTrace } from '../utils/ai-trace';
 import { loadConfig, loadConfigWithMeta, loadProjectConfig } from '../core/unified-config';
 import { callLlm, resolveAiProviders, parseTranslationResponse } from '../core/ask-llm';
 function findCommand(cmd: string, customPath?: string): string | null {
@@ -254,11 +254,41 @@ export async function doc2specCommand(options: Word2SpecOptions): Promise<void> 
   }
 
   // ── Prompt 模式: 输出 AI 验证 Prompt ──
+  // v8.3.399+: 显式交棒修复——此前裸输出 analyze prompt（无 [SPECCORE_PROMPT] 标记、
+  // 无 --response 回传约定），宿主 AI 收到 exit 10 无从知晓如何回传，交棒断链。
   if (options.prompt) {
     if (!options.file) { logger.error('--prompt 需要 --file'); return; }
+    const iterName = options.iter || '';
     const sourceContent = await readFile(options.file, 'utf-8').catch(() => '');
-    const prompt = await buildPrompt('analyze', { iteration: options.iter });
-    process.stdout.write(formatPrompt(prompt));
+    // 优先展示已转换产物供校验，未转换时退回源内容
+    let convertedContent = '';
+    if (iterName) {
+      const convertedPath = join(`Iteration-${iterName}`, '010-requirements', 'converted', basename(options.file).replace(/\.[^.]+$/, '') + '.md');
+      convertedContent = await readFile(convertedPath, 'utf-8').catch(() => '');
+    }
+    const prompt = [
+      '# 文档转换验证与修正（doc2spec）',
+      '',
+      `源文件: ${options.file}`,
+      '',
+      '请验证并修正以下 Markdown 内容：',
+      '1. 标题体系符合 SpecCore 标准层级（H1 章节 / H2 小节）',
+      '2. 表格、列表、代码块完整无截断',
+      '3. 无乱码、无转换错误，中文表述通顺',
+      '4. 图片/链接引用保留',
+      '',
+      '## 待验证内容',
+      '',
+      convertedContent || sourceContent || '（无可用内容，请直接说明）',
+      '',
+      '## 🔁 结果回传约定',
+      '',
+      '完成后将**修正后的完整 Markdown 内容**经 CLI 回传落盘：',
+      `\`speccore doc2spec --response "<修正后的完整内容>" --file ${options.file}${iterName ? ` --iter ${iterName}` : ''}\``,
+      '回传后内容写入 010-requirements/converted/ 目录。',
+    ].join('\n');
+    await recordAiTrace(iterName || 'GLOBAL', 'prompt-out', { promptLength: prompt.length, mode: 'doc2spec-verify', prompt });
+    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
   }

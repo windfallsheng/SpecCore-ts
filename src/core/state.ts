@@ -455,6 +455,67 @@ export function buildDependencyGraph(tasks: TaskState[]): Map<string, string[]> 
   return graph;
 }
 
+/** v8.3.397+: 功能单元分组（两级拓扑的第一层）——任务按 feature 归模块，组内已拓扑排序。 */
+export interface FeatureGroup {
+  feature: string;
+  tasks: TaskState[];
+  /** 本模块依赖的其它模块（feature 名，来自跨模块任务依赖） */
+  groupDeps: string[];
+}
+
+/** 分组键：feature → parentTaskId → 未归类（与扫描时 feature 回退逻辑对齐） */
+function featureKeyOf(t: TaskState): string {
+  return t.feature || t.parentTaskId || '未归类';
+}
+
+/**
+ * v8.3.397+: 以功能单元为大模块划分任务（两级拓扑）——
+ * 模块内按任务依赖拓扑排序；跨模块依赖聚合成模块间依赖（groupDeps）；
+ * 模块级 Kahn 拓扑排序（循环依赖时未入序模块按原顺序兜底追加）。
+ */
+export function groupTasksByFeature(tasks: TaskState[]): FeatureGroup[] {
+  const map = new Map<string, TaskState[]>();
+  const order: string[] = [];
+  for (const t of tasks) {
+    const key = featureKeyOf(t);
+    if (!map.has(key)) { map.set(key, []); order.push(key); }
+    map.get(key)!.push(t);
+  }
+
+  const groups: FeatureGroup[] = order.map(key => {
+    const groupTasks = topologicalSort(map.get(key)!);
+    const groupDeps = new Set<string>();
+    for (const t of groupTasks) {
+      for (const d of t.dependencies) {
+        const depTask = tasks.find(x => x.id === d);
+        if (depTask && featureKeyOf(depTask) !== key) groupDeps.add(featureKeyOf(depTask));
+      }
+    }
+    return { feature: key, tasks: groupTasks, groupDeps: [...groupDeps] };
+  });
+
+  // 模块级拓扑（Kahn）
+  const idx = new Map(groups.map((g, i) => [g.feature, i]));
+  const indegree = groups.map(g => g.groupDeps.filter(d => idx.has(d)).length);
+  const queue = groups.map((_, i) => i).filter(i => indegree[i] === 0);
+  const sorted: FeatureGroup[] = [];
+  while (queue.length > 0) {
+    const i = queue.shift()!;
+    sorted.push(groups[i]);
+    for (let j = 0; j < groups.length; j++) {
+      if (groups[j].groupDeps.includes(groups[i].feature)) {
+        indegree[j]--;
+        if (indegree[j] === 0) queue.push(j);
+      }
+    }
+  }
+  if (sorted.length < groups.length) {
+    const inOrder = new Set(sorted.map(g => g.feature));
+    for (const g of groups) if (!inOrder.has(g.feature)) sorted.push(g);
+  }
+  return sorted;
+}
+
 export function topologicalSort(tasks: TaskState[]): TaskState[] {
   const graph = buildDependencyGraph(tasks);
   const visited = new Set<string>();

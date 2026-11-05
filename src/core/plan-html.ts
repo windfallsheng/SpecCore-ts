@@ -5,6 +5,8 @@ export interface PlanHtmlTask {
   status: string;
   owner?: string;
   dependsOn: string[];
+  /** v8.3.397+: 功能单元名（模块归属，供 subgraph/卡片分组） */
+  feature?: string;
 }
 
 export interface PlanHtmlOptions {
@@ -34,7 +36,7 @@ export function generatePlanHtml(
     else if (inProgress > 0 || completed > 0) { overallStatus = '执行中'; statusColor = '#f97316'; }
   }
 
-  // Mermaid flowchart data
+  // Mermaid flowchart data（v8.3.397+: 按功能单元 subgraph 分组，两级拓扑）
   const mermaidLines: string[] = [];
   const hasDeps = tasks.some(t => t.dependsOn.length > 0);
   if (hasDeps || tasks.length > 1) {
@@ -44,21 +46,31 @@ export function generatePlanHtml(
 
     mermaidLines.push('flowchart LR');
 
-    // 1. Declare all nodes first (avoids duplicate declaration in edges)
+    // 模块分组（feature → 模块内任务），subgraph 包模块
+    const moduleGroups = new Map<string, PlanHtmlTask[]>();
+    const moduleOrder: string[] = [];
     for (const t of tasks) {
-      const label = t.name.length > 18 ? t.name.slice(0, 15) + '...' : t.name;
-      const escapedLabel = label.replace(/"/g, '\\"');
-      mermaidLines.push(`  ${idToNode.get(t.id)}["${escapedLabel}"]`);
+      const key = t.feature || '未归类';
+      if (!moduleGroups.has(key)) { moduleGroups.set(key, []); moduleOrder.push(key); }
+      moduleGroups.get(key)!.push(t);
     }
+    moduleOrder.forEach((key, mi) => {
+      const escapedKey = key.replace(/"/g, '\\"');
+      mermaidLines.push(`  subgraph M${mi}["${escapedKey}"]`);
+      for (const t of moduleGroups.get(key)!) {
+        const label = t.name.length > 18 ? t.name.slice(0, 15) + '...' : t.name;
+        const escapedLabel = label.replace(/"/g, '\\"');
+        mermaidLines.push(`    ${idToNode.get(t.id)}["${escapedLabel}"]`);
+      }
+      mermaidLines.push('  end');
+    });
 
-    // 2. Draw edges
+    // 2. Draw edges（模块内 + 跨模块统一按依赖画）
     for (const t of tasks) {
-      if (t.dependsOn.length > 0) {
-        for (const d of t.dependsOn) {
-          const depNode = idToNode.get(d);
-          if (depNode) {
-            mermaidLines.push(`  ${depNode} --> ${idToNode.get(t.id)}`);
-          }
+      for (const d of t.dependsOn) {
+        const depNode = idToNode.get(d);
+        if (depNode) {
+          mermaidLines.push(`  ${depNode} --> ${idToNode.get(t.id)}`);
         }
       }
     }
@@ -81,17 +93,28 @@ export function generatePlanHtml(
   const mermaidDef = mermaidLines.join('\n');
 
   // Task cards HTML
-  const taskCards = tasks.map((t, idx) => {
-    const statusConfig: Record<string, { emoji: string; label: string; color: string }> = {
-      completed: { emoji: '✅', label: '已完成', color: '#14b8a6' },
-      in_progress: { emoji: '🔄', label: '进行中', color: '#f97316' },
-      pending: { emoji: '⏳', label: '待开始', color: '#64748b' },
-    };
-    const sc = statusConfig[t.status] || statusConfig.pending;
-    const prioColor = t.priority === 'high' ? '#ef4444' : t.priority === 'medium' ? '#f59e0b' : '#22c55e';
-    const prioLabel = t.priority === 'high' ? '🔴 高' : t.priority === 'medium' ? '🟡 中' : '🟢 低';
+  // v8.3.397+: 按功能单元分组渲染任务卡片（两级拓扑展示）
+  const moduleGroups = new Map<string, PlanHtmlTask[]>();
+  const moduleOrder: string[] = [];
+  for (const t of tasks) {
+    const key = t.feature || '未归类';
+    if (!moduleGroups.has(key)) { moduleGroups.set(key, []); moduleOrder.push(key); }
+    moduleGroups.get(key)!.push(t);
+  }
 
-    return `
+  const taskCards = moduleOrder.map(key => {
+    const group = moduleGroups.get(key)!;
+    const cards = group.map((t, idx) => {
+      const statusConfig: Record<string, { emoji: string; label: string; color: string }> = {
+        completed: { emoji: '✅', label: '已完成', color: '#14b8a6' },
+        in_progress: { emoji: '🔄', label: '进行中', color: '#f97316' },
+        pending: { emoji: '⏳', label: '待开始', color: '#64748b' },
+      };
+      const sc = statusConfig[t.status] || statusConfig.pending;
+      const prioColor = t.priority === 'high' ? '#ef4444' : t.priority === 'medium' ? '#f59e0b' : '#22c55e';
+      const prioLabel = t.priority === 'high' ? '🔴 高' : t.priority === 'medium' ? '🟡 中' : '🟢 低';
+
+      return `
       <div class="task-card" style="border-left: 3px solid ${sc.color}">
         <div class="task-header">
           <span class="task-num">#${String(idx + 1).padStart(2, '0')}</span>
@@ -106,13 +129,21 @@ export function generatePlanHtml(
         </div>
         ${t.status === 'in_progress' ? '<div class="progress-bar"><div class="progress-fill"></div></div>' : ''}
       </div>`;
+    }).join('');
+    return `
+    <div class="module-section">
+      <div class="module-title">📦 ${key} <span class="module-count">${group.length} 任务</span></div>
+      <div class="task-grid">${cards}</div>
+    </div>`;
   }).join('');
 
-  // Timeline items
-  const timelineItems = tasks.map((t, idx) => {
-    const dotColor = t.status === 'completed' ? '#14b8a6' : t.status === 'in_progress' ? '#f97316' : '#64748b';
-    const dotPulse = t.status === 'in_progress' ? 'dot-pulse' : '';
-    return `
+  // Timeline items（按模块分组）
+  const timelineItems = moduleOrder.map(key => {
+    const group = moduleGroups.get(key)!;
+    const items = group.map((t, idx) => {
+      const dotColor = t.status === 'completed' ? '#14b8a6' : t.status === 'in_progress' ? '#f97316' : '#64748b';
+      const dotPulse = t.status === 'in_progress' ? 'dot-pulse' : '';
+      return `
       <div class="tl-item">
         <div class="tl-dot ${dotPulse}" style="background:${dotColor};box-shadow:0 0 10px ${dotColor}"></div>
         <div class="tl-content">
@@ -121,6 +152,8 @@ export function generatePlanHtml(
           <div class="tl-name">${t.name}</div>
         </div>
       </div>`;
+    }).join('');
+    return `<div class="tl-module">📦 ${key}</div>${items}`;
   }).join('');
 
   return `<!DOCTYPE html>
@@ -260,6 +293,10 @@ main { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; paddin
 
 /* ── Task Cards ── */
 .task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.module-section { margin-bottom: 28px; }
+.module-title { font-size: 15px; font-weight: 700; color: var(--cyan); margin-bottom: 10px; letter-spacing: 0.5px; }
+.module-count { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+.tl-module { font-size: 13px; font-weight: 700; color: var(--cyan); margin: 18px 0 8px; letter-spacing: 0.5px; }
 .task-card {
   background: rgba(0,0,0,.2); border: 1px solid var(--border);
   border-radius: 10px; padding: 18px; transition: all .3s;

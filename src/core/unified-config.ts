@@ -138,6 +138,9 @@ export interface SpecConfig {
     require_pr: boolean;
     /** v8.3.197+: 阻塞级别——standard(默认)=编译+单测+契约阻塞；compile=仅编译阻塞 */
     block_level?: 'compile' | 'standard';
+    /** v8.3.399+: 用例核对闸——execute 后按 TEST.md 的 TC-XXX 用例逐条核对实现
+     * （AI 交棒判定，CLI 只判卷完整性）。block(默认)=未实现阻塞修复环；report=仅报告不阻塞；off=关闭 */
+    case_gate?: 'off' | 'report' | 'block';
     verify_ui?: {
       enabled: boolean;
       smoke_test: boolean;
@@ -319,6 +322,7 @@ export const DEFAULT_CONFIG: SpecConfig = {
     enforce_review: true,
     require_pr: true,
     block_level: 'standard',
+    case_gate: 'block',
     verify_ui: {
       enabled: false,
       smoke_test: true,
@@ -1635,6 +1639,11 @@ export function toYaml(config: SpecConfig): string {
   yaml += '  #   standard → 编译+单测+契约阻塞（默认）\n';
   yaml += '  #   compile  → 仅编译阻塞\n';
   yaml += `  block_level: ${config.quality_gates.block_level ?? 'standard'}\n`;
+  yaml += '  # case_gate: 用例核对闸（v8.3.399+）——execute 后按 TEST.md 的 TC-XXX 用例逐条核对实现\n';
+  yaml += '  #   block  → ❌ 未实现阻塞修复环（默认）\n';
+  yaml += '  #   report → 仅出矩阵报告，不阻塞\n';
+  yaml += '  #   off    → 关闭\n';
+  yaml += `  case_gate: ${config.quality_gates.case_gate ?? 'block'}\n`;
 
   // verify_ui 配置
   const vui = config.quality_gates.verify_ui;

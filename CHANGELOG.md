@@ -1,5 +1,15 @@
 # Changelog
 
+## v8.3.399 (2026-11-05) — 用例核对闸开卷设闸：execute 收尾逐用例勾稽，未实现即入修复环（v8.3.398 计划蓝图聚合发布）
+
+- **TC-XXX 编号立约**：analyze 生成的 TEST.md 模板新增约定——每条用例以 `### [TC-XXX] 用例标题` 编号（正文含前置条件/步骤/预期结果），编号是 execute 后用例核对闸的勾稽锚点，禁止省略或改用其它格式。
+- **用例核对闸（Step 4.5）**：execute 收尾在编译/单测/契约/规格全过后新增用例核对闸——CLI 出卷（从 TEST.md 提取 TC-XXX 清单生成逐条判定答卷模板）→ AI 答卷（宿主 AI 或 test-reviewer 子 Agent 逐用例 ✅/❌/⚠️ 判定 + 代码行号证据）→ CLI 判卷（只校验答卷完整性，判定对错不归 CLI）→ 矩阵打印 + TEST_REVIEW.md 落盘 + 未实现/部分用例登记 .issues.md。
+- **三态裁决 quality_gates.case_gate**：off（不核）/ report（只报告）/ block（❌ 即阻塞进修复环）默认 block——发现即输出、输出即修复；修复环自动清除旧核对报告逼重新核对，防「修了个寂寞」的假收敛。
+- **三跳过与双通道**：research 任务、无 TEST.md、无 TC-XXX 编号的任务静默跳过（不惊扰存量迭代）；答卷优先 SDK 派单 test-reviewer，不可用则 [SPECCORE_PROMPT] 接力宿主 AI，--case-review 回传判卷；TEST_REVIEW.md 存在且覆盖完整则幂等复用不重复出卷。
+- **交棒点四路修复**：doc2spec/spec2doc/done 的 --prompt 与 unitize 多单元批量输出此前裸输出无 [SPECCORE_PROMPT] 标记、无结果回传约定——宿主 AI 不知如何接力。现全部重建为命令专属 Prompt（带「🔁 结果回传约定」节）+ 标记 + recordAiTrace 轨迹，交棒闭环有据可溯。
+- **计划蓝图聚合（v8.3.398）**：plan --prompt 落盘同时登记执行库 plan-store（extractPlanTaskIds 从计划内容提取任务 ID 与已知清单求交集），可直接 execute --plan 执行、被 run 流水线复用；LLM 落盘成功后直接完成不再重复调度；execute 新增跨迭代计划硬拦截（任务 ID 跨迭代同名需校验归属）；run 先取全量再过滤 active 防 limit 截断；计划 HTML 按功能单元分组两级拓扑展示。
+- **测试**：新增用例核对闸 12 例（编号提取/判卷/出卷/报告回读幂等闭环）+ 计划蓝图 16 例，全量 967/967 通过。
+
 ## v8.3.397 (2026-11-05) — 自动清理不再越界：迭代目录与知识库免死，执行边界钉死
 
 - **cleanup 扫描边界修复**：execute/taskify/analyze 收尾的自动清理（cleanupByType）此前扫描「项目根 + .speccore」递归，无迭代目录边界——execute 收尾会删迭代目录内的 .bak 文件，taskify 收尾会删迭代内 7 天前以 14 位时间戳结尾命名的文件，analyze 收尾会删迭代内 .tmp-* 文件与 .migrated-N 等后缀的整个目录。现扫描时项目根下 Iteration-NNN-* 目录一律跳过（路径判定排除 .speccore/cache/iterations 缓存区，不误伤缓存清理）。

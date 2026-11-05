@@ -12,6 +12,18 @@ disable-model-invocation: false
 
 不要输出命令文本，不要分析意图，一切交给 speccore ask。
 
+## 计划→执行衔接（v8.3.397+）
+- 计划是执行蓝图：plan 完成后，后续执行走 `speccore execute --plan <计划ID>`（ID 从 plan 命令收尾输出或 `speccore plan --list` 取）
+- 多计划可一次执行：`speccore execute --plan <id1>,<id2>`（按依赖拓扑合并执行，已完成任务自动跳过）
+- `speccore run` 流水线的 execute 阶段自动复用 plan 阶段产出的全部 active 计划
+- execute 裸执行多任务时（--all/--auto），CLI 会先自动列计划（计划库 + PLAN.md + HTML，文档生成失败不阻塞执行）
+- **两级拓扑**：计划与拓扑分析以功能单元为大模块划分（PLAN.md 模块依赖图 + 各模块分节，HTML subgraph 分组），模块内列子任务依赖；跨模块任务依赖聚合为模块间依赖
+
+## --prompt 回传约定（v8.3.398+）
+- `plan --prompt` 输出 Prompt 后，宿主 AI 按 Prompt 制定计划，完成后通过 `speccore plan --response "<计划完整内容>" -i <迭代名>` 回传落盘
+- CLI 回传落盘时会同时登记执行库并输出计划 ID；计划内容必须包含任务 ID（Task-XXX），否则无法登记执行库（仅落盘 PLAN.md）
+- 回传后计划即成为执行蓝图，用 `speccore execute --plan <计划ID>` 执行
+
 ## 输出标记处理
 - `[SPECCORE_EXEC: <cmd>]` → 立即执行该命令，不要向用户复述命令文本
 - `[SPECCORE_PROMPT]` → 将后续 Prompt 内容作为你的工作指令执行

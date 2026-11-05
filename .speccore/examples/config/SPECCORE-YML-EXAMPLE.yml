@@ -49,6 +49,11 @@ quality_gates:
   #   standard → 编译+单测+契约阻塞（默认）
   #   compile  → 仅编译阻塞
   block_level: standard
+  # case_gate: 用例核对闸（v8.3.399+）——execute 后按 TEST.md 的 TC-XXX 用例逐条核对实现
+  #   block  → ❌ 未实现阻塞修复环（默认）
+  #   report → 仅出矩阵报告，不阻塞
+  #   off    → 关闭
+  case_gate: block
   # ── UI 验证（v8.3.47+）──
   verify_ui:
     # enabled: 是否启用 UI 验证（冒烟测试 + 视觉检查）

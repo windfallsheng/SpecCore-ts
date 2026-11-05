@@ -1806,6 +1806,13 @@ function getInstruction(command: PromptCommand, context: { taskName?: string; ap
         '1. **不要询问用户** — 按你的最佳判断直接排计划，不要请求确认或澄清',
         '2. **有疑问就记录** — 将疑问写入 `.speccore/questions/plan-{迭代名}-{日期}-*.md`',
         '3. **直接输出结果** — 输出 Markdown 表格，不要输出多余解释',
+        '',
+        '## 🔁 结果回传约定（v8.3.398+）',
+        '',
+        '计划制定完成后，通过 CLI 回传落盘（CLI 会登记执行库并输出计划 ID）：',
+        '`speccore plan --response "<计划完整内容>" -i <迭代名>`',
+        '回传后计划即成为执行蓝图，后续用 `speccore execute --plan <计划ID>` 执行（ID 以 CLI 输出为准）。',
+        '计划内容中必须包含任务 ID（Task-XXX），否则 CLI 无法登记执行库。',
       ].join('\n');
   }
 }

@@ -950,8 +950,23 @@ async function autoPipeline(options: RunOptions): Promise<void> {
         if (!hasPending) {
           logger.info('  ✅ 所有任务已完成，跳过 execute');
         } else {
-          // v8.3.223+: --auto 仅执行第一个待执行任务，必须加 --all 覆盖全部 pending
-          if (runPhaseCommand(`speccore execute --auto --all -i ${iteration}`, 'execute', iteration) === 'handoff') return;
+          // v8.3.397+: 优先复用 plan 阶段生成的全部 active 调度计划（任务顺序/批次大小已在计划内），
+          // 避免「先谋」产出被「后动」弃用、重新 --auto --all 全选重来。多计划逗号拼接交给 execute 合并执行。
+          let planIds = '';
+          try {
+            const { listPlans } = await import('../core/plan-store');
+            // v8.3.398+: 先取全量再过滤 active，避免 limit 截断漏掉更早的 active 计划
+            //（历史僵尸计划过多时会挤掉真正待执行的蓝图）
+            const plans = await listPlans(iteration, 100);
+            planIds = plans.filter(p => p.status === 'active').map(p => p.id).join(',');
+          } catch { /* 计划库不可读时回退全量执行 */ }
+          if (planIds) {
+            logger.info(`  📋 复用执行计划: ${planIds}`);
+            if (runPhaseCommand(`speccore execute --plan ${planIds} -i ${iteration}`, 'execute', iteration) === 'handoff') return;
+          } else {
+            // v8.3.223+: --auto 仅执行第一个待执行任务，必须加 --all 覆盖全部 pending
+            if (runPhaseCommand(`speccore execute --auto --all -i ${iteration}`, 'execute', iteration) === 'handoff') return;
+          }
         }
         break;
       }

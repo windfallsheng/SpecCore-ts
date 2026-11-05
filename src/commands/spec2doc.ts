@@ -76,9 +76,26 @@ const REF_MAP: Record<string, string> = {
 
 export async function spec2docCommand(options: Spec2DocOptions): Promise<void> {
   // ── Prompt 模式 ──
+  // v8.3.399+: 显式交棒修复——此前裸输出 analyze prompt（无 [SPECCORE_PROMPT] 标记、
+  // 无 --apply 回传约定），宿主 AI 收到 exit 10 无从知晓如何回传，交棒断链。
   if (options.prompt) {
-    const prompt = await require('../core/prompt-builder').buildPrompt('analyze', { iteration: options.iteration });
-    process.stdout.write(require('../core/prompt-builder').formatPrompt(prompt));
+    const prompt = [
+      '# Spec 文档导出审计（spec2doc）',
+      '',
+      '请审计待导出的 Spec 文档（020-specs/ 与任务目录下的 REQ/TECH/TEST 等）：',
+      '1. 标题层级与排版适合导出（docx/pdf/html）',
+      '2. 表格/代码块完整、无空章节',
+      '3. 中英文混排与专有名词一致',
+      '4. 占位符（TODO/待补充）标注为待完善',
+      '',
+      '## 🔁 结果回传约定',
+      '',
+      '完成后将**修正后的文档内容**经 CLI 回传写入输出文件：',
+      `\`speccore spec2doc --apply "<修正后的内容>" ${options.output ? `--output ${options.output}` : '--output <输出文件路径>'}\``,
+      '若未指定 --output，请同时提供输出文件路径。',
+    ].join('\n');
+    await require('../utils/ai-trace').recordAiTrace(options.iteration || 'GLOBAL', 'prompt-out', { promptLength: prompt.length, mode: 'spec2doc-audit', prompt });
+    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}`);
     process.exitCode = 10;
     return;
   }

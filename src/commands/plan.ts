@@ -30,7 +30,24 @@ function promptUser(question: string): Promise<string> {
   });
 }
 
-/** v8.3.225+: 计划内容落盘（--response 分支与 graph 模式 SDK 闭环共用） */
+/** v8.3.398+: 从 AI 计划内容提取任务 ID（与已知任务清单求交集）——
+ * 只保留真实存在的任务，顺序保持内容中出现顺序（后续拓扑排序会重排）。 */
+export function extractPlanTaskIds(content: string, knownIds: string[]): string[] {
+  const mentioned = (content.match(/Task-[\w-]+/g) || []).map(s => s.trim());
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of mentioned) {
+    if (!knownIds.includes(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/** v8.3.225+: 计划内容落盘（--response 分支与 graph 模式 SDK 闭环共用）
+ * v8.3.398+: 同时登记执行库 plan-store（execute --plan / run 复用的前提），
+ * 并输出下一步执行指引——AI 计划与确定性执行层在此显式交棒；
+ * 登记失败仅警告降级（计划文档已落盘），不阻塞主流程。 */
 async function savePlanToFile(iteration: string, content: string, topic?: string): Promise<void> {
   const iterDir = await getIterationDir(iteration);
   const plansRoot = join(iterDir, '000-overview', 'plans');
@@ -41,7 +58,34 @@ async function savePlanToFile(iteration: string, content: string, topic?: string
   const planMdPath = join(planDir, 'PLAN.md');
   await writeFile(planMdPath, content, 'utf-8');
   logger.success(`✅ 计划已保存: ${planId}/PLAN.md`);
+
+  // 计划登记执行库：从内容提取任务 ID（与当前迭代任务清单求交集），
+  // 使 AI 生成的计划可直接被 execute --plan 执行、被 run 流水线复用
+  let saved: ExecutionPlan | null = null;
+  try {
+    const known = (await scanTasks(iteration)).map(t => t.id);
+    const tasks = extractPlanTaskIds(content, known);
+    if (tasks.length === 0) {
+      logger.warn('   ⚠️ 未能从计划内容提取任务清单，计划未登记执行库（execute --plan 不可用，可手动改 PLAN.md 补任务 ID 后重传）');
+    } else {
+      saved = await savePlan({
+        name: `Plan-${slug}`,
+        iteration,
+        tasks,
+        batchSize: 3,
+        source: 'auto',
+        filters: {},
+      });
+    }
+  } catch (storeErr) {
+    logger.warn(`   ⚠️ 计划登记执行库失败（计划文档已落盘）: ${(storeErr as Error).message}`);
+  }
+
   printPlanFromMarkdown(content, iteration);
+  if (saved) {
+    logger.info('\n🎯 下一步执行这份计划：');
+    logger.info(`   speccore execute --plan ${saved.id}`);
+  }
 }
 
 export interface PlanOptions {
@@ -60,7 +104,7 @@ export interface PlanOptions {
   delete?: string;
   cancel?: string;
   prompt?: boolean;    // --prompt
-  response?: string;   // --response: 接收 AI 计划写入 plan.json
+  response?: string;   // --response: 接收 AI 计划写入计划库（登记后可用 execute --plan 执行）
   html?: boolean;      // --html: 生成 speccore-plan.html 可视化页面
 }
 
@@ -119,7 +163,10 @@ export async function planCommand(options: PlanOptions): Promise<void> {
         return false;
       };
 
-      if (graphProvider === 'llm' && !(await tryLlmGraph())) {
+      if (graphProvider === 'llm') {
+        // v8.3.398+: LLM 成功落盘（含登记执行库）后直接完成，
+        // 不再继续走 SDK 调度/输出 Prompt（避免重复生成计划）
+        if (await tryLlmGraph()) return;
         logger.warn('⚠️ [llm] 自配 LLM 未生成计划，回退宿主模式');
       }
 
@@ -141,10 +188,11 @@ export async function planCommand(options: PlanOptions): Promise<void> {
               return;
             }
           }
-          if (graphProvider === 'auto') await tryLlmGraph();
+          // auto 模式：SDK 未产出内容 → 回退自配 LLM，成功则直接完成
+          if (graphProvider === 'auto' && (await tryLlmGraph())) return;
         } catch (e: any) {
           logger.debug(`[plan] SDK 调度尝试失败: ${e.message}`);
-          if (graphProvider === 'auto') await tryLlmGraph();
+          if (graphProvider === 'auto' && (await tryLlmGraph())) return;
         }
       }
 
@@ -443,48 +491,62 @@ export async function planCommand(options: PlanOptions): Promise<void> {
       }
       logger.success(`✅ 已选择 ${selectedTasks.length} 个任务`);
       selectedTasks.forEach(t => logger.info(`   - ${t.id}: ${t.name}`));
-      // 输出选中的具体命令
-      logger.info('');
-      logger.info('🎯 将执行：');
+      // 保存到计划库（计划是执行蓝图：后续 execute --plan 直接执行这份计划）
       const cmdIds = selectedTasks.map(t => t.id);
-      logger.info(`   speccore execute -I ${iteration} -t ${cmdIds.join(',')} --force`);
-      logger.info(`   或分批:  speccore execute -I ${iteration} -t ${cmdIds[0]} --batch-size 3 --auto`);
-      // 保存到 plan 并创建子目录
-      const _ = await saveToStore(iteration, cmdIds, 3, options, 'manual');
-      const plansRoot = join(iterDir, '000-overview', 'plans');
-      const slug = extractPlanSlug(selectedTasks);
-      const { id: planId } = await nextPlanId(slug, options.topic);
-      const planSubDir = join(plansRoot, planId);
-      await ensureDir(planSubDir);
-      const planMdContent = formatPlanMarkdown(
-        generatePlan(selectedTasks, parseInt(options.team || '3', 10), 'auto'),
-        iteration, selectedTasks
-      );
-      await writeFile(join(planSubDir, 'PLAN.md'), planMdContent, 'utf-8');
-      logger.info(`   📁 计划目录: 000-overview/plans/${planId}/`);
-      // ── HTML 可视化输出 ──
-      await writeHtmlPlan(selectedTasks, iteration, planSubDir);
+      const saved = await saveToStore(iteration, cmdIds, 3, options, 'manual');
+      logger.info('');
+      logger.info('🎯 下一步执行这份计划：');
+      logger.info(`   speccore execute --plan ${saved.id}`);
+      logger.info(`   （也可直接执行: speccore execute -I ${iteration} -t ${cmdIds.join(',')} --force）`);
+      // 计划文档落盘（PLAN.md + HTML 可视化；v8.3.397+: 文档生成失败不阻塞——计划库已保存，蓝图仍在）
+      try {
+        const plansRoot = join(iterDir, '000-overview', 'plans');
+        const slug = extractPlanSlug(selectedTasks);
+        const { id: planId } = await nextPlanId(slug, options.topic);
+        const planSubDir = join(plansRoot, planId);
+        await ensureDir(planSubDir);
+        const planMdContent = formatPlanMarkdown(
+          generatePlan(selectedTasks, parseInt(options.team || '3', 10), 'auto'),
+          iteration, selectedTasks
+        );
+        await writeFile(join(planSubDir, 'PLAN.md'), planMdContent, 'utf-8');
+        logger.info(`   📁 计划目录: 000-overview/plans/${planId}/`);
+        // ── HTML 可视化输出 ──
+        await writeHtmlPlan(selectedTasks, iteration, planSubDir);
+      } catch (docErr) {
+        logger.warn(`   ⚠️ 计划文档生成失败（不阻塞，计划已保存）: ${(docErr as Error).message}`);
+      }
       return;
     }
 
     const saved = await saveToStore(iteration, taskIds, 3, options, 'manual');
 
-    // 写入计划子目录（每个计划独立目录，含 PLAN.md + HTML）
-    const plansRoot = join(iterDir, '000-overview', 'plans');
-    await ensureDir(plansRoot);
-    const slug = extractPlanSlug(sortedTasks);
-    const { id: planId } = await nextPlanId(slug, options.topic);
-    const planDir = join(plansRoot, planId);
-    await ensureDir(planDir);
-    const planMdContent = formatPlanMarkdown(plan, iteration, sortedTasks);
-    await writeFile(join(planDir, 'PLAN.md'), planMdContent, 'utf-8');
+    // 写入计划子目录（每个计划独立目录，含 PLAN.md + HTML 可视化；
+    // v8.3.397+: 文档生成失败不阻塞——计划库已落盘，蓝图仍在）
+    let planDirLabel = '';
+    try {
+      const plansRoot = join(iterDir, '000-overview', 'plans');
+      await ensureDir(plansRoot);
+      const slug = extractPlanSlug(sortedTasks);
+      const { id: planId } = await nextPlanId(slug, options.topic);
+      const planDir = join(plansRoot, planId);
+      await ensureDir(planDir);
+      const planMdContent = formatPlanMarkdown(plan, iteration, sortedTasks);
+      await writeFile(join(planDir, 'PLAN.md'), planMdContent, 'utf-8');
 
-    // ── HTML 可视化输出（放入同一子目录） ──
-    await writeHtmlPlan(sortedTasks, iteration, planDir);
+      // ── HTML 可视化输出（放入同一子目录） ──
+      await writeHtmlPlan(sortedTasks, iteration, planDir);
+      planDirLabel = planId;
+    } catch (docErr) {
+      logger.warn(`   ⚠️ 计划文档生成失败（不阻塞，计划已保存）: ${(docErr as Error).message}`);
+    }
 
-    spinner.stop(`Saved: ${planId} | ${taskIds.length} tasks, ${plan.length} phases`);
-    logger.info(`   📁 计划目录: 000-overview/plans/${planId}/`);
+    spinner.stop(`Saved: ${saved.id} | ${taskIds.length} tasks, ${plan.length} phases`);
+    if (planDirLabel) logger.info(`   📁 计划目录: 000-overview/plans/${planDirLabel}/`);
     printPlan(plan, iteration);
+    logger.info('\n🎯 下一步执行这份计划：');
+    logger.info(`   speccore execute --plan ${saved.id}`);
+    logger.info(`   （多计划可合并执行: speccore execute --plan ${saved.id},<其它计划ID>）`);
   } catch (error) {
     spinner.fail(`Failed: ${error}`);
     throw error;
@@ -590,8 +652,56 @@ export interface TaskPlan {
   id: string; name: string; type: string; priority: string;
   branch: string; dependencies: string[]; status: string;
   assignee: string; progress: number; estimatedHours: number;
+  /** v8.3.397+: 功能单元名（模块归属，供两级拓扑展示） */
+  feature?: string;
 }
 export interface PlanEntry { phase: number; tasks: TaskPlan[]; }
+
+/** v8.3.397+: 模块化计划剖面——功能单元为大模块，内部列子任务（两级拓扑展示层）。 */
+export interface GroupedPlanSection {
+  feature: string;
+  tasks: TaskPlan[];
+  /** 该模块覆盖的全局 phase 号（升序） */
+  phases: number[];
+  /** 模块间依赖（feature 名，来自跨模块任务依赖） */
+  groupDeps: string[];
+}
+
+/**
+ * v8.3.397+: 把平铺的 phase 计划按功能单元分组——
+ * 模块顺序 = phase 展开的自然顺序（已蕴含全局拓扑序）；
+ * 模块内任务保持 phase 内顺序；跨模块任务依赖聚合为模块间依赖。
+ */
+export function groupPlanByFeature(plan: PlanEntry[]): GroupedPlanSection[] {
+  const map = new Map<string, { tasks: TaskPlan[]; phases: Set<number> }>();
+  const order: string[] = [];
+  for (const p of plan) {
+    for (const t of p.tasks) {
+      const key = t.feature || '未归类';
+      if (!map.has(key)) { map.set(key, { tasks: [], phases: new Set() }); order.push(key); }
+      map.get(key)!.tasks.push(t);
+      map.get(key)!.phases.add(p.phase);
+    }
+  }
+  const allTasks = plan.flatMap(p => p.tasks);
+  const featureOf = new Map(allTasks.map(t => [t.id, t.feature || '未归类']));
+  return order.map(key => {
+    const m = map.get(key)!;
+    const groupDeps = new Set<string>();
+    for (const t of m.tasks) {
+      for (const d of t.dependencies) {
+        const df = featureOf.get(d);
+        if (df && df !== key) groupDeps.add(df);
+      }
+    }
+    return {
+      feature: key,
+      tasks: m.tasks,
+      phases: [...m.phases].sort((a, b) => a - b),
+      groupDeps: [...groupDeps],
+    };
+  });
+}
 
 export function generatePlan(tasks: TaskState[], teamSize: number, mode: string): PlanEntry[] {
   if (mode === 'claim') {
@@ -636,6 +746,7 @@ export function buildTaskPlan(t: TaskState): TaskPlan {
     assignee: t.assignee || 'TBD',
     progress: t.progress || 0,
     estimatedHours: t.estimatedHours ?? (t.type === 'bugfix' ? 2 : 8),
+    feature: t.feature,
   };
 }
 
@@ -659,10 +770,12 @@ function printPlanFromMarkdown(md: string, iteration: string): void {
 
 function printPlan(plan: PlanEntry[], iteration: string): void {
   const allTasks = plan.flatMap(p => p.tasks);
-  logger.info(`\n📋 Plan: ${iteration}  (${allTasks.length} tasks, ${plan.length} phases)\n`);
-  for (const phase of plan) {
-    logger.info(`Phase ${phase.phase}:`);
-    for (const t of phase.tasks) {
+  const sections = groupPlanByFeature(plan);
+  logger.info(`\n📋 Plan: ${iteration}  (${allTasks.length} tasks, ${plan.length} phases, ${sections.length} modules)\n`);
+  for (const s of sections) {
+    const depsLabel = s.groupDeps.length > 0 ? `  ← 依赖模块: ${s.groupDeps.join(', ')}` : '';
+    logger.info(`📦 模块: ${s.feature}${depsLabel}`);
+    for (const t of s.tasks) {
       const st = t.status === 'completed' ? '✅' : t.status === 'in_progress' ? '🔄' : '⏳';
       logger.info(`  ${st} ${t.id}  ${t.name}  [${t.type}] → ${t.branch}`);
     }
@@ -676,44 +789,84 @@ export function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawT
   const ts = new Date().toISOString();
   const highRiskTasks = allTasks.filter(t => t.dependencies.length >= 2 || t.priority === 'high');
 
+  // v8.3.397+: 两级拓扑——功能单元为大模块，模块内列子任务依赖
+  const sections = groupPlanByFeature(plan);
+  const taskPhase = new Map<string, number>();
+  for (const p of plan) for (const t of p.tasks) taskPhase.set(t.id, p.phase);
+  const tIdx = new Map(allTasks.map((t, i) => [t.id, `T${i}`]));
+
   const lines: string[] = [];
   lines.push(`# 📋 Plan — ${iteration}`);
   lines.push('');
   lines.push(`> **生成**: ${ts}  ·  **状态**: ⏳ active`);
-  lines.push(`> **任务**: ${allTasks.length}  ·  **阶段**: ${plan.length}  ·  **预估**: ${totalHours}h`);
+  lines.push(`> **任务**: ${allTasks.length}  ·  **阶段**: ${plan.length}  ·  **模块**: ${sections.length} 个功能单元  ·  **预估**: ${totalHours}h`);
   lines.push('');
 
-  // ── 1. 依赖拓扑 (Mermaid) ──
-  const hasDeps = allTasks.some(t => t.dependencies.length > 0);
-  if (hasDeps || allTasks.length > 1) {
+  // ── 1. 模块依赖图（功能单元为节点，跨模块依赖为边） ──
+  if (sections.length > 1) {
     lines.push('---');
     lines.push('');
-    lines.push('## 1. 依赖关系图');
+    lines.push('## 1. 模块依赖图');
+    lines.push('');
+    lines.push('> 功能单元为大的模块划分：模块间依赖由跨模块的子任务依赖聚合而来。');
     lines.push('');
     lines.push('```mermaid');
     lines.push('graph LR');
-    for (const t of allTasks) {
-      const label = t.name.length > 15 ? t.name.slice(0, 12) + '...' : t.name;
-      if (t.dependencies.length > 0) {
-        for (const d of t.dependencies) {
-          lines.push(`  ${d}["${d}"] --> ${t.id}["${label}"]`);
-        }
-      } else {
-        lines.push(`  ${t.id}["${label}"]`);
-      }
+    const mIdx = new Map(sections.map((s, i) => [s.feature, `M${i}`]));
+    for (const s of sections) {
+      lines.push(`  ${mIdx.get(s.feature)}["${s.feature}"]`);
     }
-    // 标记风险任务
-    for (const t of highRiskTasks) {
-      lines.push(`  style ${t.id} fill:#f96,stroke:#333`);
+    for (const s of sections) {
+      for (const d of s.groupDeps) {
+        const dn = mIdx.get(d);
+        if (dn) lines.push(`  ${dn} --> ${mIdx.get(s.feature)}`);
+      }
     }
     lines.push('```');
     lines.push('');
   }
 
-  // ── 2. 甘特图 (Mermaid) ──
+  // ── 2. 模块执行计划（模块内子任务依赖图 + 任务表） ──
   lines.push('---');
   lines.push('');
-  lines.push('## 2. 执行甘特图');
+  lines.push('## 2. 模块执行计划');
+  lines.push('');
+  sections.forEach((s, si) => {
+    const depsLabel = s.groupDeps.length > 0 ? `依赖模块: ${s.groupDeps.join(', ')}` : '无模块间依赖';
+    lines.push(`### 2.${si + 1} 模块：${s.feature}（${depsLabel}）`);
+    lines.push('');
+    // 模块内子任务依赖图
+    if (s.tasks.length > 1) {
+      lines.push('```mermaid');
+      lines.push('graph LR');
+      for (const t of s.tasks) {
+        const label = (t.name.length > 15 ? t.name.slice(0, 12) + '...' : t.name).replace(/"/g, '\\"');
+        lines.push(`  ${tIdx.get(t.id)}["${label}"]`);
+      }
+      for (const t of s.tasks) {
+        for (const d of t.dependencies) {
+          const dn = tIdx.get(d);
+          if (dn) lines.push(`  ${dn} --> ${tIdx.get(t.id)}`);
+        }
+      }
+      lines.push('```');
+      lines.push('');
+    }
+    lines.push('| Task | Phase | Type | Priority | Deps | Assignee | Est. | Status |');
+    lines.push('|:---|:---:|:---|:---|:---|:---|:---:|:---|');
+    for (const t of s.tasks) {
+      const st = t.status === 'completed' ? '✅' : t.status === 'in_progress' ? '🔄' : '⏳';
+      const deps = t.dependencies.length > 0 ? t.dependencies.join(', ') : '—';
+      const prio = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
+      lines.push(`| ${t.id} | ${taskPhase.get(t.id) ?? '—'} | ${t.type} | ${prio} | ${deps} | ${t.assignee} | ${t.estimatedHours}h | ${st} |`);
+    }
+    lines.push('');
+  });
+
+  // ── 3. 甘特图 (Mermaid，section 按功能单元模块) ──
+  lines.push('---');
+  lines.push('');
+  lines.push('## 3. 执行甘特图');
   lines.push('');
   lines.push('```mermaid');
   lines.push('gantt');
@@ -721,54 +874,48 @@ export function formatPlanMarkdown(plan: PlanEntry[], iteration: string, allRawT
   lines.push('  dateFormat YYYY-MM-DD');
   lines.push('  axisFormat %m-%d');
   lines.push('');
-  // 用实际日期 + 依赖关系生成甘特图
+  // 用实际日期 + 依赖关系生成甘特图（模块顺序 × 模块内任务序）
   const today = new Date();
   const taskEndDates: Map<string, Date> = new Map();
-  for (const phase of plan) {
-    lines.push(`  section Phase ${phase.phase}`);
-    // 计算本阶段最早开始日期（取所有依赖的最晚完成日）
-    let phaseStart = new Date(today);
-    for (const t of phase.tasks) {
+  for (const s of sections) {
+    lines.push(`  section ${s.feature}`);
+    for (const t of s.tasks) {
+      // 最早开始日期 = 所有依赖（含跨模块）的最晚完成日
+      let tStart = new Date(today);
       for (const dep of t.dependencies) {
         const depEnd = taskEndDates.get(dep);
-        if (depEnd && depEnd > phaseStart) phaseStart = new Date(depEnd);
+        if (depEnd && depEnd > tStart) tStart = new Date(depEnd);
       }
-    }
-    for (const t of phase.tasks) {
       const dur = Math.max(1, Math.ceil(t.estimatedHours / 8));
-      const startStr = phaseStart.toISOString().split('T')[0];
+      const startStr = tStart.toISOString().split('T')[0];
       lines.push(`  ${t.id}: ${t.name.slice(0, 20)} :${startStr}, ${dur}d`);
       // 记录结束日期
-      const end = new Date(phaseStart);
+      const end = new Date(tStart);
       end.setDate(end.getDate() + dur);
       taskEndDates.set(t.id, end);
     }
-    // 下一阶段默认从本阶段结束后 1 天开始
-    const phaseMaxEnd = new Date(Math.max(...phase.tasks.map(t => (taskEndDates.get(t.id) || today).getTime())));
-    phaseMaxEnd.setDate(phaseMaxEnd.getDate() + 1);
-    // phaseStart for next iteration is handled above via dependency check
   }
   lines.push('```');
   lines.push('');
 
-  // ── 3. 执行概览 ──
+  // ── 4. 执行概览（按模块分节） ──
   lines.push('---');
   lines.push('');
-  lines.push('## 3. 执行概览');
+  lines.push('## 4. 执行概览');
   lines.push('');
-  for (const phase of plan) {
-    lines.push(`### Phase ${phase.phase}`);
+  sections.forEach((s, si) => {
+    lines.push(`### 4.${si + 1} ${s.feature}`);
     lines.push('');
-    lines.push('| Task | Type | Priority | Branch | Deps | Assignee | Est. | Status |');
-    lines.push('|:---|:---|:---|:---|:---|:---|:---:|:---|');
-    for (const t of phase.tasks) {
+    lines.push('| Task | Phase | Type | Priority | Branch | Deps | Assignee | Est. | Status |');
+    lines.push('|:---|:---:|:---|:---|:---|:---|:---|:---:|:---|');
+    for (const t of s.tasks) {
       const st = t.status === 'completed' ? '✅' : t.status === 'in_progress' ? '🔄' : '⏳';
       const deps = t.dependencies.length > 0 ? t.dependencies.join(', ') : '—';
       const prio = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
-      lines.push(`| ${t.id} | ${t.type} | ${prio} | \`${t.branch}\` | ${deps} | ${t.assignee} | ${t.estimatedHours}h | ${st} |`);
+      lines.push(`| ${t.id} | ${taskPhase.get(t.id) ?? '—'} | ${t.type} | ${prio} | \`${t.branch}\` | ${deps} | ${t.assignee} | ${t.estimatedHours}h | ${st} |`);
     }
     lines.push('');
-  }
+  });
 
   // ── 3.5 具体命令（供用户选择） ──
   lines.push('---');

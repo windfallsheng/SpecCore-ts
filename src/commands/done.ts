@@ -5,6 +5,7 @@ import { readFile, pathExists, readdir } from 'fs-extra';
 import { join, dirname } from 'path';
 import { execSync } from 'child_process';
 import { logger, Spinner } from '../utils/logger';
+import { recordAiTrace } from '../utils/ai-trace';
 import { getDefaultIteration, getIterationDir } from '../core/context';
 import { warnIfIndexStale } from '../core/index-guard';
 import { showNextSteps } from '../core/next-steps';
@@ -27,10 +28,14 @@ export interface DoneOptions {
 
 export async function doneCommand(options: DoneOptions): Promise<void> {
   // ── Prompt 模式 ──
+  // v8.3.399+: 显式交棒修复——此前裸输出验收 prompt（无 [SPECCORE_PROMPT] 标记、
+  // 无 --response 回传约定），宿主 AI 收到 exit 10 无从知晓如何回传，交棒断链。
   if (options.prompt) {
     const iter = options.iteration || await getDefaultIteration();
     const prompt = await buildDoneArchivePrompt(iter, options.task);
-    process.stdout.write(prompt);
+    const taskRef = options.task ? `--task=${options.task}` : '';
+    await recordAiTrace(iter || 'GLOBAL', 'prompt-out', { promptLength: prompt.length, mode: 'done-archive', prompt });
+    process.stdout.write(`[SPECCORE_PROMPT]\n${prompt}\n\n## 🔁 结果回传约定\n\n验收总结完成后经 CLI 回传：\n\`speccore done --response "<验收总结>" ${taskRef}${iter ? ` -I ${iter}` : ''}\``);
     process.exitCode = 10;
     return;
   }
