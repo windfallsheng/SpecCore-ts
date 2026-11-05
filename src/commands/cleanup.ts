@@ -12,7 +12,7 @@
  */
 
 import { readdir, pathExists, stat, unlink, remove } from 'fs-extra';
-import { join, dirname, relative } from 'path';
+import { join, dirname, relative, sep } from 'path';
 import { logger, Spinner } from '../utils/logger';
 import { isTimestampBackup } from '../utils/task-utils';
 
@@ -52,6 +52,15 @@ const ARCHIVE_PATTERNS = [
   /\.migrated-\d+$/,      // global.migrated-1234567890123
   /\.archived-\d+$/,      // global.archived-1234567890123
 ];
+
+// v8.3.397+: .speccore 知识资产目录不参与清理扫描——规范库四层架构
+// （GLOBAL/RULES/PATTERNS/SKILLS）与配置/模板均为长期资产，不是临时内容。
+// 仅 cache/ 与 local/ 属于临时区域，放行扫描。
+const SPECCORE_ASSET_DIRS = new Set([
+  'AGENTS', 'COMMANDS', 'GLOBAL', 'HOOKS', 'PATTERNS', 'PROJECT', 'RULES',
+  'SKILLS', 'code-graph', 'config', 'environments', 'examples', 'prompts',
+  'templates', 'tests',
+]);
 
 const TEMP_FILE_PATTERNS = [
   /^\.tmp_export\.md$/,
@@ -103,9 +112,12 @@ async function scanForCleanup(
   for (const entry of entries) {
     const fullPath = join(rootDir, entry.name);
 
-    // 跳过 .speccore/backups/ 和 .speccore/cache/ 中的活跃缓存
+    // 跳过 .speccore/backups/（备份区不参与自动清理）
+    // v8.3.397：移除 .speccore/cache 的目录/文件级拦截——旧判定对目录也生效，
+    // cache 目录名不是 staleCacheFile 导致整个 cache/ 永不递归（staleCacheFiles
+    // 清理一直是死清理）；文件级拦截则误挡 cache 子目录里的 tempFiles。活跃缓存
+    // 的保护由文件分支的 staleCacheFile 类型判定兜底（不匹配即不删）。
     if (fullPath.includes('.speccore/backups')) continue;
-    if (fullPath.includes('.speccore/cache') && !isStaleCacheFile(entry.name)) continue;
     // 跳过 node_modules 和 .git
     if (entry.name === 'node_modules' || entry.name === '.git') continue;
     // 跳过 outputs/（产物而非缓存）
@@ -115,6 +127,17 @@ async function scanForCleanup(
     const isSpeccoreRoot = rootDir.endsWith('.speccore') || rootDir.endsWith('.speccore/');
 
     if (entry.isDirectory()) {
+      // v8.3.397+: 自动清理绝不进入迭代目录（项目根下的 Iteration-NNN-*）——
+      // 迭代产物（Spec/任务/需求文档）是用户数据核心，不是临时内容；
+      // execute/taskify/analyze 收尾的自动清理与手动 cleanup 均不得扫描，
+      // 防迭代内 .bak、日期戳命名文件被误删。
+      if (!fullPath.includes(`${sep}.speccore`) && /^Iteration-\d+/.test(entry.name)) {
+        continue;
+      }
+      // v8.3.397+: .speccore 下的知识资产目录（除 cache/local）不参与清理。
+      if (isSpeccoreRoot && SPECCORE_ASSET_DIRS.has(entry.name)) {
+        continue;
+      }
       // 检查是否为归档目录
       if (isArchiveFile(entry.name)) {
         try {

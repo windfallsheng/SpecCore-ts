@@ -1789,11 +1789,12 @@ function buildAgentContext(tasks: TaskState[], agent: string): string {
   ctx += `- [ ] 前端组件按 UI_SPEC.md「元素标识约定」添加 data-testid（命名 {模块}-{页面}-{元素}，页面容器 xxx-page 结尾）——冒烟测试 VERIFY_SPEC 断言依赖这些属性定位元素（v8.3.294+）\n`;
   ctx += `- [ ] 代码实现严格遵循 REQ.md 的验收标准和 TECH.md 的技术方案\n`;
   ctx += `- [ ] 如涉及 API 变更，确保前后端接口签名一致\n`;
-  ctx += `- [ ] 完成后更新 TASK.md 状态（doing → done）\n\n`;
+  ctx += `- [ ] 完成后 TASK.md 状态由 CLI 自动联动（doing → done），无需手动修改\n`;
   ctx += `**禁止**：\n`;
   ctx += `- 不要偏离 REQ.md/TECH.md 的要求自由发挥\n`;
   ctx += `- 不要生成与规格文档不一致的代码\n`;
-  ctx += `- 不要遗漏 REQ.md 中列出的验收标准\n\n`;
+  ctx += `- 不要遗漏 REQ.md 中列出的验收标准\n`;
+  ctx += `- 不要删除、移动、重命名任务目录（迭代内 030-tasks/）中的任何文件或目录——只覆盖上面清单明确列出的骨架文件本身，其余 Spec 资产（TASK.md/TEST.md/RISK.md/DEPS.md/_shared/ 等）只读不动（v8.3.397+）\n\n`;
 
   // 3. Global rules (load last, only if needed)
   ctx += `### Step N: Global rules (load last)\n`;

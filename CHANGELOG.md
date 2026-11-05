@@ -1,5 +1,13 @@
 # Changelog
 
+## v8.3.397 (2026-11-05) — 自动清理不再越界：迭代目录与知识库免死，执行边界钉死
+
+- **cleanup 扫描边界修复**：execute/taskify/analyze 收尾的自动清理（cleanupByType）此前扫描「项目根 + .speccore」递归，无迭代目录边界——execute 收尾会删迭代目录内的 .bak 文件，taskify 收尾会删迭代内 7 天前以 14 位时间戳结尾命名的文件，analyze 收尾会删迭代内 .tmp-* 文件与 .migrated-N 等后缀的整个目录。现扫描时项目根下 Iteration-NNN-* 目录一律跳过（路径判定排除 .speccore/cache/iterations 缓存区，不误伤缓存清理）。
+- **.speccore 知识资产保护区**：规范库四层架构目录（GLOBAL/RULES/PATTERNS/SKILLS 等 14 个）不参与清理扫描，仅 cache/ 与 local/ 临时区域放行——此前知识资产与临时文件混在清理范围内。
+- **cache 死清理复活**：移除 .speccore/cache 的目录/文件级拦截——旧判定对目录也生效，cache 目录名非 staleCacheFile 导致整个 cache/ 永不递归，staleCacheFiles 清理一直是死清理；文件级拦截还误挡 cache 子目录里的 tempFiles。活跃缓存保护改由文件分支的 staleCacheFile 类型判定兜底（不匹配即不删）。
+- **execute Prompt 执行边界钉死**：此前 Prompt 授权 AI 写迭代内骨架文档却不钉边界，AI 的「整理式删除」有据可依。现「禁止」清单新增——不得删除、移动、重命名任务目录（030-tasks/）内任何文件，只许覆盖清单点名的骨架文件；TASK.md 状态改由 CLI 自动联动（去除 AI 手动改与 CLI finalizeTaskCompletion 的双写冲突）；工程路径段新增红线条款（迭代目录除点名骨架外一律只读）。
+- **测试**：新增 cleanup 安全边界 5 用例（迭代目录免扫、根目录正常清理、知识库保护、cache 清理复活、缓存区迭代名不误跳），全量 939/939 通过。
+
 ## v8.3.396 (2026-11-05) — QA 环假绿门禁闭环：空心审查与未验证产物不再蒙混过关
 
 - **verify.json 模板去误导**：模板条目默认值从 `verified` + 示例 evidence 改为 `unverified` + 空 evidence——宿主 AI 不填写时「未验证」与「已验证」从此可区分，不再默认全绿。

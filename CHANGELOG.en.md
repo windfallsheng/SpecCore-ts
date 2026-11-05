@@ -2,6 +2,14 @@
 
 ---
 
+## v8.3.397 (2026-11-05) — auto-cleanup no longer overreaches: iteration dirs & knowledge base protected, execution boundaries nailed down
+
+- **cleanup scan boundary fix**: the post-execute/taskify/analyze auto-cleanup (cleanupByType) previously scanned "project root + .speccore" recursively with no iteration-dir boundary — execute's tail would delete .bak files inside iteration dirs, taskify's tail would delete files named with a 14-digit timestamp suffix older than 7 days, and analyze's tail would delete .tmp-* files and whole dirs with .migrated-N suffixes. Iteration-NNN-* dirs under the project root are now skipped (path check excludes the .speccore/cache/iterations cache area, so cache cleanup is unaffected).
+- **.speccore knowledge-asset protection**: the four-layer standards library dirs (GLOBAL/RULES/PATTERNS/SKILLS etc., 14 total) no longer participate in cleanup scans; only the cache/ and local/ temp areas are scanned.
+- **cache dead-cleanup revived**: removed the directory/file-level interception of .speccore/cache — the old check applied to directories too, and since the cache dir name is not a staleCacheFile the whole cache/ was never recursed, leaving staleCacheFiles cleanup permanently dead; the file-level check also wrongly blocked tempFiles inside cache subdirs. Active-cache protection is now handled by the staleCacheFile type check in the file branch (no match, no delete).
+- **execute prompt execution boundaries**: the prompt previously authorized the AI to write skeleton docs inside iteration dirs without nailing boundaries, giving AI-driven "housekeeping deletions" a basis. The "forbidden" list now forbids deleting, moving, or renaming any file in the task dir (030-tasks/) — only the skeleton files named in the checklist may be overwritten; TASK.md status is now updated by the CLI automatically (removing the double-write conflict with finalizeTaskCompletion); the project-paths section gains a red-line clause (iteration dir is read-only except named skeletons).
+- **Tests**: 5 new cleanup safety-boundary cases (iteration-dir skip, root cleanup unaffected, knowledge-base protection, cache cleanup revived, cache-area iteration names not wrongly skipped); full suite 939/939 green.
+
 ## v8.3.396 (2026-11-05) — QA ring fake-green gate closure: hollow reviews and unverified artifacts can no longer slip through
 
 - **verify.json template de-misleading**: template item defaults changed from `verified` + sample evidence to `unverified` + empty evidence — an untouched file is now distinguishable from a truly verified one, no more default all-green.

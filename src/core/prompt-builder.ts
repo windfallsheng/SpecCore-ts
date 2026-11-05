@@ -2416,6 +2416,8 @@ export async function buildPrompt(
       lines.push('**重要**：输出文件时，路径必须以工程标识开头。');
       lines.push('例如：`booking-service/src/main/java/...` 会写入 `../outputs-project/backend/booking-service/src/main/java/...`');
       lines.push('如果不以工程标识开头，文件将写入迭代目录（兜底）。');
+      lines.push('');
+      lines.push('**红线（v8.3.397+）**：迭代目录（Iteration-*/）是 Spec 资产，除执行清单明确指定的骨架文件外一律只读——严禁删除、移动、重写迭代目录内的任何文件；代码只写入上表源码路径。');
       projectPathsInfo = lines.join('\n');
     }
   }
