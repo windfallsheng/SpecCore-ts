@@ -1,5 +1,7 @@
 # SpecCore — Code by Spec, Not by Vibe
 
+[![npm version](https://img.shields.io/npm/v/speccore)](https://www.npmjs.com/package/speccore) [![npm downloads](https://img.shields.io/npm/dm/speccore)](https://www.npmjs.com/package/speccore) [![skills.sh](https://skills.sh/b/windfallsheng/SpecCore-ts)](https://skills.sh/windfallsheng/SpecCore-ts)
+
 🖥️ 规范驱动开发 CLI · 需求到部署全流程 · 环境驱动部署 · 全命令 Skill 覆盖 · 多层 AI 架构
 
 > English: A spec-driven development CLI for AI coding agents — from requirements to deployable code, end to end, with specs as the single source of truth.
