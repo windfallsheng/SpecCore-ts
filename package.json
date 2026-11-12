@@ -1,7 +1,7 @@
 {
   "name": "speccore",
   "version": "8.3.399",
-  "description": "SpecCore - Code by Spec, Not by Vibe.",
+  "description": "Spec-driven development CLI — from requirements to deployable code: import → analyze → task-split → AI code generation → verify → deploy. 规格驱动开发，需求到代码全流程。",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -18,13 +18,7 @@
     "release:beta": "bash scripts/release.sh beta",
     "release:stable": "bash scripts/release.sh stable"
   },
-  "keywords": [
-    "spec-driven-development",
-    "ai",
-    "cli",
-    "code-generation",
-    "spec"
-  ],
+  "keywords": ["spec-driven-development", "spec-driven", "ai", "cli", "code-generation", "coding-agent", "requirement-analysis", "task-splitting", "iteration-management", "agent-workflow", "workflow-automation", "llm", "software-development", "spec", "automation", "quality-gates", "requirements-engineering"],
   "author": "SpecCore Team <windfallsheng@aliyun.com>",
   "license": "MIT",
   "repository": {

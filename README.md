@@ -2,7 +2,11 @@
 
 🖥️ 规范驱动开发 CLI · 需求到部署全流程 · 环境驱动部署 · 全命令 Skill 覆盖 · 多层 AI 架构
 
+> English: A spec-driven development CLI for AI coding agents — from requirements to deployable code, end to end, with specs as the single source of truth.
+
 SpecCore 把「需求文档」一路规范驱动到「可交付代码」：导入需求 → 切分功能单元 → 分析 → 拆分任务 → 开发 → 验证 → 部署。整个过程由规格（Spec）驱动，AI 只在需要判断和生成的地方介入，关键动作留给你确认。
+
+上游需求定稿用 [SpecProt](https://github.com/windfallsheng/SpecProt-CLI)，下游测试验证用 [SpecTest](https://github.com/windfallsheng/SpecTest-CLI)——Spec\* 生态三件套各管一段：定稿 → 开发 → 测试。
 
 ---
 
